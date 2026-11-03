@@ -8,6 +8,7 @@ import comfy.lora
 import comfy.lora_convert
 import comfy.model_management
 import comfy.utils
+import comfy.weight_adapter
 
 from .moss_common import (check_compatible, format_info, is_quantized, key_patches, key_patches_weight, key_slot, model_weights,
                           rescale_for, residual_scale)
@@ -167,5 +168,184 @@ class HaDeSMossLoraBlockWeight:
                                other_layers=other_layers, counts=counts))
 
 
-NODE_CLASS_MAPPINGS = {"HaDeSMossLoraExtractor": HaDeSMossLoraExtractor, "HaDeSMossLoraBlockWeight": HaDeSMossLoraBlockWeight}
-NODE_DISPLAY_NAME_MAPPINGS = {"HaDeSMossLoraExtractor": "MOSS LoRA Extractor", "HaDeSMossLoraBlockWeight": "MOSS LoRA Block Weight"}
+# ==============================================================================
+# LoRA FACTORS: any MOSS LoRA format as up / down per model weight
+# ==============================================================================
+def lora_factors(lora_name, model, strength, device):
+    """The LoRA as {model weight key: (up, down)} with alpha and `strength` folded into up, so that delta = up @ down, plus
+    {model weight key: full diff}. Split q/k/v LoRAs on a fused file land in their rows of proj.qkv, so every format comes
+    out in the model's own layout."""
+    factors, diffs = {}, {}
+    for k, patch in load_lora_patches(lora_name, model).items():
+        key, offset = k if isinstance(k, tuple) else (k, None)
+        rows = comfy.utils.get_attr(model.model, key).shape[0]
+        if isinstance(patch, comfy.weight_adapter.LoRAAdapter):
+            up, down, alpha, mid, dora_scale, reshape = patch.weights
+            if mid is not None or dora_scale is not None or reshape is not None:
+                raise ValueError(f"HaDeS MOSS LoRA: '{lora_name}' uses LoCon mid / DoRA / reshape on '{key}'; only plain LoRA layers are supported.")
+            up, down = up.to(device, torch.float32).flatten(1), down.to(device, torch.float32).flatten(1)
+            up = up * (strength * (float(alpha) / down.shape[0] if alpha is not None else 1.0))
+            if offset is not None:
+                full = up.new_zeros(rows, up.shape[1])
+                full[offset[1]:offset[1] + offset[2]] = up
+                up = full
+            factors.setdefault(key, []).append((up, down))
+        elif isinstance(patch, tuple) and patch[0] == "diff":
+            d = patch[1][0].to(device, torch.float32) * strength
+            if offset is not None:
+                full = d.new_zeros((rows,) + d.shape[1:])
+                full[offset[1]:offset[1] + offset[2]] = d
+                d = full
+            diffs[key] = diffs.get(key, 0) + d
+        else:
+            raise ValueError(f"HaDeS MOSS LoRA: '{lora_name}' has a {type(patch).__name__} layer on '{key}'; only plain LoRA and full diffs are supported.")
+    return {k: (torch.cat([u for u, _ in fs], 1), torch.cat([d for _, d in fs], 0)) for k, fs in factors.items()}, diffs
+
+
+def compress(up, down, max_rank, energy_target):
+    """Exact SVD of up @ down through QR of the factors (no full matrix), truncated to max_rank or to the smallest rank that keeps
+    energy_target of the energy. Returns (up, down, energy kept)."""
+    qu, ru = torch.linalg.qr(up)
+    qd, rd = torch.linalg.qr(down.T)
+    u, s, vh = torch.linalg.svd(ru @ rd.T)
+    energy = s.square()
+    cum = torch.cumsum(energy, 0) / energy.sum().clamp(min=1e-12)
+    r = min(max_rank, s.shape[0])
+    if energy_target > 0.0:
+        r = min(r, int(torch.searchsorted(cum, torch.tensor(energy_target, device=cum.device)).item()) + 1)
+    sqrt_s = s[:r].sqrt()
+    return (qu @ u[:, :r]) * sqrt_s, sqrt_s.unsqueeze(1) * (vh[:r] @ qd.T), float(cum[r - 1])
+
+
+def save_lora(path, factors, diffs, max_rank, energy_target, metadata):
+    """Compresses every factor pair and writes diffusion_model.* keys. Returns (energies, ranks)."""
+    out, energies, ranks = {}, [], []
+    for key, (up, down) in factors.items():
+        new_up, new_down, kept = compress(up, down, max_rank, energy_target)
+        prefix = key.removesuffix(".weight")
+        out[f"{prefix}.lora_up.weight"] = new_up.cpu().to(torch.bfloat16).contiguous()
+        out[f"{prefix}.lora_down.weight"] = new_down.cpu().to(torch.bfloat16).contiguous()
+        out[f"{prefix}.alpha"] = torch.tensor(float(new_up.shape[1]))
+        energies.append(kept)
+        ranks.append(new_up.shape[1])
+    for key, d in diffs.items():
+        out[f"{key.removesuffix('.weight').removesuffix('.bias')}.{'diff_b' if key.endswith('.bias') else 'diff'}"] = d.cpu().to(torch.bfloat16)
+    safetensors.torch.save_file(out, path, metadata={"format": "pt", "ss_base_model_version": "moss_image", **metadata})
+    return energies, ranks
+
+
+def resize_summary(path, energies, ranks, energy_target, target_rank, n_diffs):
+    mean = sum(energies) / len(energies)
+    lines = [f"Saved {os.path.basename(path)} ({os.path.getsize(path) / 1024 ** 2:.1f} MB) | rank max {max(ranks)}, mean {sum(ranks) / len(ranks):.1f} "
+             f"({'dynamic ' + format(energy_target, '.3f') if energy_target > 0.0 else 'fixed'}, cap {target_rank}) | {len(ranks)} LoRA layers, {n_diffs} full diffs",
+             f"Energy kept: mean {mean:.1%}, worst layer {min(energies):.1%}"]
+    return lines, mean
+
+
+class HaDeSMossLoraResize:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": ("MODEL", {"tooltip": "The model the LoRA is for; its layout (fused or split q/k/v) is the output's."}),
+                "lora_name": (folder_paths.get_filename_list("loras"),),
+                "target_rank": ("INT", {"default": 32, "min": 1, "max": 512, "step": 1, "tooltip": "Maximum rank per layer."}),
+                "export_filename": ("STRING", {"default": "HaDeS_MOSS_Resized_LoRA", "tooltip": "Saved under models/loras; the source is never overwritten."}),
+            },
+            "optional": {
+                "dynamic_energy": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.005,
+                                             "tooltip": "0 = fixed rank. Otherwise each layer gets the smallest rank that keeps this share of its energy, capped at target_rank."}),
+                "overwrite_existing": ("BOOLEAN", {"default": False}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("saved_lora_path", "info")
+    FUNCTION = "resize"
+    OUTPUT_NODE = True
+    CATEGORY = "HaDeS/MOSS Mergers"
+    DESCRIPTION = "Lowers a LoRA's rank with an exact SVD of its factors. Any MOSS LoRA format in, the model's layout out (split q/k/v becomes fused proj.qkv on fused files)."
+
+    def resize(self, model, lora_name, target_rank, export_filename, dynamic_energy=0.0, overwrite_existing=False):
+        device = comfy.model_management.get_torch_device()
+        factors, diffs = lora_factors(lora_name, model, 1.0, device)
+        if not factors:
+            raise ValueError(f"HaDeS MOSS LoRA Resize: '{lora_name}' has no LoRA layer that applies to this model.")
+        src = folder_paths.get_full_path_or_raise("loras", lora_name)
+        path = lora_output_path(export_filename, "HaDeS_MOSS_Resized_LoRA", overwrite_existing)
+        if os.path.abspath(path) == os.path.abspath(src):
+            raise ValueError("HaDeS MOSS LoRA Resize: the output would overwrite the source LoRA; choose another export_filename.")
+        energies, ranks = save_lora(path, factors, diffs, target_rank, dynamic_energy,
+                                    {"hades/source_lora": lora_name, "hades/target_rank": str(target_rank), "hades/dynamic_energy": str(dynamic_energy)})
+        lines, mean = resize_summary(path, energies, ranks, dynamic_energy, target_rank, len(diffs))
+        lines.insert(0, f"HaDeS MOSS LoRA Resize | {lora_name} ({os.path.getsize(src) / 1024 ** 2:.1f} MB)")
+        return {"ui": {"text": [path]}, "result": (path, format_info("\n".join(lines), "lora_resize", saved_path=path, rank=target_rank,
+                                                                      layers=len(ranks), energy_kept=round(mean, 4)))}
+
+
+class HaDeSMossLoraMerger:
+    @classmethod
+    def INPUT_TYPES(cls):
+        loras = folder_paths.get_filename_list("loras")
+        return {
+            "required": {
+                "model": ("MODEL", {"tooltip": "The model the LoRAs are for; its layout (fused or split q/k/v) is the output's."}),
+                "lora_a": (loras,),
+                "weight_a": ("FLOAT", {"default": 1.0, "min": -2.0, "max": 2.0, "step": 0.05}),
+                "lora_b": (loras,),
+                "weight_b": ("FLOAT", {"default": 1.0, "min": -2.0, "max": 2.0, "step": 0.05}),
+                "rank": ("INT", {"default": 64, "min": 1, "max": 512, "step": 1,
+                                 "tooltip": "Maximum rank per layer of the merged LoRA. The sum of both ranks keeps the merge exact."}),
+                "export_filename": ("STRING", {"default": "HaDeS_MOSS_Merged_LoRA", "tooltip": "Saved under models/loras."}),
+            },
+            "optional": {
+                "dynamic_energy": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.005,
+                                             "tooltip": "0 = fixed rank. Otherwise each layer gets the smallest rank that keeps this share of its energy, capped at rank."}),
+                "overwrite_existing": ("BOOLEAN", {"default": False}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("saved_lora_path", "info")
+    FUNCTION = "merge"
+    OUTPUT_NODE = True
+    CATEGORY = "HaDeS/MOSS Mergers"
+    DESCRIPTION = ("Merges two LoRAs into one file: weight_a * A + weight_b * B, compressed per layer with an exact SVD of the stacked factors. "
+                   "At 1.0 / 1.0 and a rank of at least rank A + rank B it is the same as stacking both LoRAs.")
+
+    def merge(self, model, lora_a, weight_a, lora_b, weight_b, rank, export_filename, dynamic_energy=0.0, overwrite_existing=False):
+        device = comfy.model_management.get_torch_device()
+        fa, da = lora_factors(lora_a, model, weight_a, device)
+        fb, db = lora_factors(lora_b, model, weight_b, device)
+        factors = {}
+        for k in fa.keys() | fb.keys():
+            parts = [f[k] for f in (fa, fb) if k in f]
+            factors[k] = (torch.cat([u for u, _ in parts], 1), torch.cat([d for _, d in parts], 0))
+        diffs = {k: da.get(k, 0) + db.get(k, 0) for k in da.keys() | db.keys()}
+        if not factors and not diffs:
+            raise ValueError("HaDeS MOSS LoRA Merger: neither LoRA applies to this model.")
+        sources = {os.path.abspath(folder_paths.get_full_path_or_raise("loras", n)) for n in (lora_a, lora_b)}
+        path = lora_output_path(export_filename, "HaDeS_MOSS_Merged_LoRA", overwrite_existing)
+        if os.path.abspath(path) in sources:
+            raise ValueError("HaDeS MOSS LoRA Merger: the output would overwrite a source LoRA; choose another export_filename.")
+        energies, ranks = save_lora(path, factors, diffs, rank, dynamic_energy,
+                                    {"hades/lora_a": lora_a, "hades/lora_b": lora_b, "hades/weights": f"{weight_a},{weight_b}", "hades/rank": str(rank)})
+        lines, mean = resize_summary(path, energies, ranks, dynamic_energy, rank, len(diffs))
+        lines.insert(0, f"HaDeS MOSS LoRA Merger | {weight_a:+.2f} x {lora_a} + {weight_b:+.2f} x {lora_b} | layers only in A: {len(fa.keys() - fb.keys())}, "
+                        f"only in B: {len(fb.keys() - fa.keys())}, shared: {len(fa.keys() & fb.keys())}")
+        return {"ui": {"text": [path]}, "result": (path, format_info("\n".join(lines), "lora_merger", saved_path=path, rank=rank,
+                                                                      layers=len(ranks), energy_kept=round(mean, 4)))}
+
+
+NODE_CLASS_MAPPINGS = {
+    "HaDeSMossLoraExtractor": HaDeSMossLoraExtractor,
+    "HaDeSMossLoraBlockWeight": HaDeSMossLoraBlockWeight,
+    "HaDeSMossLoraMerger": HaDeSMossLoraMerger,
+    "HaDeSMossLoraResize": HaDeSMossLoraResize,
+}
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "HaDeSMossLoraExtractor": "MOSS LoRA Extractor",
+    "HaDeSMossLoraBlockWeight": "MOSS LoRA Block Weight",
+    "HaDeSMossLoraMerger": "MOSS LoRA Merger",
+    "HaDeSMossLoraResize": "MOSS LoRA Resize",
+}

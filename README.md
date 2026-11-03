@@ -46,6 +46,20 @@ Claims about what layer groups do are measured with [`tools/moss_eval.py`](tools
 - **Outputs:** `MODEL`, `info` (how many LoRA weights fall in each group, e.g. 20 instead of 24 in `layers_18_23` for LoRAs trained without layer 22).
 - **Measured:** layers 30–35 carry a large share of all four community LoRAs tested, but beyond that each acts in different layers (24–35, 30–41 or 00–05 and 30–35), so the node has no style / identity presets; `tools/moss_eval.py --mode lora` measures a given LoRA. See [`tools/RESULTS.md`](tools/RESULTS.md).
 
+### `MOSS LoRA Merger` (`HaDeS/MOSS Mergers`)
+- **Class:** `HaDeSMossLoraMerger`
+- **Purpose:** merges two LoRAs into one file, `weight_a × A + weight_b × B`, compressed per layer with an exact SVD of the stacked factors (QR first, never the full matrix). Any community MOSS format in (kohya, PEFT split or fused q/k/v), the model's layout out.
+- **Inputs:** `model` (the model the LoRAs are for; it sets the q/k/v layout), `lora_a`, `weight_a`, `lora_b`, `weight_b`, `rank` (max per layer; rank A + rank B is exact), `export_filename`, optional `dynamic_energy` and `overwrite_existing`. Never overwrites a source LoRA.
+- **Outputs:** `saved_lora_path`, `info` (layers in A only / B only / both, size, rank, energy kept).
+- **Measured:** retro (rank 32) + lenovo (rank 16) merged at rank 48 or 32 renders within the noise of loading the two LoRAs in the opposite order ([`tools/RESULTS.md`](tools/RESULTS.md)).
+
+### `MOSS LoRA Resize` (`HaDeS/MOSS Mergers`)
+- **Class:** `HaDeSMossLoraResize`
+- **Purpose:** lowers a LoRA's rank with the same exact SVD, fixed (`target_rank`) or per layer by an energy target (`dynamic_energy`), and saves a new file in `models/loras/`; the source is never overwritten. Split q/k/v LoRAs come out fused on fused models.
+- **Inputs:** `model`, `lora_name`, `target_rank`, `export_filename`, optional `dynamic_energy`, `overwrite_existing`.
+- **Outputs:** `saved_lora_path`, `info` (sizes, rank, mean and worst-layer energy kept).
+- **Measured:** AnubisCitronOC (142 MB) at rank 32 (126 MB, 97.9% energy) stays within the noise floor; rank 16 (63 MB, 91.1%) and dynamic 0.90 (56 MB) drift visibly from the source.
+
 ### `MOSS Model Saver` (`HaDeS/MOSS Mergers`)
 - **Class:** `HaDeSMossModelSaver`
 - **Purpose:** saves a `MODEL` with its merge / LoRA patches baked in, loadable by the stock `Load Diffusion Model` node, and passes the model through.
