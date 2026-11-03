@@ -140,8 +140,10 @@ def residual_scale(w1s, w2s):
     a = (a.dequantize() if isinstance(a, QuantizedTensor) else a).float().cpu()
     b = (b.dequantize() if isinstance(b, QuantizedTensor) else b).float().cpu()
     s = ((a * b).sum() / (b * b).sum()).item()
-    # finetunes move this weight by well under 1%; a residual rescale moves it by a large factor
-    return s if abs(s - 1.0) > 0.05 else None
+    # finetunes move this weight by well under 1%; a residual rescale moves it by a large factor and leaves it otherwise equal
+    # (miaomiao: residual 0.0000 after x16). Unrelated weights also fit some small s, but leave a residual near 1.
+    residual = ((a - s * b).norm() / a.norm().clamp(min=1e-12)).item()
+    return s if abs(s - 1.0) > 0.05 and residual < 0.1 else None
 
 
 def rescale_for(key, w, s):

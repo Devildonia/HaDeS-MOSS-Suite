@@ -1,5 +1,6 @@
-# Left out of the Comfy Registry package (comfy node publish); they stay in the GitHub repo
+# Left out of the Comfy Registry package (comfy node publish); they stay in the GitHub repo and CI
 tests/
+.github/
 tools/*
 docs/
 # Measurements cited by the README and the node tooltips

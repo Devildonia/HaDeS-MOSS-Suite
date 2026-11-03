@@ -113,6 +113,14 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
   - **note:** KSampler size outside 768²–2048², shift other than 5.0, SLG on, fp16-fixed residual scale normalized, multi-line layout text with its box proportions.
 - **Outputs:** `report` (Markdown), `json`, `summary` (one line).
 
+## Tests
+
+`tests/test_moss_suite.py` checks the nodes against the real ComfyUI core on a tiny synthetic MOSS-Image model (CPU, a few seconds, no model download). From the ComfyUI folder:
+
+```bash
+python custom_nodes/HaDeS-MOSS-Suite/tests/test_moss_suite.py
+```
+
 ## Tools
 
 - `tools/moss_eval.py --mode bias | compare`: ethnic bias on neutral and explicit prompts, SFT vs Base on photo, illustration, text and layout prompts, with stock nodes only.
