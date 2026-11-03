@@ -96,6 +96,14 @@ Claims about what layer groups do are measured with [`tools/moss_eval.py`](tools
 - **Class:** `HaDeSMossSamplerMetadata`
 - **Purpose:** reads the settings a MOSS KSampler actually sampled with from its `info` (seed, steps, cfg, sampler, scheduler, denoise, flow shift), for image-saver metadata.
 
+### `MOSS Suite Telemetry` (`HaDeS/MOSS Pipeline`)
+- **Class:** `HaDeSMossSuiteTelemetry`
+- **Purpose:** reads the `info` outputs of up to 8 HaDeS MOSS nodes (their `HADES_META` trailer) and checks the pipeline against what was measured:
+  - **error:** layout, latent and KSampler on different canvas sizes (a layout prompt places its boxes on its own canvas);
+  - **warning:** quantized models in a merge, TIES / DARE with a quantized model, LoRAs extracted / resized / merged below 90% energy;
+  - **note:** KSampler size outside 768²–2048², shift other than 5.0, SLG on, fp16-fixed residual scale normalized, multi-line layout text with its box proportions.
+- **Outputs:** `report` (Markdown), `json`, `summary` (one line).
+
 ## Tools
 
 - `tools/moss_eval.py --mode bias | compare`: ethnic bias on neutral and explicit prompts, SFT vs Base on photo, illustration, text and layout prompts, with stock nodes only.

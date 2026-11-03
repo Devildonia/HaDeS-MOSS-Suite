@@ -182,18 +182,19 @@ class HaDeSMossLayoutCompiler:
             raise ValueError(f"HaDeS MOSS Layout: the draft is not valid JSON ({e}).") from e
         _check(isinstance(data, dict), "the draft must be a JSON object")
         prompt, width, height, texts = compile_layout(data)
+        multi = [(t, w, h) for t, w, h in texts if "\n" in t]
         if width is None:
             width = height = 1024
             text = "HaDeS MOSS Layout | caption draft, passed through as plain text | latent 1024x1024"
         else:
             text = f"HaDeS MOSS Layout | {width}x{height} | {len(data['items'])} items, {len(texts)} with text | prompt {len(prompt)} chars"
-            multi = [(t, w, h) for t, w, h in texts if "\n" in t]
             if multi:
                 text += ("\nMulti-line text (check that the box fits the lines: a two-line title in an 832x192 box came out on one line in "
                          "3 of 6 seeds, in a 640x384 box on two lines in 6 of 6, tools/RESULTS.md):")
                 text += "".join(f"\n  {t.count(chr(10)) + 1} lines in a {w:g}x{h:g} box: {t[:40]!r}" for t, w, h in multi)
         latent = torch.zeros([batch_size, LATENT_CHANNELS, height // 16, width // 16], device=comfy.model_management.intermediate_device())
-        return (prompt, {"samples": latent}, width, height, format_info(text, "layout", width=width, height=height, items=len(texts)))
+        return (prompt, {"samples": latent}, width, height, format_info(text, "layout", width=width, height=height, items=len(texts),
+                                                                                multiline=[[t.count("\n") + 1, w, h] for t, w, h in multi]))
 
 
 NODE_CLASS_MAPPINGS = {"HaDeSMossLatent": HaDeSMossLatent, "HaDeSMossLayoutCompiler": HaDeSMossLayoutCompiler}
