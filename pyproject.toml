@@ -1,6 +1,6 @@
 [project]
 name = "hades-moss-suite"
-description = "ComfyUI nodes for the MOSS-Image model family: block and multi-model (TIES, DARE, Model Stock, SLERP) mergers for the 42-layer single-stream DiT and a model saver (bf16, float32, int8 ConvRot), with more merging and LoRA tools to come."
+description = "ComfyUI nodes for the MOSS-Image model family: block and multi-model (TIES, DARE, Model Stock, SLERP) mergers for the 42-layer single-stream DiT a model saver (bf16, float32, int8 ConvRot) and a LoRA extractor, with more LoRA tools to come."
 version = "0.1.0"
 authors = [
     { name = "Devildonia" }

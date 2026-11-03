@@ -88,6 +88,23 @@ and the x16 residual rescale (x0.0625 of SFT for SLERP, whose anchor is model_1)
 - Model Stock stays near base_model in both families, as in the HaDeS Anima Suite: the task vectors point in unrelated directions.
 - Which method gives better images is not measured; it depends on what the models changed.
 
+## LoRA Extractor
+
+HaDeS MOSS LoRA Extractor on `finetune - mossImage_sft_bf16`, the LoRA applied to SFT with the stock `LoraLoaderModelOnly` at 1.0
+(the ComfyUI log reported no skipped key), fisherman and watercolor fox prompts x seeds 1000 / 1001, mean absolute pixel difference:
+
+| Finetune | Rank | Size | Energy kept | finetune vs SFT | SFT + LoRA vs finetune |
+|---|---|---|---|---|---|
+| galenaCAT (SFT + 2 LoRAs, bf16) | 32 | 126 MB | 90.6% | 31–66 | 8–24 |
+| galenaCAT | 64 | 252 MB | 95.9% | 31–66 | 4–12 |
+| pornmaster (int8) | 32 | 126 MB | 13.2% | 6–26 | 5–18 |
+
+- Only the 168 layer linears differ in both finetunes; the other 210 tensors are SFT's and are skipped.
+- On pornmaster the energy kept is low because most of the difference is int8 rounding (see above), which low rank leaves out.
+  SFT quantized to int8 with the Model Saver renders 4.0 / 5.1 / 14.1 / 6.6 from SFT bf16 on the same four images: that is the noise
+  floor. pornmaster is 6.7 / 17.2 / 24.1 / 27.0 from SFT int8, and its rank-32 LoRA on SFT bf16 is 5.0 / 18.1 / 9.4 / 6.3 from
+  pornmaster: within the noise floor on three images, while on the fisherman seed 1001 it did not reproduce the change.
+
 ## Community LoRA formats in the core loader
 
 Four community LoRAs on `mossImage_sft_bf16` (fused `proj.qkv`) through the stock `LoraLoaderModelOnly`, strength 1.0: the ComfyUI log

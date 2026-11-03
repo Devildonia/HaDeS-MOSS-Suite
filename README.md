@@ -31,6 +31,14 @@ Claims about what layer groups do are measured with [`tools/moss_eval.py`](tools
 - **Inputs it accepts:** like the Block Merger, quantized models are dequantized (with a warning; with TIES / DARE a quantized model's task vector carries its rounding), and fp16-fixed files are brought to the anchor's residual scale (`base_model`, or `model_1` for SLERP).
 - **Not measured:** which method gives better images.
 
+### `MOSS LoRA Extractor` (`HaDeS/MOSS Mergers`)
+- **Class:** `HaDeSMossLoraExtractor`
+- **Purpose:** saves `model_tuned − model_base` as a LoRA in `models/loras/`: truncated SVD per linear layer (`lora_up` / `lora_down` / `alpha`), full `.diff` / `.diff_b` for norms and biases, identical tensors skipped. Keys are `diffusion_model.*` with fused `proj.qkv`, which the stock LoRA loaders apply to the Comfy-Org files.
+- **Inputs:** `model_tuned`, `model_base` (`MODEL`; merge / LoRA patches on either are included), `rank` (`4..256`, default `32`), `export_filename`, `overwrite_existing`.
+- **Inputs it accepts:** quantized models are dequantized (with a warning: the difference includes their rounding), and an fp16-fixed `model_tuned` is brought to `model_base`'s residual scale first.
+- **Outputs:** `saved_lora_path`, `info` (size, energy kept: the share of the difference the rank holds).
+- **Measured:** `galenaCAT − SFT` at rank 64 (252 MB) keeps 95.9% of the energy and renders 4–12 from the finetune on SFT; a rank-32 LoRA of an int8 finetune reproduced it within the int8 noise on three of four images. See [`tools/RESULTS.md`](tools/RESULTS.md).
+
 ### `MOSS Model Saver` (`HaDeS/MOSS Mergers`)
 - **Class:** `HaDeSMossModelSaver`
 - **Purpose:** saves a `MODEL` with its merge / LoRA patches baked in, loadable by the stock `Load Diffusion Model` node, and passes the model through.
