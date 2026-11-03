@@ -24,6 +24,9 @@ Modes:
   shift     --sft at several square sizes and flow shifts (SHIFT_GRID, ModelSamplingAuraFlow). Reports the low-frequency spectral
             slope (composition scale, compared with 1024 at the default shift 5.0), native-resolution detail and the layout change
             against shift 5.0 at the same size.
+  slg       SFT and Base (--models) without SLG and with SkipLayerGuidanceDiTSimple on single block 22 (first half / all steps),
+            24 and 26 (first half), on text, line-break, layout and portrait prompts. Count text errors by eye on the sheets.
+  schedulers  --sft with er_sde / euler x simple / beta / normal x 15 / 25 steps against a 60-step euler / simple reference.
   bias_merge  The two neutral prompts (café woman, fisherman) over --neutral-seeds seeds on SFT and Base with and without the
             Base template's SLG, and on SFT with its later layer groups taken from Base. Count the results by hand.
 
@@ -164,15 +167,31 @@ def build_graph(args, unet, slg, prompt, seed):
         g["sft"] = {"class_type": "UNETLoader", "inputs": {"unet_name": args.sft, "weight_dtype": "default"}}
         g["base"] = {"class_type": "UNETLoader", "inputs": {"unet_name": args.base, "weight_dtype": "default"}}
     if slg:
+        # True = the official Base template: single block 22 skipped on the negative pass for the first half of the steps
+        spec = {"layers": "22", "start": 0.0, "end": 0.5} if slg is True else slg
         g["slg"] = {"class_type": "SkipLayerGuidanceDiTSimple", "inputs": {
-            "model": ["unet", 0], "double_layers": "", "single_layers": "22", "start_percent": 0.0, "end_percent": 0.5}}
+            "model": ["unet", 0], "double_layers": "", "single_layers": spec["layers"], "start_percent": spec["start"], "end_percent": spec["end"]}}
     return g
+
+
+SLG_CONFIGS = {
+    "none": None,
+    "22_half": {"layers": "22", "start": 0.0, "end": 0.5},
+    "22_full": {"layers": "22", "start": 0.0, "end": 1.0},
+    "24_half": {"layers": "24", "start": 0.0, "end": 0.5},
+    "26_half": {"layers": "26", "start": 0.0, "end": 0.5},
+}
+SLG_PROMPTS = ("text_sign", "text_linebreaks", "layout_json", "photo_portrait")
+# (sampler, scheduler, steps); the reference is euler / simple at 60 steps
+SCHEDULER_CONFIGS = [(s, sch, st) for s in ("er_sde", "euler") for sch in ("simple", "beta", "normal") for st in (15, 25)]
 
 
 def jobs_for(args):
     """[(prompt name, prompt, seeds)]"""
-    if args.mode in ("groups", "lora", "shift"):
+    if args.mode in ("groups", "lora", "shift", "schedulers"):
         return [(n, p, list(range(args.seed0, args.seed0 + args.seeds))) for n, p in GROUP_PROMPTS.items()]
+    if args.mode == "slg":
+        return [(n, COMPARE[n], list(range(args.seed0, args.seed0 + args.seeds))) for n in SLG_PROMPTS]
     if args.mode == "bias_merge":
         return [(n, GROUP_PROMPTS[n], list(range(args.seed0, args.seed0 + args.neutral_seeds))) for n in ("neutral_woman", "photo_portrait")]
     if args.mode == "bias":
@@ -298,7 +317,7 @@ def contact_sheet(out_dir, name, prompt, seeds, models, cols=8, tile=256):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--mode", choices=("bias", "compare", "groups", "lora", "bias_merge", "shift"), default="bias")
+    p.add_argument("--mode", choices=("bias", "compare", "groups", "lora", "bias_merge", "shift", "slg", "schedulers"), default="bias")
     p.add_argument("--server", default="http://127.0.0.1:8188")
     p.add_argument("--sft", default="mossImage_sft_bf16.safetensors")
     p.add_argument("--base", default="mossImage_base_bf16.safetensors")
@@ -325,6 +344,12 @@ def main():
         return
     if args.mode == "shift":
         run_shift(args, jobs)
+        return
+    if args.mode == "slg":
+        run_slg(args, jobs)
+        return
+    if args.mode == "schedulers":
+        run_schedulers(args, jobs)
         return
     total, done = len(args.models) * sum(len(s) for _, _, s in jobs), 0
     t0 = time.time()
@@ -414,6 +439,50 @@ def run_shift(args, jobs):
         json.dump(report, f, indent=2)
     for name, prompt, seeds in jobs:
         print(contact_sheet(args.out, name, prompt, seeds, [f"{s}_s{sh:g}" for s, sh in configs], cols=len(seeds), tile=256))
+    print(json.dumps(report, indent=2))
+
+
+def run_slg(args, jobs):
+    """SFT and Base with each SLG_CONFIGS entry; contact sheets per prompt to count text errors by eye."""
+    configs = [(m, name) for m in args.models for name in SLG_CONFIGS]
+    total, done, t0 = len(configs) * sum(len(s) for _, _, s in jobs), 0, time.time()
+    for m, name in configs:
+        c = f"{m}_{name}"
+        for pname, prompt, seeds in jobs:
+            os.makedirs(os.path.join(args.out, c, pname), exist_ok=True)
+            for seed in seeds:
+                path = os.path.join(args.out, c, pname, f"{seed}.png")
+                if not os.path.exists(path):
+                    run_graph(args.server, build_graph(args, getattr(args, m), SLG_CONFIGS[name], prompt, seed)).save(path)
+                done += 1
+                print(f"[{done}/{total}] {c} {pname} {seed} ({time.time() - t0:.0f}s)", flush=True)
+    for pname, prompt, seeds in jobs:
+        print(contact_sheet(args.out, pname, prompt, seeds, [f"{m}_{n}" for m, n in configs], cols=len(seeds), tile=256))
+
+
+def run_schedulers(args, jobs):
+    """--sft with SCHEDULER_CONFIGS against a 60-step euler / simple reference (lower distance = closer to the converged image)."""
+    configs = {"ref": ("euler", "simple", 60)} | {f"{s}_{sch}_{st}": (s, sch, st) for s, sch, st in SCHEDULER_CONFIGS}
+    samples = [(name, prompt, seed) for name, prompt, seeds in jobs for seed in seeds]
+    feats, total, done, t0 = {}, len(configs) * len(samples), 0, time.time()
+    for c, (sampler, scheduler, steps) in configs.items():
+        feats[c] = {}
+        for name, prompt, seed in samples:
+            os.makedirs(os.path.join(args.out, c, name), exist_ok=True)
+            path = os.path.join(args.out, c, name, f"{seed}.png")
+            if not os.path.exists(path):
+                g = build_graph(args, args.sft, False, prompt, seed)
+                g["ks"]["inputs"].update(sampler_name=sampler, scheduler=scheduler, steps=steps)
+                run_graph(args.server, g).save(path)
+            feats[c][f"{name}_{seed}"] = features(Image.open(path).convert("RGB"))
+            done += 1
+            print(f"[{done}/{total}] {c} {name} {seed} ({time.time() - t0:.0f}s)", flush=True)
+    keys = list(feats["ref"])
+    rows = {c: {m: round(float(np.mean([distance(feats[c][s], feats["ref"][s])[m] for s in keys])), 3) for m in METRICS}
+            for c in configs if c != "ref"}
+    report = {"samples": len(keys), "sft": args.sft, "cfg": args.cfg, "reference": "euler / simple / 60 steps", "distance_to_reference": rows}
+    with open(os.path.join(args.out, "report_schedulers.json"), "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=2)
     print(json.dumps(report, indent=2))
 
 

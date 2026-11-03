@@ -85,6 +85,17 @@ Claims about what layer groups do are measured with [`tools/moss_eval.py`](tools
 - **Line breaks:** write them as `\n` in `text`. Measured, the box shape decides whether they are kept: a two-line title in an 832×192 box came out on one line in 3 of 6 seeds, in a 640×384 box on two lines in 6 of 6; a literal newline instead of `\n` changed nothing ([`tools/RESULTS.md`](tools/RESULTS.md)).
 - Unlike the core `MOSS-Image Layout Prompt` (boxes from `Create Bounding Boxes`), this node takes hand-written or LLM-written drafts, including `meta`, `canvas`, `palette` and `tags`.
 
+### `MOSS KSampler` (`HaDeS/MOSS Samplers`)
+- **Class:** `HaDeSMossKSampler`
+- **Purpose:** KSampler with the official ComfyUI MOSS-Image template settings as defaults (25 steps, CFG 2.5, `er_sde` / `simple`, the model's shift 5.0), an optional flow shift, optional skip-layer guidance and optional decode. With the same settings it renders the same image as the stock graph (`KSampler`, `ModelSamplingAuraFlow`, `SkipLayerGuidanceDiTSimple`, `VAEDecode`).
+- **Inputs:** `model`, `positive`, `negative`, `latent_image`, `seed`, `steps`, `cfg`, `sampler_name`, `scheduler`, `denoise`, `flow_shift` (`0` keeps the model's 5.0), `slg` (`off`, `block 22, first half (Base template)`, `block 22, all steps`); optional `vae`.
+- **Outputs:** `latent`, `image` (when a VAE is connected), `info` (the settings actually used).
+- **Measured** ([`tools/RESULTS.md`](tools/RESULTS.md)): shift 5.0 is clean from 768 to 2048 px; SLG on block 22 did not change text accuracy on SFT or Base (blocks 24 / 26 made the only errors, on Base), so it is off by default; with euler, 25 steps render nearly the 60-step image with any scheduler and euler / beta does so at 15.
+
+### `MOSS Sampler Metadata` (`HaDeS/MOSS Samplers`)
+- **Class:** `HaDeSMossSamplerMetadata`
+- **Purpose:** reads the settings a MOSS KSampler actually sampled with from its `info` (seed, steps, cfg, sampler, scheduler, denoise, flow shift), for image-saver metadata.
+
 ## Tools
 
 - `tools/moss_eval.py --mode bias | compare`: ethnic bias on neutral and explicit prompts, SFT vs Base on photo, illustration, text and layout prompts, with stock nodes only.
@@ -92,3 +103,5 @@ Claims about what layer groups do are measured with [`tools/moss_eval.py`](tools
 - `tools/moss_eval.py --mode lora --lora <name> --lora-model <file>`: which layer groups carry a LoRA's effect.
 - `tools/moss_eval.py --mode bias_merge`: ethnic bias of SFT / Base merges.
 - `tools/moss_eval.py --mode shift`: square sizes x flow shifts (composition scale, native detail).
+- `tools/moss_eval.py --mode slg`: skip-layer guidance blocks on text and portrait prompts, SFT and Base.
+- `tools/moss_eval.py --mode schedulers`: sampler x scheduler x steps against a 60-step reference.

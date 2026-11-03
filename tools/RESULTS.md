@@ -24,6 +24,41 @@ spectral slope (more negative = larger masses); detail: high-frequency power of 
 - Raising the shift changes the composition less than a new seed does and adds a little fine detail at 2048 (+0.107 at shift 10).
   Unlike Anima, where 2048 at its default shift collapsed into dark frames, MOSS needs no shift change with resolution; 5.0 stays.
 
+## Skip-layer guidance (SLG)
+
+`--mode slg`, SFT and Base, `SkipLayerGuidanceDiTSimple` on one single block for the negative pass, 4 seeds each on the bakery sign,
+the three-line poster, the layout JSON poster and the fisherman portrait. Text images with every string spelled and set right, out of
+12 per config (3 text prompts x 4 seeds), counted by eye:
+
+| SLG | SFT | Base |
+|---|---|---|
+| none | 12 / 12 | 12 / 12 |
+| block 22, first half (the official Base template) | 12 / 12 | 12 / 12 |
+| block 22, all steps | 12 / 12 | 12 / 12 |
+| block 24, first half | 12 / 12 | 11 / 12 ("BREAAD") |
+| block 26, first half | 12 / 12 | 11 / 12 (deformed glyphs, "QUI∃T") |
+
+- Without SLG both models already spelled every string right, so SLG on block 22 showed no gain in text; blocks 24 and 26 made the
+  only two errors, both on Base.
+- Block 22 over the first half or over all steps gave nearly the same images.
+- On the portrait SLG changes details only (a little more contrast and wrinkles with 24 / 26); on Base it changed one face entirely.
+
+## Samplers and schedulers
+
+`--mode schedulers`, SFT, CFG 2.5, café woman, fisherman and watercolor fox x seeds 1000 / 1001, mean distance to a 60-step
+euler / simple render of the same seed (lower = closer to the converged image), layout / edges / texture / color:
+
+| euler | 15 steps | 25 steps |
+|---|---|---|
+| simple | 6.76 / 0.219 / 0.711 / 4.05 | 4.93 / 0.185 / 0.324 / 1.89 |
+| beta | 5.69 / 0.192 / 0.646 / 2.76 | 6.13 / 0.189 / 0.386 / 1.95 |
+| normal | 7.19 / 0.240 / 0.749 / 4.44 | 4.81 / 0.152 / 0.363 / 1.92 |
+
+- euler converges early: at 25 steps every scheduler renders nearly the 60-step image, and euler / beta does so at 15 steps already.
+- er_sde (the sampler of the official templates) is stochastic: it renders a different image of the same seed (layout ~18, edges
+  ~0.91 from the euler reference at any scheduler or step count), so this convergence measure cannot rank it. By eye its renders are
+  as clean, with a little more contrast and edge definition (most visible on the watercolor). Which looks better is not measured.
+
 ## Model Saver
 
 A 0.5 SFT/Base merge (HaDeS MOSS Model Block Merger) saved with HaDeS MOSS Model Saver and reloaded with the stock `UNETLoader`,
