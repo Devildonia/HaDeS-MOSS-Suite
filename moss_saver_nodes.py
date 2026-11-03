@@ -10,7 +10,7 @@ import comfy.model_patcher
 import comfy.quant_ops
 import comfy.utils
 
-from .moss_common import count_layers, format_info
+from .moss_common import count_layers, format_info, key_patches, key_patches_weight, model_weights
 
 # The layout of Comfy-Org's moss_image_*_int8_convrot files: the four linears of every layer in int8 with ConvRot,
 # int8 attention in every layer, everything else (text_embedder, modulations, embedders, head, norms) in bfloat16.
@@ -62,10 +62,19 @@ class HaDeSMossModelSaver:
 
         quant_device = comfy.model_management.get_torch_device()
         int8 = precision.startswith("int8")
+        dtype = torch.float32 if precision == "float32" else torch.bfloat16
+        # Layers stored quantized (an int8 / fp8 input model): kept as their weight and scale pieces for int8 output,
+        # dequantized (with their patches) for bfloat16 / float32 output, so those files hold no int8 layer.
+        quantized = {k[:-len(".weight")] for k, w in model_weights(model).items() if k.endswith(".weight") and isinstance(w, comfy.quant_ops.QuantizedTensor)}
         sd = {}
         for k, v in lazy_sd.items():
+            module = k.rsplit(".", 1)[0]
+            if not int8 and (module in quantized or k.endswith("comfy_attention.config")):
+                if k == f"{module}.weight":
+                    pk = f"diffusion_model.{k}"
+                    sd[k] = key_patches_weight(key_patches(model, pk), quant_device, pk).to(dtype).cpu().contiguous()
+                continue  # weight_scale / comfy_quant pieces and the int8 attention setting belong to the int8 layout
             tensor = v.to("cpu").contiguous()
-            # Layers that are already quantized keep their weight and scale pieces; recasting would drop the scale.
             if isinstance(v, comfy.model_patcher.LazyCastingParamPiece) or not torch.is_floating_point(tensor):
                 sd[k] = tensor
             elif int8 and _INT8_LAYER_LINEAR_RE.match(k):
@@ -74,7 +83,7 @@ class HaDeSMossModelSaver:
                 sd.update({qk: qv.cpu() for qk, qv in qt.state_dict(k).items()})
                 sd[f"{k[:-len('.weight')]}.comfy_quant"] = _json_tensor(_INT8_QUANT_CONF)
             else:
-                sd[k] = tensor.to(torch.float32 if precision == "float32" else torch.bfloat16)
+                sd[k] = tensor.to(dtype)
 
         n_layers = count_layers(sd.keys())
         if int8:

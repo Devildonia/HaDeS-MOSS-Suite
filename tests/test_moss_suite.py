@@ -41,6 +41,8 @@ saver = importlib.import_module(f"{PACK}.moss_saver_nodes")
 DIM, LAYERS = 256, 6  # 2 heads of 128; 256 keeps every linear a multiple of the ConvRot group size
 TMP = tempfile.mkdtemp(prefix="hades_moss_tests_")
 folder_paths.folder_names_and_paths["loras"] = ([TMP], {".safetensors"})
+folder_paths.set_output_directory(TMP)
+sampler = importlib.import_module(f"{PACK}.moss_sampler_nodes")
 
 
 def tiny_state_dict(seed):
@@ -53,6 +55,23 @@ def tiny_state_dict(seed):
 
 def load(sd):
     return comfy.sd.load_diffusion_model_state_dict({k: v.clone() for k, v in sd.items()})
+
+
+def load_int8(sd):
+    """The state dict saved and loaded back in Comfy-Org's int8 ConvRot layout (layer linears int8, int8 attention)."""
+    path = os.path.join(TMP, "q.safetensors")
+    out = {}
+    for k, v in sd.items():
+        if saver._INT8_LAYER_LINEAR_RE.match(k):
+            qt = QuantizedTensor.from_float(v, "TensorWiseINT8Layout", is_weight=True, per_channel=True, convrot=True, convrot_groupsize=256)
+            out.update(qt.state_dict(k))
+            out[f"{k[:-len('.weight')]}.comfy_quant"] = saver._json_tensor(saver._INT8_QUANT_CONF)
+        else:
+            out[k] = v
+    for i in range(LAYERS):
+        out[f"layers.{i}.comfy_attention.config"] = saver._json_tensor(saver._INT8_ATTENTION_CONF)
+    safetensors.torch.save_file(out, path)
+    return comfy.sd.load_diffusion_model(path)
 
 
 def stored(model, key, value):
@@ -175,17 +194,7 @@ class TestMergers(unittest.TestCase):
                 torch.testing.assert_close(patched_weight(m, key), self.sd_a[key].float(), rtol=0, atol=2e-3)
 
     def test_quantized_input_is_dequantized(self):
-        path = os.path.join(TMP, "q.safetensors")
-        sd = {}
-        for k, v in self.sd_b.items():
-            if saver._INT8_LAYER_LINEAR_RE.match(k):
-                qt = QuantizedTensor.from_float(v, "TensorWiseINT8Layout", is_weight=True, per_channel=True, convrot=True, convrot_groupsize=256)
-                sd.update(qt.state_dict(k))
-                sd[f"{k[:-len('.weight')]}.comfy_quant"] = saver._json_tensor(saver._INT8_QUANT_CONF)
-            else:
-                sd[k] = v
-        safetensors.torch.save_file(sd, path)
-        q = comfy.sd.load_diffusion_model(path)
+        q = load_int8(self.sd_b)
         key = "layers.4.proj.ffn_down.weight"
         self.assertIsInstance(comfy.utils.get_attr(q.model.diffusion_model, key), QuantizedTensor)
         m, _, _, quantized, _ = common.apply_block_merge(self.a, q, [1.0] * LAYERS, dict.fromkeys(common.PARTS, 1.0))
@@ -276,6 +285,33 @@ class TestLoras(unittest.TestCase):
         key = "diffusion_model.layers.5.proj.o.weight"
         # the stored delta also holds the bfloat16 rounding of the tuned weight, which rank 8 leaves out
         self.assertLess(rel_err(self.core_delta(os.path.basename(path), key), delta), 5e-2)
+
+
+class TestSaverAndSampler(unittest.TestCase):
+    def test_int8_model_saved_as_bf16_holds_no_int8(self):
+        q = load_int8(tiny_state_dict(7))
+        for precision, dtype in (("bfloat16", "BF16"), ("float32", "F32")):
+            path = saver.HaDeSMossModelSaver().save(q, "tests/save", precision, False)["result"][1]
+            with safetensors.safe_open(path, "pt") as f:
+                keys = list(f.keys())
+                with self.subTest(precision):
+                    self.assertEqual({f.get_slice(k).get_dtype() for k in keys if k.endswith("proj.qkv.weight")}, {dtype})
+                    self.assertFalse([k for k in keys if k.endswith(("comfy_quant", "weight_scale", "comfy_attention.config"))])
+                    deq = comfy.utils.get_attr(q.model.diffusion_model, "layers.2.proj.qkv.weight").dequantize().float().to(torch.bfloat16).float()
+                    torch.testing.assert_close(f.get_tensor("layers.2.proj.qkv.weight").float(), deq, rtol=0, atol=0)
+
+    def test_int8_output_matches_comfy_org_layout(self):
+        path = saver.HaDeSMossModelSaver().save(load(tiny_state_dict(8)), "tests/save", "int8 ConvRot (Comfy-Org layout)", False)["result"][1]
+        with safetensors.safe_open(path, "pt") as f:
+            keys = set(f.keys())
+            self.assertEqual(f.get_slice("layers.0.proj.qkv.weight").get_dtype(), "I8")
+            self.assertEqual(f.get_slice("text_embedder.proj.weight").get_dtype(), "BF16")
+            self.assertTrue({"layers.0.proj.qkv.weight_scale", "layers.0.proj.qkv.comfy_quant", "layers.5.comfy_attention.config"} <= keys)
+
+    def test_image_output_without_vae_is_reported(self):
+        prompt = {"9": {"class_type": "HaDeSMossKSampler", "inputs": {}}, "10": {"class_type": "SaveImage", "inputs": {"images": ["9", 1]}}}
+        with self.assertRaisesRegex(ValueError, "no VAE"):
+            sampler.HaDeSMossKSampler().sample(None, None, None, None, 0, 1, 1.0, "euler", "simple", 1.0, 0.0, "off", prompt=prompt, unique_id="9")
 
 
 class TestTelemetry(unittest.TestCase):

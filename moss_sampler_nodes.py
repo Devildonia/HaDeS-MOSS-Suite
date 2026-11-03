@@ -51,11 +51,13 @@ class HaDeSMossKSampler:
                                                     "changes the image less than a new seed (tools/RESULTS.md)."}),
                 "slg": (list(SLG_MODES), {"default": "off",
                                           "tooltip": "Skip-layer guidance on the negative pass. Measured on SFT and Base, block 22 did not change text accuracy "
-                                                     "(both models spelled every test string right without it) and only nudged photos (tools/RESULTS.md)."}),
+                                                     "(both models spelled every test string right without it); on photos it changed details, "
+                                                     "and on Base one face entirely (tools/RESULTS.md)."}),
             },
             "optional": {
-                "vae": ("VAE", {"tooltip": "Optional: also decode the result."}),
+                "vae": ("VAE", {"tooltip": "Optional: also decode the result. Needed when the image output is connected."}),
             },
+            "hidden": {"prompt": "PROMPT", "unique_id": "UNIQUE_ID"},
         }
 
     RETURN_TYPES = ("LATENT", "IMAGE", "STRING")
@@ -64,7 +66,11 @@ class HaDeSMossKSampler:
     CATEGORY = "HaDeS/MOSS Samplers"
     DESCRIPTION = "KSampler with the official MOSS-Image settings as defaults, optional shift and SLG, optional decode, and the settings used in info."
 
-    def sample(self, model, positive, negative, latent_image, seed, steps, cfg, sampler_name, scheduler, denoise, flow_shift, slg, vae=None):
+    def sample(self, model, positive, negative, latent_image, seed, steps, cfg, sampler_name, scheduler, denoise, flow_shift, slg, vae=None,
+               prompt=None, unique_id=None):
+        # the image output connected without a VAE would reach the next node as None; say so here instead
+        if vae is None and any(v == [str(unique_id), 1] for node in (prompt or {}).values() for v in node.get("inputs", {}).values()):
+            raise ValueError("HaDeS MOSS KSampler: the image output is connected but no VAE is; connect the VAE input to decode.")
         m = with_shift(model, flow_shift)
         if SLG_MODES[slg] is not None:
             layers, start, end = SLG_MODES[slg]

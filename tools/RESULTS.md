@@ -21,7 +21,9 @@ spectral slope (more negative = larger masses); detail: high-frequency power of 
 - Every size from 768 to 2048 rendered clean images at the default shift 5.0, with no repeated subjects and no collapsed frames; at
   2048 the native-resolution crop holds fine detail (skin, hair, knit). Larger canvases show more of the scene around a smaller
   subject (steeper slope), not repeated subjects.
-- Raising the shift changes the composition less than a new seed does and adds a little fine detail at 2048 (+0.107 at shift 10).
+- Raising the shift changes the composition less than a new seed does: layout distance 3.8–6.1 against shift 5.0, while seeds
+  1000 and 1001 at shift 5.0 are 19.5 / 20.2 / 19.5 / 22.4 apart (768 / 1024 / 1536 / 2048, mean of the three prompts). It adds a
+  little fine detail at 2048 (+0.107 at shift 10).
   Unlike Anima, where 2048 at its default shift collapsed into dark frames, MOSS needs no shift change with resolution; 5.0 stays.
 
 ## Skip-layer guidance (SLG)

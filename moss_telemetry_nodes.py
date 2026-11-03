@@ -43,9 +43,9 @@ def diagnose(metas):
 
     for kind in ("lora_extractor", "lora_resize", "lora_merger"):
         for m in by_node.get(kind, []):
-            if m["energy_kept"] < 0.9:
-                out.append(("warning", f"{NODE_NAMES[kind]}: {m['energy_kept']:.1%} energy kept; below about 90% the output drifted visibly "
-                                       "from the source in tests. Raise the rank."))
+            if m["energy_kept"] < 0.979:  # the lowest energy measured within the noise floor
+                out.append(("warning", f"{NODE_NAMES[kind]}: {m['energy_kept']:.1%} energy kept. Measured: 97.9-100% stayed within the "
+                                       "noise floor of the source, 90.4-91.1% drifted visibly. Raise the rank to stay close."))
 
     for m in by_node.get("layout", []):
         for lines, w, h in m.get("multiline", []):

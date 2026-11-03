@@ -18,7 +18,8 @@ def group_name(g):
 
 GROUPS = [group_name(g) for g in range(N_GROUPS)]
 
-# Share of the SFT -> Base change each group carries alone, min-max over layout / edges / texture / color (tools/RESULTS.md)
+# Share of the SFT -> Base change each group carries, min-max over layout / edges / texture / color and over swap-in (only that group
+# from Base) and leave-out (Base without that group), tools/RESULTS.md
 MEASURED = {
     "layers_00_05": "0.17-0.40", "layers_06_11": "0.10-0.28", "layers_12_17": "0.11-0.31", "layers_18_23": "0.20-0.48",
     "layers_24_29": "0.44-0.76 (strongest)", "layers_30_35": "0.37-0.65", "layers_36_41": "0.17-0.39",
@@ -27,7 +28,8 @@ MEASURED = {
 
 
 def tooltip(name, what):
-    return f"{what} 0.0 = Model 1, 1.0 = Model 2. Alone it carries {MEASURED[name]} of the SFT -> Base change (tools/RESULTS.md)."
+    return (f"{what} 0.0 = Model 1, 1.0 = Model 2. Measured on SFT -> Base, this group carries {MEASURED[name]} of the change "
+            f"(taken alone or left out, per image metric; tools/RESULTS.md).")
 
 
 def layer_group(i, n_layers):
@@ -40,7 +42,10 @@ def parse_recipe(text, n_layers):
     if len(parts) != n_layers + len(PARTS):
         raise ValueError(f"HaDeS MOSS Merger: recipe_override needs {n_layers + len(PARTS)} comma-separated values "
                          f"({n_layers} layers, then {', '.join(PARTS)}), got {len(parts)}.")
-    values = [float(p) for p in parts]
+    try:
+        values = [float(p) for p in parts]
+    except ValueError:
+        raise ValueError(f"HaDeS MOSS Merger: recipe_override must be numbers only, got {[p for p in parts if not p.replace('.', '', 1).lstrip('-').isdigit()][:3]}.") from None
     return values[:n_layers], dict(zip(PARTS, values[n_layers:]))
 
 
