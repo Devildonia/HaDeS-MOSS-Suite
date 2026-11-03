@@ -1,0 +1,105 @@
+import datetime
+import json
+import os
+import re
+
+import torch
+import folder_paths
+import comfy.model_management
+import comfy.model_patcher
+import comfy.quant_ops
+import comfy.utils
+
+from .moss_common import count_layers, format_info
+
+# The layout of Comfy-Org's moss_image_*_int8_convrot files: the four linears of every layer in int8 with ConvRot,
+# int8 attention in every layer, everything else (text_embedder, modulations, embedders, head, norms) in bfloat16.
+_INT8_LAYER_LINEAR_RE = re.compile(r"^layers\.\d+\.proj\.(qkv|q|k|v|o|ffn_up_gate|ffn_down)\.weight$")
+_INT8_QUANT_CONF = {"format": "int8_tensorwise", "convrot": True, "convrot_groupsize": 256}
+_INT8_ATTENTION_CONF = {"attention": "comfy_kitchen_int8"}
+
+PRECISIONS = ["bfloat16", "int8 ConvRot (Comfy-Org layout)", "float32"]
+
+
+def _json_tensor(obj):
+    return torch.tensor(list(json.dumps(obj).encode("utf-8")), dtype=torch.uint8)
+
+
+class HaDeSMossModelSaver:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": ("MODEL",),
+                "filename_prefix": ("STRING", {"default": "diffusion_models/MOSS_HaDeS_Merged", "tooltip": "Subfolder and file name prefix inside ComfyUI/output."}),
+                "precision": (PRECISIONS, {"tooltip": "bfloat16: same as the original files. int8 ConvRot: the layout of Comfy-Org's *_int8_convrot files "
+                                                      "(layer linears in int8 with Hadamard rotation and int8 attention, the rest in bfloat16), "
+                                                      "about half the size. float32: uncompressed."}),
+                "include_metadata": ("BOOLEAN", {"default": True, "tooltip": "Write ModelSpec title / author and the HaDeS precision and layer count into the safetensors header."}),
+            },
+            "optional": {
+                "custom_author": ("STRING", {"default": "HaDeS"}),
+                "custom_model_title": ("STRING", {"default": ""}),
+            },
+        }
+
+    RETURN_TYPES = ("MODEL", "STRING", "STRING")
+    RETURN_NAMES = ("model", "saved_path", "info")
+    FUNCTION = "save"
+    OUTPUT_NODE = True
+    CATEGORY = "HaDeS/MOSS Mergers"
+    DESCRIPTION = "Saves a MOSS-Image MODEL with its merge / LoRA patches baked in, loadable by the stock Load Diffusion Model node."
+
+    def save(self, model, filename_prefix, precision, include_metadata, custom_author="HaDeS", custom_model_title=""):
+        full_output_folder, filename, counter, _, _ = folder_paths.get_save_image_path(filename_prefix, folder_paths.get_output_directory())
+        os.makedirs(full_output_folder, exist_ok=True)
+        out_path = os.path.join(full_output_folder, f"{filename}_{counter:05}_.safetensors")
+
+        # Same path as comfy.sd.save_checkpoint: with dynamic VRAM the patches are applied at cast time and never
+        # live in the raw state_dict, so the weights go through the lazy patching casters.
+        comfy.model_management.load_models_gpu([model])
+        lazy_sd = model.model_state_dict_for_saving(model.model.diffusion_model, "diffusion_model.")
+
+        quant_device = comfy.model_management.get_torch_device()
+        int8 = precision.startswith("int8")
+        sd = {}
+        for k, v in lazy_sd.items():
+            tensor = v.to("cpu").contiguous()
+            # Layers that are already quantized keep their weight and scale pieces; recasting would drop the scale.
+            if isinstance(v, comfy.model_patcher.LazyCastingParamPiece) or not torch.is_floating_point(tensor):
+                sd[k] = tensor
+            elif int8 and _INT8_LAYER_LINEAR_RE.match(k):
+                qt = comfy.quant_ops.QuantizedTensor.from_float(tensor.to(quant_device, torch.bfloat16), "TensorWiseINT8Layout",
+                                                                is_weight=True, per_channel=True, convrot=True, convrot_groupsize=256)
+                sd.update({qk: qv.cpu() for qk, qv in qt.state_dict(k).items()})
+                sd[f"{k[:-len('.weight')]}.comfy_quant"] = _json_tensor(_INT8_QUANT_CONF)
+            else:
+                sd[k] = tensor.to(torch.float32 if precision == "float32" else torch.bfloat16)
+
+        n_layers = count_layers(sd.keys())
+        if int8:
+            for i in range(n_layers):
+                sd.setdefault(f"layers.{i}.comfy_attention.config", _json_tensor(_INT8_ATTENTION_CONF))
+
+        metadata = None
+        if include_metadata:
+            metadata = {
+                "format": "pt",
+                "modelspec.architecture": "moss_image",
+                "modelspec.sai_model_spec": "1.0.0",
+                "modelspec.title": custom_model_title or filename,
+                "modelspec.author": custom_author or "HaDeS",
+                "hades/precision": precision,
+                "hades/layers": str(n_layers),
+                "hades/timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            }
+        comfy.utils.save_torch_file(sd, out_path, metadata=metadata)
+
+        size_gb = os.path.getsize(out_path) / 1024 ** 3
+        info = format_info(f"HaDeS MOSS Model Saver | {os.path.basename(out_path)} | {precision} | {size_gb:.2f} GB | {n_layers} layers",
+                           "model_saver", saved_path=out_path, precision=precision, n_layers=n_layers)
+        return {"ui": {"saved_path": [out_path], "info": [info]}, "result": (model, out_path, info)}
+
+
+NODE_CLASS_MAPPINGS = {"HaDeSMossModelSaver": HaDeSMossModelSaver}
+NODE_DISPLAY_NAME_MAPPINGS = {"HaDeSMossModelSaver": "MOSS Model Saver"}

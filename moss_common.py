@@ -5,6 +5,8 @@ import re
 import torch
 import comfy.lora
 import comfy.model_management
+import comfy.model_patcher
+import comfy.utils
 import comfy.weight_adapter
 from comfy.quant_ops import QuantizedTensor
 
@@ -59,14 +61,16 @@ def key_slot(key):
     return None
 
 
-def require_unquantized(key, *weights):
-    """Stored int8 / ConvRot / fp8 weights are not values that can be blended."""
-    for w in weights:
-        if isinstance(w, QuantizedTensor) or not w.is_floating_point() or w.element_size() < 2:
-            raise ValueError(
-                f"HaDeS MOSS Merger: '{key}' is quantized ({w.dtype}); load both models unquantized "
-                f"(the bf16 checkpoints) to merge them."
-            )
+def model_weights(model):
+    """Merge-able parameters of a MOSS MODEL by key (no 'diffusion_model.' prefix). Quantized layers (int8 ConvRot, fp8)
+    come back as their QuantizedTensor, not as the raw int8 / weight_scale / comfy_quant pieces of the state_dict."""
+    dm = model.model.diffusion_model
+    return {k: comfy.utils.get_attr(dm, k) for k in dm.state_dict() if k.endswith((".weight", ".bias")) and key_slot(k) is not None}
+
+
+def require_float(key, w):
+    if not isinstance(w, QuantizedTensor) and not w.is_floating_point():
+        raise ValueError(f"HaDeS MOSS Merger: '{key}' is stored as {w.dtype} without a quantization layout ComfyUI can dequantize.")
 
 
 # ==============================================================================
@@ -77,11 +81,26 @@ def same_weight(a, b):
     return torch.equal(a, b.to(a.device))
 
 
+def key_patches(model, key):
+    """get_key_patches() for one key. The ModelPatcher method itself fails on quantized models: it reads every state_dict
+    entry as a module attribute, comfy_quant included."""
+    weight, _, convert = comfy.model_patcher.get_key_weight(model.model, key)
+    if key in model.backup:
+        weight = model.backup[key].weight
+    if key in model.hook_backup:
+        weight = model.hook_backup[key][0]
+    return [(weight, convert or (lambda a, **kwargs: a))] + model.patches.get(key, [])
+
+
 def key_patches_weight(key_patches, device, key):
-    """One get_key_patches() entry baked like a saved model: patches applied in float32, rounded to the stored dtype."""
+    """One key_patches() entry baked like a saved model: patches applied in float32, rounded to the stored dtype.
+    Quantized weights are dequantized first, so the result is the rounded (lossy) weight, not the pre-quantization one."""
     (w, convert), patches = key_patches[0], key_patches[1:]
-    baked = comfy.lora.calculate_weight(patches, convert(comfy.model_management.cast_to_device(w, device, torch.float32, copy=True), inplace=True), key)
-    return baked.to(w.dtype).float()
+    w32 = comfy.model_management.cast_to_device(w, device, torch.float32, copy=True)
+    if isinstance(w32, QuantizedTensor):
+        w32 = w32.dequantize().float()
+    baked = comfy.lora.calculate_weight(patches, convert(w32, inplace=True), key)
+    return baked.to(torch.bfloat16 if isinstance(w, QuantizedTensor) else w.dtype).float()
 
 
 class MossMergeAdapter(comfy.weight_adapter.WeightAdapterBase):
@@ -92,47 +111,90 @@ class MossMergeAdapter(comfy.weight_adapter.WeightAdapterBase):
 
     def __init__(self, loaded_keys, weights):
         self.loaded_keys = loaded_keys
-        self.weights = weights  # (model1 key patches, model2 key patches, ratio, model1 storage dtype)
+        self.weights = weights  # (model1 key patches, model2 key patches, ratio, model1 storage dtype, model2 rescale or None)
 
     def calculate_weight(self, weight, key, strength, strength_model, offset, function, intermediate_dtype=torch.float32, original_weight=None):
-        key_patches1, key_patches2, ratio, storage_dtype = self.weights
+        key_patches1, key_patches2, ratio, storage_dtype, rescale2 = self.weights
         w1 = key_patches_weight(key_patches1, weight.device, key)
         w2 = key_patches_weight(key_patches2, weight.device, key)
+        if rescale2 is not None:
+            w2 = w2 * rescale2.to(w2.device)
         return (w1 + (w2 - w1) * ratio).to(storage_dtype).to(weight.dtype)
 
 
+# ==============================================================================
+# RESIDUAL STREAM SCALE ("fp16-fixed" files)
+# ==============================================================================
+# Every MOSS norm is an RMSNorm, so scaling all writes into the residual stream by one factor gives the same model.
+# fp16 conversions use that to stay in fp16 range (miaomiaoHaremMOSS_baseV11_fp16: x 1/16, tools/RESULTS.md).
+# The writes: the latent embedder, the text embedder's projection and block outputs, and the two gates of the shared modulation.
+_RESIDUAL_WRITER_RE = re.compile(r"^(video_embedder|text_embedder\.proj|text_embedder\.blocks\.\d+\.(proj|ffn_down))\.(weight|bias)$")
+_MODULATION_GATES = (2, 5)  # shared_block_modulation chunks: shift, scale, gate (attention), shift, scale, gate (ffn)
+
+
+def residual_scale(w1s, w2s):
+    """Factor that brings model2's residual stream to model1's (least squares on the latent embedder), or None when they match."""
+    a = w1s["video_embedder.weight"]
+    b = w2s["video_embedder.weight"]
+    a = (a.dequantize() if isinstance(a, QuantizedTensor) else a).float().cpu()
+    b = (b.dequantize() if isinstance(b, QuantizedTensor) else b).float().cpu()
+    s = ((a * b).sum() / (b * b).sum()).item()
+    # finetunes move this weight by well under 1%; a residual rescale moves it by a large factor
+    return s if abs(s - 1.0) > 0.05 else None
+
+
+def rescale_for(key, w, s):
+    """model2's rescale factor for one key: a scalar, per-row factors for the modulation, None for keys off the residual stream."""
+    if _RESIDUAL_WRITER_RE.match(key):
+        return torch.tensor(s)
+    if key.startswith("shared_block_modulation."):
+        rows = torch.ones(w.shape[0])
+        for c in _MODULATION_GATES:
+            rows.view(6, -1)[c] = s
+        return rows.view(-1, *([1] * (w.ndim - 1)))
+    return None
+
+
 def apply_block_merge(model1, model2, layer_ratios, part_ratios):
-    """Merge model2 into model1 with one ratio per `layers.N` and per PARTS entry. Returns (model, merged tensors, layers)."""
+    """Merge model2 into model1 with one ratio per `layers.N` and per PARTS entry.
+    model2's residual stream is brought to model1's scale first (fp16-fixed files).
+    Returns (model, merged tensors, layers, quantized side names, model2 residual rescale or None)."""
     m = model1.clone()
-    sd1 = m.model.diffusion_model.state_dict()
-    sd2 = model2.model.diffusion_model.state_dict()
-    n_layers = count_layers(sd1.keys())
-    if n_layers != count_layers(sd2.keys()):
-        raise ValueError(f"HaDeS MOSS Merger: model1 has {n_layers} layers, model2 has {count_layers(sd2.keys())}.")
+    w1s, w2s = model_weights(m), model_weights(model2)
+    n_layers = count_layers(w1s.keys())
+    if n_layers != count_layers(w2s.keys()):
+        raise ValueError(f"HaDeS MOSS Merger: model1 has {n_layers} layers, model2 has {count_layers(w2s.keys())}.")
     if n_layers != len(layer_ratios):
         raise ValueError(f"HaDeS MOSS Merger: got {len(layer_ratios)} layer ratios for a {n_layers}-layer model.")
-    fused1, fused2 = ("layers.0.proj.qkv.weight" in sd1), ("layers.0.proj.qkv.weight" in sd2)
-    if fused1 != fused2:
+    if ("layers.0.proj.qkv.weight" in w1s) != ("layers.0.proj.qkv.weight" in w2s):
         raise ValueError("HaDeS MOSS Merger: one model stores q/k/v fused (proj.qkv) and the other split (proj.q/k/v); "
                          "load both from files of the same layout.")
 
-    key_patches1 = m.get_key_patches("diffusion_model.")
-    key_patches2 = model2.get_key_patches("diffusion_model.")
+    quantized = [name for name, ws in (("model1", w1s), ("model2", w2s)) if any(isinstance(w, QuantizedTensor) for w in ws.values())]
+    scale = residual_scale(w1s, w2s)
     merged = 0
-    for k, w1 in sd1.items():
-        slot = key_slot(k)
-        if slot is None or k not in sd2:
+    for k, w1 in w1s.items():
+        if k not in w2s:
             continue
-        w2 = sd2[k]
+        w2 = w2s[k]
         if w1.shape != w2.shape:
             raise ValueError(f"HaDeS MOSS Merger: shape mismatch on '{k}': {tuple(w1.shape)} vs {tuple(w2.shape)}.")
-        require_unquantized(k, w1, w2)
+        require_float(k, w1)
+        require_float(k, w2)
+        slot = key_slot(k)
         ratio = layer_ratios[slot] if isinstance(slot, int) else part_ratios[slot]
         if ratio == 0.0:
             continue
         patch_key = f"diffusion_model.{k}"
-        if patch_key not in m.patches and patch_key not in model2.patches and same_weight(w1, w2):
+        exact = not isinstance(w1, QuantizedTensor) and not isinstance(w2, QuantizedTensor)
+        if exact and patch_key not in m.patches and patch_key not in model2.patches and same_weight(w1, w2):
             continue
-        m.add_patches({patch_key: MossMergeAdapter(set(), (key_patches1[patch_key], key_patches2[patch_key], ratio, w1.dtype))}, 1.0)
+        storage = torch.bfloat16 if isinstance(w1, QuantizedTensor) else w1.dtype
+        rescale = rescale_for(k, w2, scale) if scale is not None else None
+        m.add_patches({patch_key: MossMergeAdapter(set(), (key_patches(m, patch_key), key_patches(model2, patch_key), ratio, storage, rescale))}, 1.0)
         merged += 1
-    return m, merged, n_layers
+    if quantized:
+        logger.warning(f"HaDeS MOSS Merger: {' and '.join(quantized)} quantized; merging their dequantized (rounded) weights.")
+    if scale is not None:
+        logger.info(f"HaDeS MOSS Merger: model2's residual stream rescaled by {scale:.4g} to match model1.")
+    return m, merged, n_layers, quantized, scale

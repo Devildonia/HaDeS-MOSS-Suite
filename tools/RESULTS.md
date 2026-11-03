@@ -5,6 +5,82 @@ model shift 5.0, negative `nsfw, worst quality, bad anatomy, watermark, jpeg art
 text encoder `mossImage_base_txt_int4` (w4a8 with codebook), VAE `flux2-vae`. Models: `mossImage_sft_bf16` and `mossImage_base_bf16`
 (fused `proj.qkv`, 42 layers). Ethnicity counts are by eye on the contact sheets.
 
+## Model Saver
+
+A 0.5 SFT/Base merge (HaDeS MOSS Model Block Merger) saved with HaDeS MOSS Model Saver and reloaded with the stock `UNETLoader`,
+fisherman prompt, seed 1000, mean absolute pixel difference (0-255):
+
+| Comparison | Difference |
+|---|---|
+| SFT saved without changes vs the original SFT file | 0.0 |
+| Saved bf16 weights vs (SFT + Base) / 2 computed directly | max 3e-8 per weight (rounding of the smallest values) |
+| Live merge (this suite) vs live merge (core `ModelMergeSimple`, same ratio) | 0.0 |
+| Live merge vs the saved bf16 file | 7.9 |
+| Live merge vs the saved int8 ConvRot file | 2.9 |
+| Saved bf16 vs saved int8 ConvRot | 8.8 |
+
+- The saved file holds the merged weights, and the saver changes nothing on an unpatched model.
+- A merge applied live renders a little differently from the same weights loaded from a file, in the core merger as in this one:
+  same subject and composition, different small details (pose of the arms, framing). Judge a merge on the saved file when the
+  exact image matters.
+- The int8 ConvRot file has the same keys, dtypes and shapes as Comfy-Org's `moss_image_sft_int8_convrot` (5.41 GB).
+
+## Merging an int8 ConvRot finetune
+
+`pornmasterMoss_sftV1` (int8 ConvRot, SFT-derived: identical to SFT outside the layer linears) merged with `mossImage_sft_bf16`
+through HaDeS MOSS Model Block Merger, checked on the weights (no render):
+
+- At ratio 1.0 every merged weight equals the dequantized int8 weight (`torch.allclose` on three layers).
+- The finetune's difference to SFT is about as large as the int8 rounding itself (relative norm, SFT re-quantized with the same layout
+  as the yardstick):
+
+| Weight | int8 rounding of SFT | finetune vs SFT | top-32 singular energy: finetune vs SFT / int8 noise |
+|---|---|---|---|
+| layers.0.proj.qkv | 0.0094 | 0.0120 | 0.478 / 0.034 |
+| layers.10.proj.o | — | — | 0.044 / 0.043 |
+| layers.20.proj.ffn_down | 0.0100 | 0.0099 | 0.150 / 0.028 |
+| layers.35.proj.o | 0.0096 | 0.0088 | 0.043 / 0.042 |
+
+- Where the finetune changed a layer (0, 20), its change is low rank and stands out from the noise; where it did not (10, 35), the
+  difference to SFT is int8 rounding alone. A block merge spreads that noise by the ratio; methods that trim task vectors by magnitude
+  (TIES / DARE) would keep noise in the untouched layers, so an int8 model is a poor input for them.
+
+With the merger in ComfyUI (fisherman prompt, seed 1000, mean absolute pixel difference): SFT x pornmaster at ratio 1.0 is 2.4 from
+pornmaster loaded directly and 6.7 from SFT; at 0.5 it is 4.7 / 4.3; pornmaster itself is 5.8 from SFT.
+
+## fp16-fixed files (residual stream rescale)
+
+`miaomiaoHaremMOSS_baseV11_fp16` (fp16, Base-derived) fitted tensor by tensor against `mossImage_base_bf16` (least-squares scale):
+
+- 12 tensors are Base's exactly x 1/16 (residual 0.0000 after scaling): `video_embedder` and, in `text_embedder`, `proj` and every
+  block's `proj` and `ffn_down` (weights and biases).
+- `shared_block_modulation`: the two gate chunks (attention, ffn) x 1/16; the shift and scale chunks unchanged.
+- `final_linear_video`, `video_head_modulation`, all norms: unchanged.
+
+These are all the writes into the residual stream, and every norm in MOSS is an RMSNorm, so the file is the same model with its
+residual stream scaled by 1/16 to stay in fp16 range. The finetune itself changed 64 of the 336 layer tensors (mean 0.2% vs Base).
+Merged as stored, its task vector in those 14 tensors would be -15/16 of the weights. The merger fits the scale on `video_embedder`,
+finds 16.0, and multiplies model2's residual writes and gates by it before merging: Base x miaomiao at ratio 1.0 gives Base's values
+in those tensors (miaomiao did not change them beyond the scale) and miaomiao's in the layers.
+
+In ComfyUI (fisherman prompt, seed 1000, mean absolute pixel difference): Base x miaomiao at ratio 1.0 is 1.8 from miaomiao loaded
+directly and 22.3 from Base; at 0.5 it is 16.3 / 8.5; miaomiao itself is 22.5 from Base. All renders are clean.
+
+## Community LoRA formats in the core loader
+
+Four community LoRAs on `mossImage_sft_bf16` (fused `proj.qkv`) through the stock `LoraLoaderModelOnly`, strength 1.0: the ComfyUI log
+reported no skipped key for any of them and every one changed the image.
+
+| Key format | Example | q/k/v | Loaded |
+|---|---|---|---|
+| kohya `lora_unet_layers_N_proj_q.lora_down/up` + `alpha` (sd-scripts on the Diffusers files) | AnubisCitronOC_MOSS_v1 | split | all keys |
+| PEFT `diffusion_model.layers.N.proj.q.lora_A/B`, no alpha | asura MOSS Base | split | all keys |
+| PEFT `diffusion_model.layers.N.proj.qkv.lora_A/B` (ai-toolkit on the Comfy-Org files) | lenovo_moss, retro-scifi-90s | fused | all keys |
+
+- The core already maps split q/k/v LoRAs onto fused files, so the suite needs no key remapper (unlike Anima).
+- The three ai-toolkit / PEFT LoRAs leave out layer 22, the layer the official Base template skips for SLG; the kohya one trains all 42.
+- None of them touches `text_embedder`, the modulations or `io`.
+
 ## Phase 0: bias, SFT vs Base, text and layout
 
 As in the templates, SFT samples without SLG and Base with SkipLayerGuidanceDiTSimple on single block 22 for the first half.

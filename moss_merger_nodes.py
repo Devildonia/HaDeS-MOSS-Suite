@@ -68,9 +68,18 @@ class HaDeSMossModelBlockMerger:
             layer_ratios = [groups[GROUPS[layer_group(i, n_layers)]] for i in range(n_layers)]
             part_ratios = {"text_embedder": text_embedder, "time_modulation": time_modulation, "io": io}
             mode = "groups"
-        m, merged, n_layers = apply_block_merge(model1, model2, layer_ratios, part_ratios)
-        return (m, format_info(f"HaDeS MOSS Model Merged ({mode}) | {n_layers} layers | modified tensors: {merged}",
-                               "model_block_merger", mode=mode, n_layers=n_layers, modified_tensors=merged))
+        m, merged, n_layers, quantized, scale = apply_block_merge(model1, model2, layer_ratios, part_ratios)
+        text = f"HaDeS MOSS Model Merged ({mode}) | {n_layers} layers | modified tensors: {merged}"
+        if scale is not None:
+            text += (f"\nmodel2 stores its residual stream scaled by {1 / scale:.4g} relative to model1 (an fp16-fixed file); "
+                     f"it was brought to model1's scale before merging, which gives the same model2.")
+        if quantized:
+            text += (f"\nWARNING: {' and '.join(quantized)} quantized (int8 / fp8). Their dequantized weights were merged: "
+                     f"the rounding of the quantized file is kept, the original weights are not recovered.")
+            if "model1" in quantized:
+                text += " The result is quantized again into model1's format; connect the bf16 model as model1 to keep it in bf16."
+        return (m, format_info(text, "model_block_merger", mode=mode, n_layers=n_layers, modified_tensors=merged, quantized=quantized,
+                               model2_residual_rescale=scale))
 
 
 NODE_CLASS_MAPPINGS = {"HaDeSMossModelBlockMerger": HaDeSMossModelBlockMerger}
