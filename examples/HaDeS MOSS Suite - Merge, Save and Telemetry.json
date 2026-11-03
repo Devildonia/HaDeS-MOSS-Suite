@@ -1,0 +1,858 @@
+{
+ "id": "d4604795-df3e-5056-8e6c-c23529f570fa",
+ "revision": 0,
+ "last_node_id": 14,
+ "last_link_id": 17,
+ "nodes": [
+  {
+   "id": 1,
+   "type": "UNETLoader",
+   "pos": [
+    0,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "moss_image_sft_bf16.safetensors",
+    "default"
+   ],
+   "properties": {
+    "Node name for S&R": "UNETLoader",
+    "models": [
+     {
+      "name": "moss_image_sft_bf16.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_sft_bf16.safetensors",
+      "directory": "diffusion_models"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      1,
+      12
+     ]
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "type": "UNETLoader",
+   "pos": [
+    0,
+    172
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 1,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "moss_image_base_bf16.safetensors",
+    "default"
+   ],
+   "properties": {
+    "Node name for S&R": "UNETLoader",
+    "models": [
+     {
+      "name": "moss_image_base_bf16.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_base_bf16.safetensors",
+      "directory": "diffusion_models"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      2,
+      13
+     ]
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "type": "HaDeSMossModelBlockMerger",
+   "pos": [
+    420,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 5,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "model1",
+     "type": "MODEL",
+     "link": 1
+    },
+    {
+     "name": "model2",
+     "type": "MODEL",
+     "link": 2
+    }
+   ],
+   "widgets_values": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    ""
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossModelBlockMerger"
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      5,
+      11
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      14
+     ]
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "type": "CLIPLoader",
+   "pos": [
+    0,
+    344
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 2,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "qwen3.5_9b_w4a8_gptq.safetensors",
+    "moss_image",
+    "default"
+   ],
+   "properties": {
+    "Node name for S&R": "CLIPLoader",
+    "models": [
+     {
+      "name": "qwen3.5_9b_w4a8_gptq.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_w4a8_gptq.safetensors",
+      "directory": "text_encoders"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "CLIP",
+     "type": "CLIP",
+     "links": [
+      3,
+      4
+     ]
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "type": "VAELoader",
+   "pos": [
+    0,
+    542
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 3,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "flux2-vae.safetensors"
+   ],
+   "properties": {
+    "Node name for S&R": "VAELoader",
+    "models": [
+     {
+      "name": "flux2-vae.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae.safetensors",
+      "directory": "vae"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "VAE",
+     "type": "VAE",
+     "links": [
+      9
+     ]
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "type": "CLIPTextEncode",
+   "pos": [
+    420,
+    458
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 6,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "clip",
+     "type": "CLIP",
+     "link": 3
+    }
+   ],
+   "widgets_values": [
+    "nsfw, worst quality, bad anatomy, watermark, jpeg artifact"
+   ],
+   "properties": {
+    "Node name for S&R": "CLIPTextEncode"
+   },
+   "outputs": [
+    {
+     "name": "CONDITIONING",
+     "type": "CONDITIONING",
+     "links": [
+      7
+     ]
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "type": "CLIPTextEncode",
+   "pos": [
+    420,
+    630
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 7,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "clip",
+     "type": "CLIP",
+     "link": 4
+    }
+   ],
+   "widgets_values": [
+    "Studio photograph of an elderly fisherman with a weathered face and a grey knitted cap, soft window light from the left, shallow depth of field, 85mm lens, muted colors."
+   ],
+   "properties": {
+    "Node name for S&R": "CLIPTextEncode"
+   },
+   "outputs": [
+    {
+     "name": "CONDITIONING",
+     "type": "CONDITIONING",
+     "links": [
+      6
+     ]
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "type": "HaDeSMossLatent",
+   "pos": [
+    0,
+    688
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 4,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "1:1",
+    1.0,
+    1024,
+    1024,
+    1
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossLatent"
+   },
+   "outputs": [
+    {
+     "name": "latent",
+     "type": "LATENT",
+     "links": [
+      8
+     ]
+    },
+    {
+     "name": "width",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "height",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "type": "HaDeSMossKSampler",
+   "pos": [
+    840,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 9,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 5
+    },
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "link": 6
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "link": 7
+    },
+    {
+     "name": "latent_image",
+     "type": "LATENT",
+     "link": 8
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": 9,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    1000,
+    "fixed",
+    25,
+    2.5,
+    "er_sde",
+    "simple",
+    1.0,
+    0.0,
+    "off"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossKSampler"
+   },
+   "outputs": [
+    {
+     "name": "latent",
+     "type": "LATENT",
+     "links": []
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "links": [
+      10
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      16
+     ]
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "type": "SaveImage",
+   "pos": [
+    1260,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 11,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "images",
+     "type": "IMAGE",
+     "link": 10
+    }
+   ],
+   "widgets_values": [
+    "HaDeS_MOSS_merge"
+   ],
+   "properties": {
+    "Node name for S&R": "SaveImage"
+   },
+   "outputs": [
+    {
+     "name": "images",
+     "type": "IMAGE",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "type": "HaDeSMossModelSaver",
+   "pos": [
+    840,
+    484
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 10,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 11
+    }
+   ],
+   "widgets_values": [
+    "diffusion_models/MOSS_HaDeS_Merged",
+    "bfloat16",
+    true,
+    "HaDeS",
+    ""
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossModelSaver"
+   },
+   "outputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "links": []
+    },
+    {
+     "name": "saved_path",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "type": "HaDeSMossMultiModelMerger",
+   "pos": [
+    420,
+    802
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 8,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "model_1",
+     "type": "MODEL",
+     "link": 12
+    },
+    {
+     "name": "model_2",
+     "type": "MODEL",
+     "link": 13
+    },
+    {
+     "name": "base_model",
+     "type": "MODEL",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "model_3",
+     "type": "MODEL",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "model_4",
+     "type": "MODEL",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "SLERP",
+    0.5,
+    1.0,
+    0,
+    "fixed",
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossMultiModelMerger"
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "type": "HaDeSMossSuiteTelemetry",
+   "pos": [
+    1260,
+    172
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 12,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "info_1",
+     "type": "STRING",
+     "link": 14,
+     "shape": 7
+    },
+    {
+     "name": "info_2",
+     "type": "STRING",
+     "link": 15,
+     "shape": 7
+    },
+    {
+     "name": "info_3",
+     "type": "STRING",
+     "link": 16,
+     "shape": 7
+    },
+    {
+     "name": "info_4",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "info_5",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "info_6",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "info_7",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "info_8",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "HaDeS MOSS Suite Telemetry"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossSuiteTelemetry"
+   },
+   "outputs": [
+    {
+     "name": "report",
+     "type": "STRING",
+     "links": [
+      17
+     ]
+    },
+    {
+     "name": "json",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "summary",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "type": "PreviewAny",
+   "pos": [
+    1680,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 13,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "source",
+     "type": "*",
+     "link": 17
+    }
+   ],
+   "widgets_values": [],
+   "properties": {
+    "Node name for S&R": "PreviewAny"
+   },
+   "outputs": [
+    {
+     "name": "STRING",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  }
+ ],
+ "links": [
+  [
+   1,
+   1,
+   0,
+   3,
+   0,
+   "MODEL"
+  ],
+  [
+   2,
+   2,
+   0,
+   3,
+   1,
+   "MODEL"
+  ],
+  [
+   3,
+   4,
+   0,
+   6,
+   0,
+   "CLIP"
+  ],
+  [
+   4,
+   4,
+   0,
+   7,
+   0,
+   "CLIP"
+  ],
+  [
+   5,
+   3,
+   0,
+   9,
+   0,
+   "MODEL"
+  ],
+  [
+   6,
+   7,
+   0,
+   9,
+   1,
+   "CONDITIONING"
+  ],
+  [
+   7,
+   6,
+   0,
+   9,
+   2,
+   "CONDITIONING"
+  ],
+  [
+   8,
+   8,
+   0,
+   9,
+   3,
+   "LATENT"
+  ],
+  [
+   9,
+   5,
+   0,
+   9,
+   4,
+   "VAE"
+  ],
+  [
+   10,
+   9,
+   1,
+   10,
+   0,
+   "IMAGE"
+  ],
+  [
+   11,
+   3,
+   0,
+   11,
+   0,
+   "MODEL"
+  ],
+  [
+   12,
+   1,
+   0,
+   12,
+   0,
+   "MODEL"
+  ],
+  [
+   13,
+   2,
+   0,
+   12,
+   1,
+   "MODEL"
+  ],
+  [
+   14,
+   3,
+   1,
+   13,
+   0,
+   "STRING"
+  ],
+  [
+   15,
+   8,
+   3,
+   13,
+   1,
+   "STRING"
+  ],
+  [
+   16,
+   9,
+   2,
+   13,
+   2,
+   "STRING"
+  ],
+  [
+   17,
+   13,
+   0,
+   14,
+   0,
+   "STRING"
+  ]
+ ],
+ "groups": [],
+ "config": {},
+ "extra": {},
+ "version": 0.4
+}

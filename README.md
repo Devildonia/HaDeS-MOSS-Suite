@@ -113,6 +113,16 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
   - **note:** KSampler size outside 768²–2048², shift other than 5.0, SLG on, fp16-fixed residual scale normalized, multi-line layout text with its box proportions.
 - **Outputs:** `report` (Markdown), `json`, `summary` (one line).
 
+## Example workflows
+
+In [`examples/`](examples) (drag a file into ComfyUI). They use the official Comfy-Org file names and carry their download links, so ComfyUI offers to download missing models.
+
+- **Merge, Save and Telemetry:** SFT with layers 24–35 from Base through the Block Merger, MOSS Latent and MOSS KSampler, telemetry report. Model Saver and a SLERP Multi-Model Merger come muted, ready to switch on.
+- **Layout Poster:** an OpenMOSS layout draft through the Layout Compiler, whose prompt and latent feed the sampler, with telemetry.
+- **LoRA Toolkit:** a LoRA through LoRA Block Weight into the sampler; LoRA Merger, LoRA Resize and LoRA Extractor (with a finetune loader) come muted, since they write files. Pick your own LoRA in `lora_name`.
+
+Every example was run end to end in ComfyUI 0.43.0 (muted nodes left out). `tools/make_examples.py` regenerates them from the node definitions of a running ComfyUI.
+
 ## Tests
 
 `tests/test_moss_suite.py` checks the nodes against the real ComfyUI core on a tiny synthetic MOSS-Image model (CPU, a few seconds, no model download). From the ComfyUI folder:

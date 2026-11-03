@@ -29,3 +29,6 @@ Repository = "https://github.com/Devildonia/HaDeS-MOSS-Suite"
 [tool.comfy]
 PublisherId = "hades"
 DisplayName = "HaDeS MOSS Suite"
+includes = [
+    "examples",
+]
