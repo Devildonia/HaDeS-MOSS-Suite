@@ -4,6 +4,15 @@ ComfyUI nodes for the **MOSS-Image** model family (OpenMOSS / Comfy Org: 42-laye
 
 Claims about what layer groups do are measured with [`tools/moss_eval.py`](tools/moss_eval.py), not assumed.
 
+## Installation
+
+```bash
+cd ComfyUI/custom_nodes
+git clone https://github.com/Devildonia/HaDeS-MOSS-Suite
+```
+
+No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0) and the MOSS-Image weights from `Comfy-Org/MOSS-Image`.
+
 ## Nodes
 
 ### `MOSS Model Block Merger` (`HaDeS/MOSS Mergers`)
