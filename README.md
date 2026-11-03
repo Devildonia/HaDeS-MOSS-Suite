@@ -77,6 +77,14 @@ Claims about what layer groups do are measured with [`tools/moss_eval.py`](tools
 - **Outputs:** `latent`, `width`, `height`, `info`.
 - **Measured:** square images from 768 to 2048 render clean at the model's default shift 5.0, with no repeated subjects; larger canvases show more of the scene. Raising the shift is not needed at any of these sizes. Non-square ratios are not measured. See [`tools/RESULTS.md`](tools/RESULTS.md).
 
+### `MOSS Layout Compiler` (`HaDeS/MOSS Pipeline`)
+- **Class:** `HaDeSMossLayoutCompiler`
+- **Purpose:** compiles an OpenMOSS layout draft (the schema of the official `moss-image-prompt-enhancer`: `width` / `height`, `bbox_coord_space: "abs"`, `bbox_format: "xyxy"` in top-left pixels, `summary` and a flat `items` array) into the model-facing prompt (boxes centered on the canvas, `yxyx`), with the same validation as the official `compile_prompt.py` and byte-identical output. Also outputs the empty latent and `width` / `height` of the draft's own canvas, so prompt and image size cannot drift apart. A `{"caption": ...}` draft passes through as plain text.
+- **Inputs:** `draft` (`STRING`, JSON), `batch_size`.
+- **Outputs:** `prompt` (to `CLIPTextEncode`), `latent`, `width`, `height`, `info` (lists multi-line text items with their box size).
+- **Line breaks:** write them as `\n` in `text`. Measured, the box shape decides whether they are kept: a two-line title in an 832×192 box came out on one line in 3 of 6 seeds, in a 640×384 box on two lines in 6 of 6; a literal newline instead of `\n` changed nothing ([`tools/RESULTS.md`](tools/RESULTS.md)).
+- Unlike the core `MOSS-Image Layout Prompt` (boxes from `Create Bounding Boxes`), this node takes hand-written or LLM-written drafts, including `meta`, `canvas`, `palette` and `tags`.
+
 ## Tools
 
 - `tools/moss_eval.py --mode bias | compare`: ethnic bias on neutral and explicit prompts, SFT vs Base on photo, illustration, text and layout prompts, with stock nodes only.

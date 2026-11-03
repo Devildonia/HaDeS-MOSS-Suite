@@ -212,6 +212,16 @@ As in the templates, SFT samples without SLG and Base with SkipLayerGuidanceDiTS
   (`NORTHERN\nLIGHTS`) was ignored in 11/12 (one line). The box was wide and low (832 x 192 px), which may favor one line.
 - Some seeds return collages or a framed poster on white, in both models.
 
+**Line breaks in a layout text item** (SFT, 6 seeds, `NORTHERN\nLIGHTS` as the title of the same poster layout):
+
+| Title box | `\n` escaped by json.dumps (as the core node and OpenMOSS' compiler write it) | literal newline in the prompt |
+|---|---|---|
+| 832 x 192 px (one-line proportions) | two lines in 3 / 6 | two lines in 3 / 6, one more with a shrunken second line |
+| 640 x 384 px | two lines in 6 / 6 | two lines in 6 / 6 |
+
+The box shape decides, not the encoding: in a box with one-line proportions MOSS may set the text on one line; in a box that fits
+the lines it keeps them. OpenMOSS' own layout reference asks to check that line breaks and text length fit the box.
+
 ## Layer groups (SFT -> Base)
 
 `--mode groups`, HaDeS MOSS Model Block Merger, 3 prompts (café woman, fisherman portrait, watercolor fox) x 4 seeds, no SLG in any
