@@ -51,7 +51,7 @@
    "type": "UNETLoader",
    "pos": [
     0,
-    172
+    250
    ],
    "size": [
     380,
@@ -82,7 +82,7 @@
    "id": 3,
    "type": "HaDeSMossLoraBlockWeight",
    "pos": [
-    420,
+    500,
     0
    ],
    "size": [
@@ -136,7 +136,7 @@
    "type": "CLIPLoader",
    "pos": [
     0,
-    344
+    500
    ],
    "size": [
     380,
@@ -177,7 +177,7 @@
    "type": "VAELoader",
    "pos": [
     0,
-    542
+    780
    ],
    "size": [
     380,
@@ -214,8 +214,8 @@
    "id": 6,
    "type": "CLIPTextEncode",
    "pos": [
-    420,
-    406
+    500,
+    520
    ],
    "size": [
     380,
@@ -251,8 +251,8 @@
    "id": 7,
    "type": "CLIPTextEncode",
    "pos": [
-    420,
-    578
+    500,
+    770
    ],
    "size": [
     380,
@@ -289,7 +289,7 @@
    "type": "HaDeSMossLatent",
    "pos": [
     0,
-    688
+    1000
    ],
    "size": [
     380,
@@ -345,7 +345,7 @@
    "id": 9,
    "type": "HaDeSMossKSampler",
    "pos": [
-    840,
+    1000,
     0
    ],
    "size": [
@@ -423,7 +423,7 @@
    "id": 10,
    "type": "SaveImage",
    "pos": [
-    1260,
+    1500,
     0
    ],
    "size": [
@@ -458,8 +458,8 @@
    "id": 11,
    "type": "HaDeSMossLoraMerger",
    "pos": [
-    420,
-    750
+    500,
+    1020
    ],
    "size": [
     380,
@@ -505,8 +505,8 @@
    "id": 12,
    "type": "HaDeSMossLoraResize",
    "pos": [
-    420,
-    1104
+    500,
+    1480
    ],
    "size": [
     380,
@@ -549,8 +549,8 @@
    "id": 13,
    "type": "HaDeSMossLoraExtractor",
    "pos": [
-    420,
-    1380
+    500,
+    1850
    ],
    "size": [
     380,
@@ -596,8 +596,8 @@
    "id": 14,
    "type": "HaDeSMossSuiteTelemetry",
    "pos": [
-    1260,
-    172
+    1500,
+    250
    ],
    "size": [
     380,
@@ -686,7 +686,7 @@
    "id": 15,
    "type": "PreviewAny",
    "pos": [
-    1680,
+    2000,
     0
    ],
    "size": [

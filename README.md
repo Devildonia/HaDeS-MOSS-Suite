@@ -113,6 +113,17 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
   - **note:** KSampler size outside 768²–2048², shift other than 5.0, SLG on, fp16-fixed residual scale normalized, multi-line layout text with its box proportions.
 - **Outputs:** `report` (Markdown), `json`, `summary` (one line).
 
+## Interface
+
+The nodes draw their own moss-green rows on the canvas (the HaDeS Anima Suite widget library with its own palette), in the classic canvas and in Nodes 2.0:
+
+- every widget becomes a styled row by type (combo, slider, number, toggle, text); the layout draft keeps ComfyUI's text editor;
+- tooltips are the node's own, with the measurements behind each value;
+- **Block Merger:** a bar chart of the 42 layers and 3 parts colored by depth group, each group labeled with the share of the SFT → Base change it carries, and buttons **M1**, **50/50**, **24–35 M2** (the groups that carry most of that change) and **M2**;
+- **LoRA Block Weight:** a bar per layer group; **KSampler** and **Latent:** a status line with the settings or the final size.
+
+*Settings → HaDeS MOSS Suite → Use standard ComfyUI widgets* (or *HaDeS MOSS Suite* in a node's right-click menu) switches to the plain widgets. It does not affect HaDeS Anima Suite nodes when both suites are installed.
+
 ## Example workflows
 
 In [`examples/`](examples) (drag a file into ComfyUI). They use the official Comfy-Org file names and carry their download links, so ComfyUI offers to download missing models.

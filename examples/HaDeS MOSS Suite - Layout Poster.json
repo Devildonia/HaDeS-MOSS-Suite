@@ -48,7 +48,7 @@
    "type": "CLIPLoader",
    "pos": [
     0,
-    172
+    250
    ],
    "size": [
     380,
@@ -89,7 +89,7 @@
    "type": "VAELoader",
    "pos": [
     0,
-    370
+    530
    ],
    "size": [
     380,
@@ -126,7 +126,7 @@
    "id": 4,
    "type": "CLIPTextEncode",
    "pos": [
-    420,
+    500,
     0
    ],
    "size": [
@@ -164,7 +164,7 @@
    "type": "HaDeSMossLayoutCompiler",
    "pos": [
     0,
-    516
+    750
    ],
    "size": [
     380,
@@ -219,8 +219,8 @@
    "id": 6,
    "type": "CLIPTextEncode",
    "pos": [
-    420,
-    172
+    500,
+    250
    ],
    "size": [
     380,
@@ -264,7 +264,7 @@
    "id": 7,
    "type": "HaDeSMossKSampler",
    "pos": [
-    840,
+    1000,
     0
    ],
    "size": [
@@ -342,7 +342,7 @@
    "id": 8,
    "type": "SaveImage",
    "pos": [
-    1260,
+    1500,
     0
    ],
    "size": [
@@ -377,8 +377,8 @@
    "id": 9,
    "type": "HaDeSMossSuiteTelemetry",
    "pos": [
-    1260,
-    172
+    1500,
+    250
    ],
    "size": [
     380,
@@ -467,7 +467,7 @@
    "id": 10,
    "type": "PreviewAny",
    "pos": [
-    1680,
+    2000,
     0
    ],
    "size": [

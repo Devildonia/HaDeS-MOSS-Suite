@@ -26,6 +26,13 @@ jobs:
         with:
           python-version: "3.12"
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Validate frontend JavaScript syntax
+        run: for f in ComfyUI/custom_nodes/HaDeS-MOSS-Suite/web/*.js; do node --check "$f"; done
+
       - name: Install ComfyUI
         run: |
           pip install --upgrade pip

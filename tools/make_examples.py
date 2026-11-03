@@ -171,12 +171,13 @@ def to_editor(graph, object_info):
                 node_inputs.append(entry)
         col = node_depth(name)
         y = rows.get(col, 0)
-        rows[col] = y + 120 + 26 * (len(widgets) + len(node_inputs))
+        # HaDeS MOSS nodes add a banner and draw one 25 px row per widget; the layout compiler opens at 520 px
+        rows[col] = y + (560 if cls == "HaDeSMossLayoutCompiler" else 190 + 30 * (len(widgets) + len(node_inputs)))
         properties = {"Node name for S&R": cls}
         models = [{"name": w, "url": f"{HF}/{MODEL_FILES[w]}/{w}", "directory": MODEL_FILES[w]} for w in widgets if w in MODEL_FILES]
         if models:
             properties["models"] = models
-        nodes.append({"id": ids[name], "type": cls, "pos": [col * 420, y], "size": [380, 100], "flags": {}, "order": 0, "mode": mode[0] if mode else 0,
+        nodes.append({"id": ids[name], "type": cls, "pos": [col * 500, y], "size": [380, 100], "flags": {}, "order": 0, "mode": mode[0] if mode else 0,
                       "inputs": node_inputs, "widgets_values": widgets, "properties": properties, "_outputs": info})
     for node, name in zip(nodes, graph):
         info = node.pop("_outputs")

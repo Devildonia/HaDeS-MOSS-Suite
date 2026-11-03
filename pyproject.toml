@@ -30,5 +30,6 @@ Repository = "https://github.com/Devildonia/HaDeS-MOSS-Suite"
 PublisherId = "hades"
 DisplayName = "HaDeS MOSS Suite"
 includes = [
+    "web",
     "examples",
 ]
