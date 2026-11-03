@@ -1,0 +1,27 @@
+[project]
+name = "hades-moss-suite"
+description = "ComfyUI nodes for the MOSS-Image model family: a block merger for the 42-block single-stream DiT, with more merging and LoRA tools to come."
+version = "0.1.0"
+authors = [
+    { name = "Devildonia" }
+]
+license = { file = "LICENSE" }
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Framework :: ComfyUI",
+]
+keywords = [
+    "comfyui",
+    "moss-image",
+    "model-merging",
+    "flow-matching",
+]
+dependencies = []
+
+[tool.comfy]
+PublisherId = "hades"
+DisplayName = "HaDeS MOSS Suite"
