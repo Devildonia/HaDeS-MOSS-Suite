@@ -21,6 +21,9 @@ Modes:
             Every config samples without SLG, so the only difference between them is the merge.
   lora      Like groups, for one LoRA (--lora) on --lora-model through HaDeS MOSS LoRA Block Weight: A = the model without
             the LoRA, B = the full LoRA, each layer group swapped in / left out.
+  shift     --sft at several square sizes and flow shifts (SHIFT_GRID, ModelSamplingAuraFlow). Reports the low-frequency spectral
+            slope (composition scale, compared with 1024 at the default shift 5.0), native-resolution detail and the layout change
+            against shift 5.0 at the same size.
   bias_merge  The two neutral prompts (café woman, fisherman) over --neutral-seeds seeds on SFT and Base with and without the
             Base template's SLG, and on SFT with its later layer groups taken from Base. Count the results by hand.
 
@@ -79,6 +82,8 @@ GROUP_PROMPTS = {
 }
 MERGE_GROUPS = [f"layers_{g * 6:02d}_{g * 6 + 5:02d}" for g in range(7)] + ["text_embedder", "time_modulation", "io"]
 LORA_GROUPS = MERGE_GROUPS[:7] + ["other_layers"]
+# square side -> flow shifts tried there; 5.0 is the model default (supported_models.MOSSImage)
+SHIFT_GRID = {768: (3.0, 5.0), 1024: (3.0, 5.0, 7.0), 1536: (5.0, 7.5), 2048: (5.0, 7.5, 10.0)}
 METRICS = ("layout", "edges", "texture", "color")
 
 MODELS = {
@@ -121,6 +126,15 @@ def lora_node(args, weights):
                                                                  **{g: float(weights.get(g, 0.0)) for g in LORA_GROUPS}}}
 
 
+def shift_graph(args, size, shift, prompt, seed):
+    """--sft at size x size with ModelSamplingAuraFlow (multiplier 1, as the model's own sampling) at the given shift."""
+    g = build_graph(args, args.sft, False, prompt, seed)
+    g["ms"] = {"class_type": "ModelSamplingAuraFlow", "inputs": {"model": ["unet", 0], "shift": shift}}
+    g["ks"]["inputs"]["model"] = ["ms", 0]
+    g["latent"]["inputs"].update(width=size, height=size)
+    return g
+
+
 def build_graph(args, unet, slg, prompt, seed):
     """`unet` is a diffusion_models file name, {"ratios": ...} for a merge of --sft and --base, or {"lora": ...} for
     --lora on --lora-model through HaDeS MOSS LoRA Block Weight."""
@@ -157,7 +171,7 @@ def build_graph(args, unet, slg, prompt, seed):
 
 def jobs_for(args):
     """[(prompt name, prompt, seeds)]"""
-    if args.mode in ("groups", "lora"):
+    if args.mode in ("groups", "lora", "shift"):
         return [(n, p, list(range(args.seed0, args.seed0 + args.seeds))) for n, p in GROUP_PROMPTS.items()]
     if args.mode == "bias_merge":
         return [(n, GROUP_PROMPTS[n], list(range(args.seed0, args.seed0 + args.neutral_seeds))) for n in ("neutral_woman", "photo_portrait")]
@@ -227,7 +241,16 @@ def features(img):
     radial = np.bincount(r.ravel(), spec.ravel()) / np.maximum(np.bincount(r.ravel()), 1)
     texture = np.log10(np.array([radial[b].mean() for b in np.array_split(np.arange(64, 256), 16)]) + 1e-9)
     color = np.concatenate([lab.reshape(-1, 3).mean(0), lab.reshape(-1, 3).std(0)])
-    return {"layout": thumb, "edges": np.hypot(gx, gy).ravel(), "texture": texture, "color": color}
+    # Slope of log power over 2-32 cycles per image: steeper = larger masses, flatter = busier / repeated layout
+    r_lo = np.arange(2, 33)
+    slope = np.polyfit(np.log(r_lo), np.log(radial[r_lo] + 1e-9), 1)[0]
+    # Upper-half log power of a native-resolution 512 px center crop: fine detail per pixel, comparable at one size only
+    gray = np.asarray(img.convert("L"), dtype=np.float64)
+    cy, cx = gray.shape[0] // 2, gray.shape[1] // 2
+    crop = gray[cy - 256:cy + 256, cx - 256:cx + 256]
+    cspec = np.abs(np.fft.fftshift(np.fft.fft2(crop - crop.mean()))) ** 2
+    detail = np.log10(cspec[(r >= 128) & (r < 256)].mean() + 1e-9)
+    return {"layout": thumb, "edges": np.hypot(gx, gy).ravel(), "texture": texture, "color": color, "slope": slope, "detail": detail}
 
 
 def distance(fa, fb):
@@ -275,7 +298,7 @@ def contact_sheet(out_dir, name, prompt, seeds, models, cols=8, tile=256):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--mode", choices=("bias", "compare", "groups", "lora", "bias_merge"), default="bias")
+    p.add_argument("--mode", choices=("bias", "compare", "groups", "lora", "bias_merge", "shift"), default="bias")
     p.add_argument("--server", default="http://127.0.0.1:8188")
     p.add_argument("--sft", default="mossImage_sft_bf16.safetensors")
     p.add_argument("--base", default="mossImage_base_bf16.safetensors")
@@ -299,6 +322,9 @@ def main():
     jobs = jobs_for(args)
     if args.mode in ("groups", "lora", "bias_merge"):
         run_merges(args, jobs)
+        return
+    if args.mode == "shift":
+        run_shift(args, jobs)
         return
     total, done = len(args.models) * sum(len(s) for _, _, s in jobs), 0
     t0 = time.time()
@@ -352,6 +378,42 @@ def run_merges(args, jobs):
         json.dump(report, f, indent=2)
     for name, prompt, seeds in jobs:
         print(contact_sheet(args.out, name, prompt, seeds, list(configs), cols=len(seeds), tile=160))
+    print(json.dumps(report, indent=2))
+
+
+def run_shift(args, jobs):
+    configs = [(size, shift) for size, shifts in SHIFT_GRID.items() for shift in shifts]
+    samples = [(name, prompt, seed) for name, prompt, seeds in jobs for seed in seeds]
+    feats, total, done, t0 = {}, len(configs) * len(samples), 0, time.time()
+    for size, shift in configs:
+        c = f"{size}_s{shift:g}"
+        feats[c] = {}
+        for name, prompt, seed in samples:
+            os.makedirs(os.path.join(args.out, c, name), exist_ok=True)
+            path = os.path.join(args.out, c, name, f"{seed}.png")
+            if not os.path.exists(path):
+                run_graph(args.server, shift_graph(args, size, shift, prompt, seed)).save(path)
+            feats[c][f"{name}_{seed}"] = features(Image.open(path).convert("RGB"))
+            done += 1
+            print(f"[{done}/{total}] {c} {name} {seed} ({time.time() - t0:.0f}s)", flush=True)
+
+    keys = list(feats["1024_s5"])
+    mean = lambda vals: round(float(np.mean(vals)), 3)
+    rows = {}
+    for c in feats:
+        ref = f"{c.split('_')[0]}_s5"
+        rows[c] = {
+            "slope": mean([feats[c][s]["slope"] for s in keys]),
+            "slope_vs_1024": mean([feats[c][s]["slope"] - feats["1024_s5"][s]["slope"] for s in keys]),
+            "detail_vs_shift5": mean([feats[c][s]["detail"] - feats[ref][s]["detail"] for s in keys]),
+            "layout_vs_shift5": round(float(np.mean([distance(feats[c][s], feats[ref][s])["layout"] for s in keys])), 2),
+        }
+    report = {"samples": len(keys), "sft": args.sft, "steps": args.steps, "cfg": args.cfg, "sampler": args.sampler, "scheduler": args.scheduler,
+              "by_size_and_shift": rows}
+    with open(os.path.join(args.out, "report_shift.json"), "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=2)
+    for name, prompt, seeds in jobs:
+        print(contact_sheet(args.out, name, prompt, seeds, [f"{s}_s{sh:g}" for s, sh in configs], cols=len(seeds), tile=256))
     print(json.dumps(report, indent=2))
 
 

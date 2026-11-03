@@ -70,9 +70,17 @@ Claims about what layer groups do are measured with [`tools/moss_eval.py`](tools
 - **Outputs:** `model` (pass-through), `saved_path`, `info`.
 - **Measured:** a live merge renders slightly differently from the same merge saved and reloaded (same subject and composition, small details change), in ComfyUI's own merger too; see [`tools/RESULTS.md`](tools/RESULTS.md).
 
+### `MOSS Latent` (`HaDeS/MOSS Pipeline`)
+- **Class:** `HaDeSMossLatent`
+- **Purpose:** empty MOSS-Image latent (128 channels, 16 px grid) from an aspect ratio (`1:1`, `4:3`, `3:2`, `16:9`, `21:9` and their portrait forms) and a size in megapixels (`1.0` = 1024×1024), or a custom width / height snapped to 16 px. Outputs `width` / `height` for layout prompts.
+- **Inputs:** `aspect_ratio`, `megapixels` (`0.25..4.0`, default `1.0`), `custom_width`, `custom_height`, `batch_size`; optional `vae` (rejects a VAE that is not the 128-channel FLUX.2 one).
+- **Outputs:** `latent`, `width`, `height`, `info`.
+- **Measured:** square images from 768 to 2048 render clean at the model's default shift 5.0, with no repeated subjects; larger canvases show more of the scene. Raising the shift is not needed at any of these sizes. Non-square ratios are not measured. See [`tools/RESULTS.md`](tools/RESULTS.md).
+
 ## Tools
 
 - `tools/moss_eval.py --mode bias | compare`: ethnic bias on neutral and explicit prompts, SFT vs Base on photo, illustration, text and layout prompts, with stock nodes only.
 - `tools/moss_eval.py --mode groups`: which layer groups carry the SFT → Base change (needs this suite installed).
 - `tools/moss_eval.py --mode lora --lora <name> --lora-model <file>`: which layer groups carry a LoRA's effect.
 - `tools/moss_eval.py --mode bias_merge`: ethnic bias of SFT / Base merges.
+- `tools/moss_eval.py --mode shift`: square sizes x flow shifts (composition scale, native detail).
