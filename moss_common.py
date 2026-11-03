@@ -133,7 +133,8 @@ _MODULATION_GATES = (2, 5)  # shared_block_modulation chunks: shift, scale, gate
 
 
 def residual_scale(w1s, w2s):
-    """Factor that brings model2's residual stream to model1's (least squares on the latent embedder), or None when they match."""
+    """Factor that brings the second model's residual stream to the first's (least squares on the latent embedder), or None
+    when they match."""
     a = w1s["video_embedder.weight"]
     b = w2s["video_embedder.weight"]
     a = (a.dequantize() if isinstance(a, QuantizedTensor) else a).float().cpu()
@@ -155,32 +156,46 @@ def rescale_for(key, w, s):
     return None
 
 
+def is_quantized(ws):
+    return any(isinstance(w, QuantizedTensor) for w in ws.values())
+
+
+def check_compatible(names_ws):
+    """Same depth, same q/k/v layout and same shapes for every (name, weights) pair. Returns the number of layers."""
+    (name0, ws0), rest = names_ws[0], names_ws[1:]
+    n_layers = count_layers(ws0.keys())
+    for name, ws in rest:
+        if count_layers(ws.keys()) != n_layers:
+            raise ValueError(f"HaDeS MOSS Merger: {name0} has {n_layers} layers, {name} has {count_layers(ws.keys())}.")
+        if ("layers.0.proj.qkv.weight" in ws0) != ("layers.0.proj.qkv.weight" in ws):
+            raise ValueError(f"HaDeS MOSS Merger: {name0} and {name} store q/k/v differently (fused proj.qkv vs split proj.q/k/v); "
+                             "load them from files of the same layout.")
+        for k, w in ws.items():
+            if k in ws0 and w.shape != ws0[k].shape:
+                raise ValueError(f"HaDeS MOSS Merger: shape mismatch on '{k}': {tuple(ws0[k].shape)} ({name0}) vs {tuple(w.shape)} ({name}).")
+    for name, ws in names_ws:
+        for k, w in ws.items():
+            require_float(k, w)
+    return n_layers
+
+
 def apply_block_merge(model1, model2, layer_ratios, part_ratios):
     """Merge model2 into model1 with one ratio per `layers.N` and per PARTS entry.
     model2's residual stream is brought to model1's scale first (fp16-fixed files).
     Returns (model, merged tensors, layers, quantized side names, model2 residual rescale or None)."""
     m = model1.clone()
     w1s, w2s = model_weights(m), model_weights(model2)
-    n_layers = count_layers(w1s.keys())
-    if n_layers != count_layers(w2s.keys()):
-        raise ValueError(f"HaDeS MOSS Merger: model1 has {n_layers} layers, model2 has {count_layers(w2s.keys())}.")
+    n_layers = check_compatible([("model1", w1s), ("model2", w2s)])
     if n_layers != len(layer_ratios):
         raise ValueError(f"HaDeS MOSS Merger: got {len(layer_ratios)} layer ratios for a {n_layers}-layer model.")
-    if ("layers.0.proj.qkv.weight" in w1s) != ("layers.0.proj.qkv.weight" in w2s):
-        raise ValueError("HaDeS MOSS Merger: one model stores q/k/v fused (proj.qkv) and the other split (proj.q/k/v); "
-                         "load both from files of the same layout.")
 
-    quantized = [name for name, ws in (("model1", w1s), ("model2", w2s)) if any(isinstance(w, QuantizedTensor) for w in ws.values())]
+    quantized = [name for name, ws in (("model1", w1s), ("model2", w2s)) if is_quantized(ws)]
     scale = residual_scale(w1s, w2s)
     merged = 0
     for k, w1 in w1s.items():
         if k not in w2s:
             continue
         w2 = w2s[k]
-        if w1.shape != w2.shape:
-            raise ValueError(f"HaDeS MOSS Merger: shape mismatch on '{k}': {tuple(w1.shape)} vs {tuple(w2.shape)}.")
-        require_float(k, w1)
-        require_float(k, w2)
         slot = key_slot(k)
         ratio = layer_ratios[slot] if isinstance(slot, int) else part_ratios[slot]
         if ratio == 0.0:

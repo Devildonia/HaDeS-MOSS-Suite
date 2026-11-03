@@ -66,6 +66,28 @@ in those tensors (miaomiao did not change them beyond the scale) and miaomiao's 
 In ComfyUI (fisherman prompt, seed 1000, mean absolute pixel difference): Base x miaomiao at ratio 1.0 is 1.8 from miaomiao loaded
 directly and 22.3 from Base; at 0.5 it is 16.3 / 8.5; miaomiao itself is 22.5 from Base. All renders are clean.
 
+## Multi-Model Merger methods
+
+HaDeS MOSS Multi-Model Merger, weights 1.0 / 1.0, density 0.5, scale 1.0, seed 0; fisherman and watercolor fox prompts x 2 seeds,
+judged by eye next to the input models. Two families:
+
+- SFT family: `galenaCATGalenaCitronAnime_moss` (bf16) + `pornmasterMoss_sftV1` (int8), base_model SFT.
+- Mixed family: `miaomiaoHaremMOSS_baseV11_fp16` (fp16-fixed) + `mossImage_sft_bf16`, base_model Base.
+
+Every method rendered clean images in both families, and `info` reported the int8 input (with the task-vector note for TIES / DARE)
+and the x16 residual rescale (x0.0625 of SFT for SLERP, whose anchor is model_1).
+
+| Method | SFT family | Mixed family |
+|---|---|---|
+| TIES, DARE-TIES | close to galenaCAT (warm light, its fox style) | close to SFT |
+| DARE, Task Arithmetic, SLERP | between the two models | between the two models |
+| Model Stock | close to SFT, the base | close to Base, the base |
+
+- TIES and DARE-TIES follow the model whose task vector is larger: galenaCAT (two LoRAs baked into SFT) over pornmaster, and SFT
+  (the whole SFT stage) over miaomiao.
+- Model Stock stays near base_model in both families, as in the HaDeS Anima Suite: the task vectors point in unrelated directions.
+- Which method gives better images is not measured; it depends on what the models changed.
+
 ## Community LoRA formats in the core loader
 
 Four community LoRAs on `mossImage_sft_bf16` (fused `proj.qkv`) through the stock `LoraLoaderModelOnly`, strength 1.0: the ComfyUI log
