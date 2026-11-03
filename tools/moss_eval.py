@@ -19,6 +19,8 @@ Modes:
               texture  - distance of the high-frequency log power spectrum (line weight, grain, detail)
               color    - distance of Lab mean / std (palette and contrast)
             Every config samples without SLG, so the only difference between them is the merge.
+  lora      Like groups, for one LoRA (--lora) on --lora-model through HaDeS MOSS LoRA Block Weight: A = the model without
+            the LoRA, B = the full LoRA, each layer group swapped in / left out.
   bias_merge  The two neutral prompts (café woman, fisherman) over --neutral-seeds seeds on SFT and Base with and without the
             Base template's SLG, and on SFT with its later layer groups taken from Base. Count the results by hand.
 
@@ -76,6 +78,7 @@ GROUP_PROMPTS = {
     "illustration": COMPARE["illustration"],
 }
 MERGE_GROUPS = [f"layers_{g * 6:02d}_{g * 6 + 5:02d}" for g in range(7)] + ["text_embedder", "time_modulation", "io"]
+LORA_GROUPS = MERGE_GROUPS[:7] + ["other_layers"]
 METRICS = ("layout", "edges", "texture", "color")
 
 MODELS = {
@@ -112,10 +115,23 @@ def merge_node(ratios):
     return {"class_type": "HaDeSMossModelBlockMerger", "inputs": {"model1": ["sft", 0], "model2": ["base", 0], "recipe_override": "", **ratios}}
 
 
+def lora_node(args, weights):
+    """HaDeS MOSS LoRA Block Weight of --lora on --lora-model; `weights` maps LORA_GROUPS names to multipliers (missing = 0)."""
+    return {"class_type": "HaDeSMossLoraBlockWeight", "inputs": {"model": ["sft", 0], "lora_name": args.lora, "strength_model": 1.0,
+                                                                 **{g: float(weights.get(g, 0.0)) for g in LORA_GROUPS}}}
+
+
 def build_graph(args, unet, slg, prompt, seed):
-    """`unet` is a diffusion_models file name, or {"ratios": ...} for a merge of --sft and --base."""
+    """`unet` is a diffusion_models file name, {"ratios": ...} for a merge of --sft and --base, or {"lora": ...} for
+    --lora on --lora-model through HaDeS MOSS LoRA Block Weight."""
+    if isinstance(unet, dict) and "lora" in unet:
+        model_node = lora_node(args, unet["lora"])
+    elif isinstance(unet, dict):
+        model_node = merge_node(unet["ratios"])
+    else:
+        model_node = {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": "default"}}
     g = {
-        "unet": merge_node(unet["ratios"]) if isinstance(unet, dict) else {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": "default"}},
+        "unet": model_node,
         "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": args.clip, "type": "moss_image", "device": "default"}},
         "vae": {"class_type": "VAELoader", "inputs": {"vae_name": args.vae}},
         "pos": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["clip", 0]}},
@@ -128,7 +144,9 @@ def build_graph(args, unet, slg, prompt, seed):
         "dec": {"class_type": "VAEDecode", "inputs": {"samples": ["ks", 0], "vae": ["vae", 0]}},
         "out": {"class_type": "PreviewImage", "inputs": {"images": ["dec", 0]}},
     }
-    if isinstance(unet, dict):
+    if isinstance(unet, dict) and "lora" in unet:
+        g["sft"] = {"class_type": "UNETLoader", "inputs": {"unet_name": args.lora_model, "weight_dtype": "default"}}
+    elif isinstance(unet, dict):
         g["sft"] = {"class_type": "UNETLoader", "inputs": {"unet_name": args.sft, "weight_dtype": "default"}}
         g["base"] = {"class_type": "UNETLoader", "inputs": {"unet_name": args.base, "weight_dtype": "default"}}
     if slg:
@@ -139,7 +157,7 @@ def build_graph(args, unet, slg, prompt, seed):
 
 def jobs_for(args):
     """[(prompt name, prompt, seeds)]"""
-    if args.mode == "groups":
+    if args.mode in ("groups", "lora"):
         return [(n, p, list(range(args.seed0, args.seed0 + args.seeds))) for n, p in GROUP_PROMPTS.items()]
     if args.mode == "bias_merge":
         return [(n, GROUP_PROMPTS[n], list(range(args.seed0, args.seed0 + args.neutral_seeds))) for n in ("neutral_woman", "photo_portrait")]
@@ -155,6 +173,17 @@ def group_configs():
     for g in MERGE_GROUPS:
         cfg[f"in_{g}"] = {"ratios": {k: float(k == g) for k in MERGE_GROUPS}, "slg": False}
         cfg[f"out_{g}"] = {"ratios": {k: float(k != g) for k in MERGE_GROUPS}, "slg": False}
+    return cfg
+
+
+def lora_configs():
+    """A = --lora-model without the LoRA, B = the full LoRA, and every layer group swapped in / left out.
+    other_layers is left out of the ablation: no community MOSS LoRA measured so far trains outside the layers."""
+    full = dict.fromkeys(LORA_GROUPS, 1.0)
+    cfg = {"A": {"lora": {}, "slg": False}, "B": {"lora": full, "slg": False}}
+    for g in LORA_GROUPS[:-1]:
+        cfg[f"in_{g}"] = {"lora": {g: 1.0}, "slg": False}
+        cfg[f"out_{g}"] = {"lora": {**full, g: 0.0}, "slg": False}
     return cfg
 
 
@@ -210,13 +239,13 @@ def distance(fa, fb):
     }
 
 
-def analyze_groups(feats, samples):
+def analyze_groups(feats, samples, groups):
     def total(name, ref):
         return {m: sum(distance(feats[name][s], feats[ref][s])[m] for s in samples) for m in METRICS}
     ab = total("A", "B")
     report = {"samples": len(samples), "A_to_B_mean_distance": {m: v / len(samples) for m, v in ab.items()}}
     for kind, prefix, ref in (("swap_in", "in", "A"), ("leave_out", "out", "B")):
-        report[kind] = {g: {m: round(v / ab[m], 3) for m, v in total(f"{prefix}_{g}", ref).items()} for g in MERGE_GROUPS}
+        report[kind] = {g: {m: round(v / ab[m], 3) for m, v in total(f"{prefix}_{g}", ref).items()} for g in groups}
     return report
 
 
@@ -246,11 +275,13 @@ def contact_sheet(out_dir, name, prompt, seeds, models, cols=8, tile=256):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--mode", choices=("bias", "compare", "groups", "bias_merge"), default="bias")
+    p.add_argument("--mode", choices=("bias", "compare", "groups", "lora", "bias_merge"), default="bias")
     p.add_argument("--server", default="http://127.0.0.1:8188")
     p.add_argument("--sft", default="mossImage_sft_bf16.safetensors")
     p.add_argument("--base", default="mossImage_base_bf16.safetensors")
     p.add_argument("--models", nargs="+", choices=list(MODELS), default=list(MODELS))
+    p.add_argument("--lora", help="models/loras name of the LoRA (lora mode)")
+    p.add_argument("--lora-model", default="mossImage_sft_bf16.safetensors", help="model the LoRA is applied to (lora mode)")
     p.add_argument("--clip", default="mossImage_base_txt_int4.safetensors")
     p.add_argument("--vae", default="flux2-vae.safetensors")
     p.add_argument("--out", required=True)
@@ -266,7 +297,7 @@ def main():
 
     os.makedirs(args.out, exist_ok=True)
     jobs = jobs_for(args)
-    if args.mode in ("groups", "bias_merge"):
+    if args.mode in ("groups", "lora", "bias_merge"):
         run_merges(args, jobs)
         return
     total, done = len(args.models) * sum(len(s) for _, _, s in jobs), 0
@@ -292,7 +323,7 @@ def main():
 
 
 def run_merges(args, jobs):
-    configs = group_configs() if args.mode == "groups" else bias_merge_configs()
+    configs = {"groups": group_configs, "lora": lora_configs, "bias_merge": bias_merge_configs}[args.mode]()
     samples = [(name, prompt, seed) for name, prompt, seeds in jobs for seed in seeds]
     feats, total, done, t0 = {}, len(configs) * len(samples), 0, time.time()
     for c, unet in configs.items():
@@ -302,7 +333,7 @@ def run_merges(args, jobs):
             path = os.path.join(args.out, c, name, f"{seed}.png")
             if not os.path.exists(path):
                 run_graph(args.server, build_graph(args, unet, unet["slg"], prompt, seed)).save(path)
-            if args.mode == "groups":
+            if args.mode in ("groups", "lora"):
                 feats[c][f"{name}_{seed}"] = features(Image.open(path).convert("RGB"))
             done += 1
             print(f"[{done}/{total}] {c} {name} {seed} ({time.time() - t0:.0f}s)", flush=True)
@@ -311,9 +342,13 @@ def run_merges(args, jobs):
         for name, prompt, seeds in jobs:
             print(contact_sheet(args.out, name, prompt, seeds, list(configs)))
         return
-    report = analyze_groups(feats, list(feats["A"]))
-    report.update(sft=args.sft, base=args.base, steps=args.steps, cfg=args.cfg, sampler=args.sampler, scheduler=args.scheduler, slg=False)
-    with open(os.path.join(args.out, "report_groups.json"), "w", encoding="utf-8") as f:
+    report = analyze_groups(feats, list(feats["A"]), MERGE_GROUPS if args.mode == "groups" else LORA_GROUPS[:-1])
+    if args.mode == "lora":
+        report.update(lora=args.lora, lora_model=args.lora_model)
+    else:
+        report.update(sft=args.sft, base=args.base)
+    report.update(steps=args.steps, cfg=args.cfg, sampler=args.sampler, scheduler=args.scheduler, slg=False)
+    with open(os.path.join(args.out, f"report_{args.mode}.json"), "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
     for name, prompt, seeds in jobs:
         print(contact_sheet(args.out, name, prompt, seeds, list(configs), cols=len(seeds), tile=160))

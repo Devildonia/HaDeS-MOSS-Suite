@@ -4,10 +4,14 @@ import re
 import torch
 import folder_paths
 import safetensors.torch
+import comfy.lora
+import comfy.lora_convert
 import comfy.model_management
+import comfy.utils
 
-from .moss_common import (check_compatible, format_info, is_quantized, key_patches, key_patches_weight, model_weights, rescale_for,
-                          residual_scale)
+from .moss_common import (check_compatible, format_info, is_quantized, key_patches, key_patches_weight, key_slot, model_weights,
+                          rescale_for, residual_scale)
+from .moss_merger_nodes import GROUPS, layer_group
 
 _SAFE_FILENAME_RE = re.compile(r"[^\w\-. ]+")
 
@@ -113,5 +117,55 @@ class HaDeSMossLoraExtractor:
                                                                       layers=stats["lora"], energy_kept=round(mean_energy, 4), quantized=quantized))}
 
 
-NODE_CLASS_MAPPINGS = {"HaDeSMossLoraExtractor": HaDeSMossLoraExtractor}
-NODE_DISPLAY_NAME_MAPPINGS = {"HaDeSMossLoraExtractor": "MOSS LoRA Extractor"}
+def load_lora_patches(lora_name, model):
+    """A LoRA file as ComfyUI patches keyed by model weight key, or (key, offset) for split q/k/v on a fused file.
+    The core maps every community MOSS format (kohya, PEFT split or fused), tools/RESULTS.md."""
+    sd = comfy.lora_convert.convert_lora(comfy.utils.load_torch_file(folder_paths.get_full_path_or_raise("loras", lora_name), safe_load=True))
+    return comfy.lora.load_lora(sd, comfy.lora.model_lora_keys_unet(model.model, {}))
+
+
+class HaDeSMossLoraBlockWeight:
+    @classmethod
+    def INPUT_TYPES(cls):
+        weight = {"default": 1.0, "min": -2.0, "max": 3.0, "step": 0.05}
+        required = {
+            "model": ("MODEL",),
+            "lora_name": (folder_paths.get_filename_list("loras"),),
+            "strength_model": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.01}),
+        }
+        for g in GROUPS:
+            required[g] = ("FLOAT", {**weight, "tooltip": f"Multiplier for the LoRA on {g.replace('_', ' ', 1).replace('_', '-')}."})
+        required["other_layers"] = ("FLOAT", {**weight, "tooltip": "Multiplier for LoRA weights outside the layers (text_embedder, modulation, embedders, head)."})
+        return {"required": required}
+
+    RETURN_TYPES = ("MODEL", "STRING")
+    RETURN_NAMES = ("MODEL", "info")
+    FUNCTION = "apply"
+    CATEGORY = "HaDeS/MOSS Mergers"
+    DESCRIPTION = "Applies one LoRA with a separate strength per group of 6 layers. At 1.0 everywhere it is the stock LoRA loader."
+
+    def apply(self, model, lora_name, strength_model, other_layers, **groups):
+        n_layers = len(model.model.diffusion_model.layers)
+        weights = [groups[g] for g in GROUPS]
+        m = model.clone()
+        by_strength = {}
+        counts = dict.fromkeys(GROUPS + ["other_layers"], 0)
+        for k, patch in load_lora_patches(lora_name, model).items():
+            target = k[0] if isinstance(k, tuple) else k
+            slot = key_slot(target.removeprefix("diffusion_model."))
+            group = GROUPS[layer_group(slot, n_layers)] if isinstance(slot, int) else "other_layers"
+            counts[group] += 1
+            s = round(strength_model * (groups[group] if group in groups else other_layers), 4)
+            if s != 0.0:
+                by_strength.setdefault(s, {})[k] = patch
+        for s, patches in by_strength.items():
+            m.add_patches(patches, strength_patch=s)
+        text = (f"HaDeS MOSS LoRA Block Weight | {lora_name} | model {strength_model:+.2f} | "
+                f"{' / '.join(f'{w:.2f}' for w in weights)} | other {other_layers:.2f}\n"
+                f"LoRA weights per group: {', '.join(f'{g} {c}' for g, c in counts.items())}")
+        return (m, format_info(text, "lora_block_weight", lora=lora_name, strength_model=strength_model, weights=weights,
+                               other_layers=other_layers, counts=counts))
+
+
+NODE_CLASS_MAPPINGS = {"HaDeSMossLoraExtractor": HaDeSMossLoraExtractor, "HaDeSMossLoraBlockWeight": HaDeSMossLoraBlockWeight}
+NODE_DISPLAY_NAME_MAPPINGS = {"HaDeSMossLoraExtractor": "MOSS LoRA Extractor", "HaDeSMossLoraBlockWeight": "MOSS LoRA Block Weight"}

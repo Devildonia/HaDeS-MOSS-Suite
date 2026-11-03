@@ -39,6 +39,13 @@ Claims about what layer groups do are measured with [`tools/moss_eval.py`](tools
 - **Outputs:** `saved_lora_path`, `info` (size, energy kept: the share of the difference the rank holds).
 - **Measured:** `galenaCAT − SFT` at rank 64 (252 MB) keeps 95.9% of the energy and renders 4–12 from the finetune on SFT; a rank-32 LoRA of an int8 finetune reproduced it within the int8 noise on three of four images. See [`tools/RESULTS.md`](tools/RESULTS.md).
 
+### `MOSS LoRA Block Weight` (`HaDeS/MOSS Mergers`)
+- **Class:** `HaDeSMossLoraBlockWeight`
+- **Purpose:** applies one LoRA with a separate strength per group of 6 layers (`layers_00_05` … `layers_36_41`) and `other_layers` for LoRA weights outside the layers. Loads every community MOSS format through ComfyUI's own key map (kohya, PEFT split or fused q/k/v); at 1.0 everywhere it renders the same image as the stock `LoraLoaderModelOnly`.
+- **Inputs:** `model`, `lora_name`, `strength_model`, the seven group multipliers and `other_layers` (`-2..3`, default `1.0`).
+- **Outputs:** `MODEL`, `info` (how many LoRA weights fall in each group, e.g. 20 instead of 24 in `layers_18_23` for LoRAs trained without layer 22).
+- **Measured:** layers 30–35 carry a large share of all four community LoRAs tested, but beyond that each acts in different layers (24–35, 30–41 or 00–05 and 30–35), so the node has no style / identity presets; `tools/moss_eval.py --mode lora` measures a given LoRA. See [`tools/RESULTS.md`](tools/RESULTS.md).
+
 ### `MOSS Model Saver` (`HaDeS/MOSS Mergers`)
 - **Class:** `HaDeSMossModelSaver`
 - **Purpose:** saves a `MODEL` with its merge / LoRA patches baked in, loadable by the stock `Load Diffusion Model` node, and passes the model through.
@@ -53,3 +60,5 @@ Claims about what layer groups do are measured with [`tools/moss_eval.py`](tools
 
 - `tools/moss_eval.py --mode bias | compare`: ethnic bias on neutral and explicit prompts, SFT vs Base on photo, illustration, text and layout prompts, with stock nodes only.
 - `tools/moss_eval.py --mode groups`: which layer groups carry the SFT → Base change (needs this suite installed).
+- `tools/moss_eval.py --mode lora --lora <name> --lora-model <file>`: which layer groups carry a LoRA's effect.
+- `tools/moss_eval.py --mode bias_merge`: ethnic bias of SFT / Base merges.
