@@ -1,4 +1,4 @@
-# HaDeS MOSS Suite (work in progress)
+# HaDeS MOSS Suite
 
 ComfyUI nodes for the **MOSS-Image** model family (OpenMOSS / Comfy Org: 42-layer single-stream DiT, `Qwen3.5-9B` text encoder, FLUX.2 VAE), in the style of the [HaDeS Anima Suite](https://github.com/Devildonia/HaDeS-Anima-Suite).
 

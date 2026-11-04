@@ -16,6 +16,7 @@ Fixes from the pre-publication audit; 0.1.0 never reached the Comfy Registry.
 - **MOSS KSampler:** with the `image` output connected and no VAE, the output was `None` and the next node failed on it; the KSampler now stops before sampling and asks for the VAE.
 - **MOSS Model Block Merger:** a `recipe_override` with non-numeric entries now names them in the error.
 - **MOSS Suite Telemetry:** the LoRA energy warning now fires below 97.9%, the lowest energy measured within the source's noise floor, and cites the measured ranges.
+- **README:** the title no longer says *work in progress*.
 - **Tooltips:** the layer-group shares and the SLG note now say exactly what was measured (group taken alone or left out; on Base, SLG changed one face entirely).
 
 ### Added
