@@ -145,7 +145,45 @@ Cut to layers 24–41 at rank 8 and 2 (fused qkv, from the official files), each
 - Text: every string is spelled right in all 81 text and layout images (3 LoRAs x 3 versions x 3 prompts x 3 seeds), cuts included.
 - The 2-step LoRA's haze and soft glyphs are the LoRA's own (the original shows them); the rank-2 cut keeps the original's look at
   every step count tried.
-- Base and other sizes with the official files are not measured. The 4-step file measured here
+- Base and other sizes with the official files are not measured.
+
+**What the rank-2 change reads** (`tools/moss_activations.py`, the official 4-step cut to layers 24–41 at rank 2 on SFT, 4 steps,
+euler / simple / CFG 1, café woman / fisherman / fox x seeds 1000–1001, 1024 x 1024). For each weight the change adds `up @ z`
+with `z = down @ x` (2 numbers per token). share = mean² / (mean² + variance) of z over the 4096 image tokens of one image (1: the
+same z on every token); spread = std of the per-image means over the 6 images / their mean magnitude. Means over the 18 layers and
+both z components:
+
+| Weight | share, steps 0 / 1 / 2 / 3 | spread between images, steps 0 / 1 / 2 / 3 |
+|---|---|---|
+| qkv | 0.91 / 0.88 / 0.87 / 0.87 | 0.10 / 0.08 / 0.13 / 0.14 |
+| o | 0.59 / 0.56 / 0.55 / 0.55 | 0.39 / 0.36 / 0.49 / 0.43 |
+| ffn_up_gate | 0.59 / 0.59 / 0.60 / 0.61 | 0.33 / 0.36 / 0.36 / 0.33 |
+| ffn_down | 0.59 / 0.61 / 0.61 / 0.61 | 0.42 / 0.27 / 0.35 / 0.37 |
+
+- On qkv the change reads nearly the same z on every token and in every image (share ~0.88, spread ~0.1): there it acts close to a
+  fixed per-layer, per-step bias on q, k and v.
+- On o and the FFN, about 60% of z is a per-image constant and 40% varies by token, and the constant part changes by 30–50%
+  between images: there the change depends on the content.
+
+**Fixed biases in place of the LoRA** (`tools/moss_bias_turbo.py`, same LoRA and settings). Calibration on café woman / fisherman /
+fox x seeds 1000–1001 with the LoRA: for every LoRA weight, step and token kind (image, text), the mean of the change it adds,
+`up @ mean(down @ x)`. Test on held-out seeds 2000–2002 and four prompts (the three above and the bakery sign), 12 images per config:
+
+| Config | Distance to the LoRA's image, layout / edges / texture / color | By eye |
+|---|---|---|
+| the rank-2 LoRA (reference) | — | clean |
+| LoRA without its qkv part | 9.7 / 0.48 / 0.61 / 4.6 | artifacts: ghosted strokes on one café image, "B&EAD" and a broken "DAILY" on the sign |
+| LoRA without qkv + calibrated qkv biases | 10.4 / 0.42 / 0.40 / 4.3 | clean, sign spelled right in 3 of 3 |
+| no LoRA, calibrated biases on all four weights | 14.3 / 0.55 / 0.52 / 7.9 | clean, sign spelled right in 3 of 3 |
+| SFT alone, same 4 steps | 13.3 / 0.73 / 3.96 / 13.1 | broken (blur, smeared faces, unreadable sign) |
+
+- With no LoRA at all, fixed vectors added to the outputs of the 72 late-layer weights (one per weight, step and token kind)
+  turn SFT at 4 steps / CFG 1 from broken into clean images and correct text, on seeds the calibration never saw.
+- The qkv part of the LoRA matters (without it the images get artifacts) and its fixed bias replaces it.
+- The bias-only images differ from the LoRA's more (layout 14 against 10), and by eye they are more alike between seeds (same
+  centred pose on the three café images); diversity is not measured.
+- The biases are computed from the LoRA's own activations, so this replaces the LoRA's weights, not its training. Whether the
+  biases can be found without a LoRA, and how they behave on Base, at other sizes or step counts, is not measured. The 4-step file measured here
   carries no source in its metadata (it says "Dynamic resize with sv_fro: 0.99 from 128").
 
 ## Two-resolution sampling (prototype)
