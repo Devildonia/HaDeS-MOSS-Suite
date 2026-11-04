@@ -251,8 +251,23 @@ Test of the fitted biases (`moss_bias_turbo.py --biases`, 512 x 512, held-out pr
 
 - With no LoRA and 19 minutes of fitting against SFT itself, the biases turn SFT at 4 steps from broken into coherent images with
   legible text, below the LoRA's quality. Unlike the LoRA-calibrated biases, the fitted ones need all four steps.
-- Longer fits, more prompts, 1024 x 1024 (the first try there ran at about 49 s per iteration, cause not found) and other
-  objectives are not measured. The 4-step file measured here
+- The 512 x 512 fit transfers to 1024 x 1024: coherent scenes, the sign legible in 3 of 3 (rough letters on one), faces still
+  over-textured.
+
+Second round, 1000 iterations each on `--prompt-set large` (84 prompts: the 24 above, 48 subject x style pairs, 12 more text
+designs) x 2 seeds, teacher at 12 steps instead of 25 to halve its cost, tested at 1024 x 1024 on the held-out prompts and seeds:
+
+| Fit | Sign (3 seeds) | Café woman | Fisherman | Fox |
+|---|---|---|---|---|
+| first round: per-step biases, 24 prompts x 1, teacher 25 steps, 200 iterations | legible 3 / 3, one rough | coherent | coherent, over-textured | a little haze |
+| A: shared (one vector per linear x per-step scale), large set, teacher 12 steps | "B&AD", smeared letters | ghosted, double-exposed | two of three hazy | hazier |
+| B: per-step biases, large set, teacher 12 steps | legible 2 / 3 ("BFEAD" on one) | ghosted | two of three coherent | clearer than A, some haze |
+
+- With the same data and teacher, the shared form (A) is worse than free per-step vectors (B): without a LoRA to give the
+  direction, one vector per linear is too rigid.
+- B with 7 times the data and 5 times the iterations is not better than the first round; the change it shares with A is the
+  teacher at 12 steps, whose targets are less converged (euler at 15 steps still differs from 60, see "Samplers and schedulers").
+  The teacher's step count is the likely cause; a run that changes only it is not measured. The 4-step file measured here
   carries no source in its metadata (it says "Dynamic resize with sv_fro: 0.99 from 128").
 
 ## Two-resolution sampling (prototype)

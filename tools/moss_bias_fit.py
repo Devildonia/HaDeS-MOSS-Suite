@@ -15,6 +15,7 @@ Uses PyTorch attention (SageAttention has no backward). Run from the ComfyUI fol
   python custom_nodes/HaDeS-MOSS-Suite/tools/moss_bias_fit.py --out H:/moss_eval/bias_fit --compare-biases H:/moss_eval/biases_3p/biases.safetensors
 """
 import argparse
+import hashlib
 import json
 import os
 import random
@@ -64,6 +65,33 @@ TRAIN_PROMPTS = [
     "Vintage travel poster that reads \"VISIT LISBON\" with yellow trams and terracotta roofs.",
     "Photograph of a birthday cake with \"HAPPY 30\" written in blue icing, candles lit.",
 ]
+# --prompt-set large: TRAIN_PROMPTS plus subject x style pairs and more text designs, none of them a moss_eval test prompt
+SUBJECTS = ["a lighthouse keeper with a lantern", "a mountain village in winter", "two kids flying a kite on a beach", "a jazz trio on a small stage",
+            "a vintage car parked on a desert road", "a girl feeding pigeons in a plaza", "a bowl of ramen on a wooden counter",
+            "a fisherman's boat in a foggy harbor", "a cat sleeping on a windowsill with plants", "a busy train station at rush hour",
+            "an astronaut tending a greenhouse on Mars", "a grandmother knitting by a fireplace", "a waterfall in a tropical forest",
+            "a skateboarder jumping over stairs", "a library with tall shelves and a ladder", "a dragon curled around a castle tower"]
+STYLES = ["documentary photograph, natural light", "studio portrait photograph, soft key light", "watercolor illustration, loose washes",
+          "flat vector illustration, bold shapes", "oil painting, impasto brush strokes", "anime illustration, clean line art, cel shading"]
+TEXT_DESIGNS = ["Bookshop window with gold lettering that reads \"RARE BOOKS\".",
+                "Concert flyer that says \"LIVE TONIGHT\" in big red letters above a guitar silhouette.",
+                "Wooden crate stamped with the words \"FRAGILE\" and \"THIS SIDE UP\".",
+                "Retro diner sign that reads \"EAT\" in glowing red neon.",
+                "Minimal coffee bag label that reads \"DARK ROAST\" with a small mountain logo.",
+                "Movie poster with the title \"NIGHT TRAIN\" over a rainy platform.",
+                "Hand-lettered wedding sign that says \"WELCOME\" in white script on green.",
+                "Tram destination board reading \"CENTRAL STATION\" in orange dot-matrix letters.",
+                "Classroom chalkboard with \"MATH QUIZ FRIDAY\" written in white chalk.",
+                "Grocery price tag reading \"APPLES 1.99\" on a fruit stand.",
+                "Running race banner that says \"FINISH\" over a road with runners.",
+                "Postcard design with \"GREETINGS FROM KYOTO\" in large letters over a pagoda."]
+
+
+def prompt_set(name):
+    if name == "base":
+        return list(TRAIN_PROMPTS)
+    pairs = [f"{s[0].upper()}{s[1:]}, {style}." for i, s in enumerate(SUBJECTS) for j, style in enumerate(STYLES) if (i + j) % 2 == 0]
+    return list(TRAIN_PROMPTS) + pairs + TEXT_DESIGNS
 
 
 def main():
@@ -80,7 +108,10 @@ def main():
     p.add_argument("--size", type=int, default=1024)
     p.add_argument("--layers", default="24-41")
     p.add_argument("--compare-biases", help="biases.safetensors to score with the same loss before fitting")
-    p.add_argument("--max-prompts", type=int, default=len(TRAIN_PROMPTS), help="use the first N training prompts (smoke tests)")
+    p.add_argument("--prompt-set", choices=("base", "large"), default="base")
+    p.add_argument("--max-prompts", type=int, default=0, help="use the first N training prompts (smoke tests; 0 = all)")
+    p.add_argument("--param", choices=("per_step", "shared"), default="per_step",
+                   help="per_step: a free bias vector per linear and step; shared: one vector per linear times a learned scale per step")
     p.add_argument("--objective", choices=("final", "teacher_step"), default="final",
                    help="final: the clean-image prediction against the teacher's final latent; teacher_step: from the student's state the "
                         "teacher runs its own --teacher-steps schedule (CFG) down to the next student sigma, and the student's one euler step "
@@ -88,7 +119,21 @@ def main():
     p.add_argument("--out", required=True)
     args = p.parse_args(ARGV)
     os.makedirs(args.out, exist_ok=True)
+    lock = os.path.join(args.out, "FIT_RUNNING")
+    if os.path.exists(lock):
+        raise SystemExit(f"{lock} exists: another fit may be writing to this folder (delete the file if it is not)")
+    with open(lock, "w") as f:
+        f.write(str(os.getpid()))
+    try:
+        fit(args)
+    finally:
+        os.remove(lock)
+
+
+def fit(args):
     lo, hi = (int(v) for v in args.layers.split("-"))
+    prompts = prompt_set(args.prompt_set)
+    prompts = prompts[:args.max_prompts] if args.max_prompts else prompts
 
     patcher = comfy.sd.load_diffusion_model(folder_paths.get_full_path_or_raise("diffusion_models", args.unet))
     clip = comfy.sd.load_clip([folder_paths.get_full_path_or_raise("text_encoders", args.clip)], clip_type=comfy.sd.CLIPType.MOSS_IMAGE)
@@ -106,10 +151,10 @@ def main():
     data, cache = [], os.path.join(args.out, "teacher.pt")
     saved = torch.load(cache) if os.path.exists(cache) else {}
     t0 = time.time()
-    for i, prompt in enumerate(TRAIN_PROMPTS[:args.max_prompts]):
+    for i, prompt in enumerate(prompts):
         pos = clip.encode_from_tokens_scheduled(clip.tokenize(prompt))
         for seed in range(5000, 5000 + args.seeds):
-            key = f"{i}_{seed}"
+            key = f"{hashlib.md5(prompt.encode()).hexdigest()[:12]}_{seed}_{args.teacher_steps}_{args.teacher_cfg:g}"
             latent = torch.zeros([1, 128, lat_hw, lat_hw])
             noise = comfy.sample.prepare_noise(latent, seed)
             if key not in saved:
@@ -123,17 +168,25 @@ def main():
     comfy.model_management.load_models_gpu([patcher], force_full_load=True)
     device = comfy.model_management.get_torch_device()
     sigmas = comfy.samplers.calculate_sigmas(bm.model_sampling, "simple", args.steps).to(device)
-    biases = torch.nn.ParameterDict({f"{n.replace('.', '_')}__{s}": torch.nn.Parameter(torch.zeros(out_dim[n], device=device))
-                                     for n in names for s in range(args.steps)})
+    if args.param == "per_step":
+        biases = torch.nn.ParameterDict({f"{n.replace('.', '_')}__{s}": torch.nn.Parameter(torch.zeros(out_dim[n], device=device))
+                                         for n in names for s in range(args.steps)})
+    else:  # one vector per linear, one scale per linear and step
+        biases = torch.nn.ParameterDict({f"{n.replace('.', '_')}__v": torch.nn.Parameter(torch.zeros(out_dim[n], device=device)) for n in names})
+        biases.update({f"{n.replace('.', '_')}__s{s}": torch.nn.Parameter(torch.ones((), device=device)) for n in names for s in range(args.steps)})
     state = {"step": 0, "on": True}
 
-    def adder(name):
+    def bias_of(name, step):
         key = name.replace(".", "_")
+        if args.param == "per_step":
+            return biases[f"{key}__{step}"]
+        return biases[f"{key}__v"] * biases[f"{key}__s{step}"]
 
+    def adder(name):
         def fn(module, inputs, output):
             if not state["on"]:
                 return output
-            return output + biases[f"{key}__{state['step']}"].to(output.dtype)
+            return output + bias_of(name, state["step"]).to(output.dtype)
         return fn
 
     handles = [comfy.utils.get_attr(dm, n).register_forward_hook(adder(n)) for n in names]
@@ -202,7 +255,9 @@ def main():
         return val
 
     report = {"loss_zero": score("zero biases")}
-    if args.compare_biases:
+    if args.compare_biases and args.param != "per_step":
+        print("--compare-biases needs --param per_step; skipped", flush=True)
+    elif args.compare_biases:
         cmp = safetensors.torch.load_file(args.compare_biases)
         with torch.no_grad():
             for n in names:
@@ -215,7 +270,12 @@ def main():
             for b in biases.values():
                 b.zero_()
 
-    opt = torch.optim.Adam(biases.parameters(), lr=args.lr)
+    # shared: Adam on the scales at the vectors' rate would move them as fast as a whole vector element; keep them slower
+    groups = [{"params": [b for k, b in biases.items() if not k.split("__")[1].startswith("s")], "lr": args.lr}]
+    if args.param == "shared":
+        groups.append({"params": [b for k, b in biases.items() if k.split("__")[1].startswith("s")], "lr": args.lr * 0.1})
+
+    opt = torch.optim.Adam(groups)
     rng = random.Random(0)
     log, skipped, t0 = [], 0, time.time()
     for it in range(1, args.iters + 1):
@@ -235,7 +295,7 @@ def main():
             print(f"iter {it}: loss {sum(log[-k:]) / k:.5f} ({time.time() - t0:.0f}s; "
                   + ", ".join(f"{a} {b:.0f}s" for a, b in timing.items()) + ")", flush=True)
         if it % 100 == 0 or it == args.iters:
-            tensors = {f"{n}.step{s}.{kind}": biases[f"{n.replace('.', '_')}__{s}"].detach().float().cpu().contiguous()
+            tensors = {f"{n}.step{s}.{kind}": bias_of(n, s).detach().float().cpu().contiguous()
                        for n in names for s in range(args.steps) for kind in ("img", "txt")}
             safetensors.torch.save_file(tensors, os.path.join(args.out, "biases.safetensors"),
                                         metadata={"fit": "moss_bias_fit", "iters": str(it), "steps": str(args.steps)})
@@ -243,7 +303,7 @@ def main():
     for h in handles:
         h.remove()
     report.update(iters=args.iters, lr=args.lr, grad_clip=args.grad_clip, skipped=skipped, objective=args.objective, size=args.size,
-                  prompts=args.max_prompts, seeds=args.seeds, log=log)
+                  param=args.param, prompt_set=args.prompt_set, prompts=len(prompts), seeds=args.seeds, teacher_steps=args.teacher_steps, log=log)
     with open(os.path.join(args.out, "report_bias_fit.json"), "w", encoding="utf-8") as f:
         json.dump(report, f, indent=1)
 
