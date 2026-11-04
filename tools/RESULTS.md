@@ -203,7 +203,29 @@ right out of 9 (3 text prompts x 3 seeds):
 - Biases calibrated on one watercolor prompt fix photos, the sign and the line-break poster at 4 steps; the layout poster fails on
   one of three seeds with every bias set (the LoRA gets it right), so they are general but not complete.
 - The first step carries the structure: alone it gives the right composition and text, only soft; without it the image is sharp
-  but the model invents content. Steps 0 and 1 together are as clean as all four, so steps 2 and 3 need no bias. The 4-step file measured here
+  but the model invents content. Steps 0 and 1 together are as clean as all four, so steps 2 and 3 need no bias.
+
+**What the biases are made of** (`--calib-only`, saved biases of three calibrations: fox alone, café woman alone, the three
+prompts together). Each bias is `up @ mean(z)`, so its direction lies in the plane of the LoRA's two `up` columns by construction:
+the cosines between calibrations (1.000 for qkv, o and ffn_up_gate, 0.98–1.00 for ffn_down, at every step, and step 0 against
+steps 1–3 the same) only say that the two numbers of mean(z) keep their ratio. Those numbers, on one weight as an example
+(layer 32 qkv, steps 0 / 1 / 2 / 3): fox (-19.5, -0.8) / (-22.3, -1.6) / (-23.1, -1.9) / (-22.1, -2.0); woman (-17.3, -0.5) /
+(-21.5, -1.1) / (-22.0, -1.2) / (-21.1, -1.4). Bias norms, mean over the 18 layers:
+
+| Weight | fox / woman norm ratio, steps 0 / 1 / 2 / 3 | norm, steps 0 / 1 / 2 / 3 (three prompts) |
+|---|---|---|
+| qkv | 1.15 / 1.00 / 1.00 / 1.00 | 6.4 / 7.6 / 7.9 / 7.6 |
+| o | 1.39 / 1.19 / 1.16 / 1.15 | 5.8 / 6.4 / 6.6 / 6.1 |
+| ffn_up_gate | 1.14 / 1.02 / 0.99 / 0.98 | 1.7 / 1.8 / 1.9 / 1.9 |
+| ffn_down | 1.27 / 1.05 / 1.03 / 1.02 | 1.3 / 1.6 / 1.7 / 1.7 |
+
+- One of the two numbers dominates (about 20 to 1 on the example), so each bias is close to one fixed vector per weight, the LoRA's
+  first `up` column, times a scale.
+- The scale barely depends on the prompt (within 0–20% from step 1 on, 14–39% at step 0) and changes by about 20% between steps.
+- Across the 18 layers the vectors differ (9–12 of 18 components for 90% of the energy): one vector per layer and weight.
+- So the measured turbo effect is close to adding one bias vector to each of the 72 late-layer linears (MOSS's linears have
+  none), with a per-step scale: about 571 thousand numbers. Its directions still come from a LoRA; finding them without one, for
+  example by fitting only these biases to SFT at many steps, is not measured. The 4-step file measured here
   carries no source in its metadata (it says "Dynamic resize with sv_fro: 0.99 from 128").
 
 ## Two-resolution sampling (prototype)
