@@ -6,6 +6,115 @@ text encoder `mossImage_base_txt_int4` (w4a8 with codebook), VAE `flux2-vae`. Mo
 (fused `proj.qkv`, 42 layers). Ethnicity counts are by eye on the contact sheets. ComfyUI runs with `--use-sage-attention` (the
 launcher's flag, read from the server on 2026-11-04), so every image here was sampled with SageAttention.
 
+## Few-step LoRAs
+
+Two community LoRAs for `mossImage_sft_bf16`: `lodestones-8-steps-dmd2-lora` (DMD2, rank 128, fp32) and
+`moss_image_sft_4_steps_lora_v2_600_avg_rank_72_bf16` (4 steps, resized from rank 128 to 99% Frobenius, ranks 2–121 per layer).
+Both train every linear of all 42 layers with split q/k/v and nothing outside the layers.
+
+**Size of the change** (‖ΔW‖ / ‖W‖ against SFT, mean per layer group, both LoRAs alike): 0.03% in layers 0–23, 0.06% in 24–29,
+0.08–0.11% in 30–41; the largest are q / k in 32–41 and `ffn_up_gate` (up to 0.16%). In the 4-step LoRA, `v`, `ffn_up_gate` and
+`ffn_down` of layers 24–38 kept rank 2–5 at 99% energy: there the change is nearly one direction per weight.
+
+**bf16 rounding.** bf16 steps are about 0.4% of a weight, larger than these changes. The core LoRA loader adds the delta in fp32
+and rounds to the weight's dtype to nearest (`comfy/float.py`, stochastic rounding only for fp8). The delta applied to the bf16
+SFT weights, against the LoRA's own delta, checked offline on seven weights:
+
+| Weights | Elements changed | Applied delta / intended (norm) | Cosine to intended |
+|---|---|---|---|
+| layers 0, 10, 22 (q, o, ffn_down) | 7–13% | 0.54–0.66 | 0.41–0.50 |
+| layer 28 v | 13–14% | 0.79–0.80 | 0.61–0.62 |
+| layers 32, 36, 40 (q, ffn_up_gate, k) | 21–30% | 0.93–1.00 | 0.76–0.87 |
+
+Loaded the usual way on a bf16 model, these LoRAs therefore apply about half their change in the early and middle layers. The
+core bypass loader (`LoraLoaderBypassModelOnly`, "for debugging") leaves the weights as they are and runs the LoRA beside them, but
+it skips split q/k/v on a fused `proj.qkv` model (126 "not in model state_dict" warnings per LoRA); the bypass runs below load copies
+with fused `proj.qkv` written by HaDeS MOSS LoRA Resize at rank 512 (lossless: the qkv rank is the sum of q, k and v), which load
+with no warning.
+
+**Images** (`--mode turbo`, euler / simple / CFG 1 as the cards give, 8 steps for DMD2 and 4 for the 4-step LoRA, against SFT at
+er_sde / simple / 25 steps / CFG 2.5; café woman, fisherman, watercolor fox x seeds 1000–1002, SageAttention):
+
+| Config | Seconds per image | Weights vs bypass, layout / edges / texture / color | By eye |
+|---|---|---|---|
+| SFT, 25 steps (reference) | 15.14 | | |
+| SFT alone, 8 steps, CFG 1 | 2.72 | | broken (blur, smeared faces) |
+| DMD2, 8 steps, usual loader | 2.72 (5.6x faster) | 10.1 / 0.42 / 0.57 / 3.8 | clean |
+| DMD2, 8 steps, bypass | 3.07 | | clean |
+| SFT alone, 4 steps, CFG 1 | 1.54 | | broken |
+| 4-step LoRA, usual loader | 1.54 (9.8x faster) | 13.1 / 0.61 / 0.47 / 7.3 | clean, one café image with a ghosted double exposure |
+| 4-step LoRA, bypass | 1.72 | | clean |
+
+- Both LoRAs do the work: the same SFT at their step counts without them is broken.
+- The rounding of the usual loader moves the images about half as much as a new seed (layout 10–13) and gave the one artifact of
+  the 18 LoRA images; bypass costs 11–13% more time. Which of the two looks better on the clean images is not measured.
+- Next to the reference, both LoRAs give polished, centred, softly lit images; seed-to-seed variety is not measured with enough
+  seeds to say whether they narrow it.
+- Merging these LoRAs into a bf16 file (as HaDeS MOSS Model Saver would) rounds the same way as the usual loader.
+
+**Where the speed-up lives** (`--mode turbo_groups`: each LoRA at its step count with only some layer groups, through HaDeS MOSS
+LoRA Block Weight, which at 1.0 everywhere renders the stock loader's image exactly; distance to the full LoRA's image of the same
+seed, layout / edges / texture / color):
+
+| Groups kept | DMD2, 8 steps | By eye | 4-step LoRA | By eye |
+|---|---|---|---|---|
+| 0–23 | 15.9 / 0.77 / 2.48 / 13.0 | broken, as SFT without the LoRA | 12.9 / 0.77 / 4.04 / 13.2 | broken |
+| 24–41 | 4.4 / 0.12 / 0.10 / 0.9 | the full LoRA's image | 2.8 / 0.10 / 0.08 / 0.7 | the full LoRA's image |
+| 30–41 | 6.9 / 0.27 / 0.18 / 2.1 | same scenes, small changes, clean | 6.2 / 0.27 / 0.18 / 2.2 | same scenes, clean |
+| 36–41 | 15.0 / 0.70 / 0.49 / 7.5 | other images, still clean | 12.4 / 0.70 / 1.82 / 9.4 | broken (ghosting, blur) |
+
+- Both LoRAs do their work in layers 24–41: that half alone renders practically the full LoRA's image (closer to it than the
+  usual loader is to bypass), and layers 0–23 alone do nothing usable. 30–41 is still enough for both; 36–41 is enough only for DMD2.
+- The early layers, where the usual loader loses about half of the change to bf16 rounding, are the ones that matter least, which
+  is why the usual loader works anyway.
+
+## Two-resolution sampling (prototype)
+
+`--mode progressive`, `mossImage_sft_bf16`, SageAttention, 1024 x 1024 output, er_sde / simple / 25 steps / CFG 2.5, café woman,
+fisherman and watercolor fox x seeds 1000–1002. The first k steps run at 512 x 512 (1024 tokens), the latent is scaled x2 with
+`LatentUpscaleBy` (bilinear) and the remaining steps run at 1024 x 1024, all through stock `KSamplerAdvanced`. renoise = stage 1 ends
+with the clean-image prediction and stage 2 adds fresh noise at step k's sigma; leftover = the noisy latent is scaled and continued.
+Seconds per image (median of 6), distance to the one-stage render of the same seed, fine detail against it:
+
+| Config | Seconds | Layout / edges / texture / color | Detail | By eye |
+|---|---|---|---|---|
+| one stage (reference) | 15.14 | — | 0 | |
+| renoise at step 10, no resize (control) | 15.85 | 6.8 / 0.32 / 0.30 / 3.0 | -0.03 | nearly the reference image |
+| renoise, k = 5 | 13.68 (-10%) | 17.7 / 0.84 / 0.55 / 7.3 | +0.06 | clean |
+| renoise, k = 8 | 12.19 (-19%) | 19.4 / 0.88 / 0.74 / 8.7 | +0.12 | scenes clean, faces over-textured |
+| renoise, k = 10 | 10.91 (-28%) | 20.0 / 0.89 / 0.70 / 8.7 | +0.15 | exaggerated wrinkles, one face distorted |
+| renoise, k = 13 | 9.73 (-36%) | 20.5 / 0.90 / 0.76 / 9.0 | +0.22 | as k = 10, stronger |
+| leftover, k = 5 / 8 / 10 / 13 | 13.63 / 12.40 / 11.54 / 9.69 | 22–25 / 0.89 / 1.0–1.5 / 10–16 | -0.35 to -0.49 | broken: blur, checker patterns |
+
+- Upscaling the noisy latent breaks every image; re-noising from the clean-image prediction works (the control stays close to the
+  reference).
+- The composition is the 512 x 512 one, so every two-resolution image differs from the reference as much as another seed does
+  (layout ~18–20 against ~20 between seeds): it is a different sampler, not a faster route to the same image.
+- Switching at step 5 is clean and saves 10%. From step 8 on, the full-size stage invents skin texture to cover the upscale
+  (detail rises with k), so the larger savings are not usable as they are.
+
+Backtracking (`--resume K:B`): K steps at 512 x 512, then the full-size stage re-noised from an earlier step B, same setup:
+
+| Config | Seconds | Layout / edges / texture / color | Detail | By eye |
+|---|---|---|---|---|
+| 10 low, full from 7 | 12.93 (-15%) | 19.6 / 0.89 / 0.66 / 8.3 | +0.08 | clean faces |
+| 13 low, full from 9 | 12.34 (-18%) | 20.3 / 0.89 / 0.67 / 8.8 | +0.12 | wrinkles exaggerated on two portraits |
+| 13 low, full from 10 | 11.43 (-25%) | 20.4 / 0.90 / 0.70 / 8.9 | +0.15 | over-textured faces |
+| 15 low, full from 10 | 11.79 (-22%) | 20.8 / 0.90 / 0.73 / 8.9 | +0.15 | over-textured faces |
+| 15 low, full from 12 | 10.65 (-30%) | 21.0 / 0.90 / 0.77 / 9.0 | +0.20 | over-textured, one face with artifacts |
+
+- The invented texture follows the step the full-size stage starts from, not how long the low stage ran: starting at step 10 gives
+  +0.15 after 10, 13 or 15 low steps alike, and starting at step 7 or earlier stays clean.
+- At 1024 x 1024 the clean limit is therefore about 15% saved (10 low steps, full size from step 7). 2048 x 2048, where the
+  full-size steps cost more, is not measured.
+
+## Upscaling a MOSS latent
+
+The core `LatentUpscale` node takes a width / height in pixels and resizes the latent to `width // 8` x `height // 8` (nodes.py),
+the SD VAE grid. The MOSS latent is 16 px per cell, so the image comes out at twice the size asked: a 512 x 512 MOSS latent sent to
+`LatentUpscale` with 1024 x 1024 and sampled on rendered 2048 x 2048 images (checked on the PNGs), at about 4.6x the time per step
+of 1024 x 1024. `LatentUpscaleBy` scales the latent grid by a factor and gives the expected size.
+
 ## Attention backends and int8 speed
 
 `--mode attention`, RTX 5090 (32 GB, the whole model in VRAM in every run), café woman, fisherman and watercolor fox x seeds

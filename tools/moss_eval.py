@@ -31,6 +31,18 @@ Modes:
             argv is saved next to the images). Seconds per image count only runs where the model and both prompts came from
             ComfyUI's cache (sampling + decode). The cache is cleared first. --compare TAG [TAG ...] then reports every tag
             against the first: mean absolute pixel difference (0-255), the image metrics and median seconds per image.
+  progressive  --sft sampled in two stages through stock KSamplerAdvanced: the first --switch steps at --low-size, the latent
+            upscaled (bilinear) to --size, the remaining steps there. renoise = stage 1 ends with the clean-image prediction and
+            stage 2 adds fresh noise at that step's sigma; leftover = the noisy latent is upscaled and continued as is. Control:
+            renoise at full size (no resize). --resume K:B backtracks: K steps at --low-size, then --size re-noised from step B.
+            Reports seconds per image, distance to the one-stage render of the same seed and the
+            change in fine detail; contact sheets to judge by eye.
+  turbo     Few-step LoRAs (TURBO_LORAS) on --sft at their cards' settings (euler / simple, CFG 1), each loaded the usual way
+            (LoraLoaderModelOnly: the delta is added to the weights and rounded to their dtype) and in bypass mode
+            (LoraLoaderBypassModelOnly: the weights stay as they are and the LoRA runs beside them), plus --sft alone at the same
+            few-step settings. Reports seconds per image and distances to the --steps / --cfg / --sampler render of the same seed.
+  turbo_groups  Each TURBO_LORAS LoRA at its few-step settings with only some layer groups kept (TURBO_GROUP_SETS, through HaDeS MOSS
+            LoRA Block Weight, the usual weight patch); distances to the full LoRA's render of the same seed. Judge broken / clean by eye.
   bias_merge  The two neutral prompts (café woman, fisherman) over --neutral-seeds seeds on SFT and Base with and without the
             Base template's SLG, and on SFT with its later layer groups taken from Base. Count the results by hand.
 
@@ -194,11 +206,26 @@ SLG_PROMPTS = ("text_sign", "text_linebreaks", "layout_json", "photo_portrait")
 # (sampler, scheduler, steps); the reference is euler / simple at 60 steps
 SCHEDULER_CONFIGS = [(s, sch, st) for s in ("er_sde", "euler") for sch in ("simple", "beta", "normal") for st in (15, 25)]
 ATTENTION_SIZES = (1024, 2048)
+# name -> (models/loras file, steps, the same LoRA with fused proj.qkv); euler / simple / CFG 1 as their model cards give.
+# The core bypass loader skips split q/k/v on a fused model, so bypass runs load the fused copy, written losslessly by
+# HaDeS MOSS LoRA Resize at rank 512 on --sft.
+TURBO_LORAS = {
+    "dmd2_8": ("MOSS\\lodestones-8-steps-dmd2-lora.safetensors", 8, "HaDeS_test_dmd2_8_fused.safetensors"),
+    "rapid_4": ("MOSS\\moss_image_sft_4_steps_lora_v2_600_avg_rank_72_bf16.safetensors", 4, "HaDeS_test_rapid_4_fused.safetensors"),
+}
+# name -> LORA_GROUPS kept at 1.0 (the rest at 0)
+TURBO_GROUP_SETS = {
+    "all": LORA_GROUPS,
+    "00_23": LORA_GROUPS[:4],
+    "24_41": LORA_GROUPS[4:7],
+    "30_41": LORA_GROUPS[5:7],
+    "36_41": LORA_GROUPS[6:7],
+}
 
 
 def jobs_for(args):
     """[(prompt name, prompt, seeds)]"""
-    if args.mode in ("groups", "lora", "shift", "schedulers", "attention"):
+    if args.mode in ("groups", "lora", "shift", "schedulers", "attention", "progressive", "turbo", "turbo_groups"):
         return [(n, p, list(range(args.seed0, args.seed0 + args.seeds))) for n, p in GROUP_PROMPTS.items()]
     if args.mode == "slg":
         return [(n, COMPARE[n], list(range(args.seed0, args.seed0 + args.seeds))) for n in SLG_PROMPTS]
@@ -327,7 +354,9 @@ def contact_sheet(out_dir, name, prompt, seeds, models, cols=8, tile=256):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--mode", choices=("bias", "compare", "groups", "lora", "bias_merge", "shift", "slg", "schedulers", "attention"), default="bias")
+    p.add_argument("--mode", choices=("bias", "compare", "groups", "lora", "bias_merge", "shift", "slg", "schedulers", "attention", "progressive",
+                                      "turbo", "turbo_groups"),
+                   default="bias")
     p.add_argument("--server", default="http://127.0.0.1:8188")
     p.add_argument("--sft", default="mossImage_sft_bf16.safetensors")
     p.add_argument("--base", default="mossImage_base_bf16.safetensors")
@@ -348,6 +377,10 @@ def main():
     p.add_argument("--attn-models", nargs="+", default=["mossImage_sft_bf16.safetensors"], help="diffusion_models files (attention mode)")
     p.add_argument("--tag", help="name of the attention backend the server runs (attention mode)")
     p.add_argument("--compare", nargs="+", metavar="TAG", help="compare attention runs, the first tag is the reference")
+    p.add_argument("--low-size", type=int, default=512, help="first-stage square side (progressive mode)")
+    p.add_argument("--switch", type=int, nargs="+", default=[5, 8, 10, 13], help="steps run at --low-size (progressive mode)")
+    p.add_argument("--methods", nargs="+", choices=("renoise", "leftover"), default=["renoise", "leftover"], help="progressive mode")
+    p.add_argument("--resume", nargs="+", metavar="K:B", help="progressive mode: K steps at --low-size, then --size from step B <= K (re-noised)")
     args = p.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
@@ -366,6 +399,15 @@ def main():
         return
     if args.mode == "attention":
         compare_attention(args, jobs) if args.compare else run_attention(args, jobs)
+        return
+    if args.mode == "progressive":
+        run_progressive(args, jobs)
+        return
+    if args.mode == "turbo":
+        run_turbo(args, jobs)
+        return
+    if args.mode == "turbo_groups":
+        run_turbo_groups(args, jobs)
         return
     total, done = len(args.models) * sum(len(s) for _, _, s in jobs), 0
     t0 = time.time()
@@ -562,6 +604,176 @@ def compare_attention(args, jobs):
         report["configs"][cfg] = row
     with open(os.path.join(args.out, "report_attention.json"), "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
+    print(json.dumps(report, indent=2))
+
+
+def progressive_graph(args, prompt, seed, switch, method, low, resume=None):
+    """Two KSamplerAdvanced stages of one --steps schedule: steps [0, switch) on a `low` x `low` latent, [resume, steps) at --size.
+    resume (default switch) earlier than switch backtracks: the full-size stage re-noises to that earlier step's sigma."""
+    resume = switch if resume is None else resume
+    g = build_graph(args, args.sft, False, prompt, seed)
+    common = {"model": ["unet", 0], "positive": ["pos", 0], "negative": ["neg", 0], "noise_seed": seed, "steps": args.steps,
+              "cfg": args.cfg, "sampler_name": args.sampler, "scheduler": args.scheduler}
+    g["latent"]["inputs"].update(width=low, height=low)
+    g["ks"] = {"class_type": "KSamplerAdvanced", "inputs": {**common, "latent_image": ["latent", 0], "add_noise": "enable",
+                                                            "start_at_step": 0, "end_at_step": switch,
+                                                            "return_with_leftover_noise": "disable" if method == "renoise" else "enable"}}
+    # LatentUpscaleBy scales the latent itself; LatentUpscale takes pixels and assumes a x8 VAE (MOSS is x16)
+    g["up"] = {"class_type": "LatentUpscaleBy", "inputs": {"samples": ["ks", 0], "upscale_method": "bilinear", "scale_by": args.size / low}}
+    g["ks2"] = {"class_type": "KSamplerAdvanced", "inputs": {**common, "latent_image": ["up", 0],
+                                                             "add_noise": "enable" if method == "renoise" else "disable",
+                                                             "start_at_step": resume, "end_at_step": 10000, "return_with_leftover_noise": "disable"}}
+    g["dec"]["inputs"]["samples"] = ["ks2", 0]
+    return g
+
+
+def run_progressive(args, jobs):
+    if args.resume:
+        pairs = [tuple(int(v) for v in p.split(":")) for p in args.resume]
+        configs = {"ref": None} | {f"renoise_{k}_from_{b}": ("renoise", k, args.low_size, b) for k, b in pairs}
+    else:
+        configs = {"ref": None, f"renoise_full_{args.switch[len(args.switch) // 2]}": ("renoise", args.switch[len(args.switch) // 2], args.size)}
+        configs |= {f"{m}_{k}": (m, k, args.low_size) for m in args.methods for k in args.switch}
+    samples = [(name, prompt, seed) for name, prompt, seeds in jobs for seed in seeds]
+    _request(args.server, "/free", json.dumps({"unload_models": True, "free_memory": True}).encode())
+    argv = json.loads(_request(args.server, "/system_stats"))["system"].get("argv")
+    print(f"server argv: {argv}", flush=True)
+    timings_path = os.path.join(args.out, "timings.json")
+    timings = json.load(open(timings_path, encoding="utf-8")) if os.path.exists(timings_path) else {}
+    feats, total, done, t0 = {}, len(configs) * len(samples), 0, time.time()
+    for c, spec in configs.items():
+        feats[c] = {}
+        for name, prompt, seed in samples:
+            os.makedirs(os.path.join(args.out, c, name), exist_ok=True)
+            path = os.path.join(args.out, c, name, f"{seed}.png")
+            if not os.path.exists(path):
+                if spec is None:
+                    g = build_graph(args, args.sft, False, prompt, seed)
+                else:
+                    g = progressive_graph(args, prompt, seed, spec[1], spec[0], spec[2], *spec[3:])
+                info = {}
+                img = run_graph(args.server, g, info)
+                if img.size != (args.size, args.size):
+                    raise RuntimeError(f"{c}: rendered {img.size[0]}x{img.size[1]}, expected {args.size}x{args.size}")
+                img.save(path)
+                timings[f"{c}/{name}/{seed}"] = {"seconds": info["seconds"], "sampling_only": {"unet", "pos", "neg"} <= set(info["cached"])}
+                with open(timings_path, "w", encoding="utf-8") as f:
+                    json.dump(timings, f, indent=1)
+            feats[c][f"{name}_{seed}"] = features(Image.open(path).convert("RGB"))
+            done += 1
+            print(f"[{done}/{total}] {c} {name} {seed} ({time.time() - t0:.0f}s)", flush=True)
+    keys = list(feats["ref"])
+    rows = {}
+    for c in configs:
+        secs = [v["seconds"] for k, v in timings.items() if k.startswith(c + "/") and v["sampling_only"]]
+        rows[c] = {"median_seconds": round(float(np.median(secs)), 2) if secs else None,
+                   "detail_vs_ref": round(float(np.mean([feats[c][s]["detail"] - feats["ref"][s]["detail"] for s in keys])), 3)}
+        if c != "ref":
+            rows[c].update({m: round(float(np.mean([distance(feats[c][s], feats["ref"][s])[m] for s in keys])), 3) for m in METRICS})
+    report = {"samples": len(keys), "sft": args.sft, "size": args.size, "low_size": args.low_size, "steps": args.steps, "cfg": args.cfg,
+              "sampler": args.sampler, "scheduler": args.scheduler, "server_argv": argv, "configs": rows}
+    with open(os.path.join(args.out, "report_progressive.json"), "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=2)
+    for name, prompt, seeds in jobs:
+        print(contact_sheet(args.out, name, prompt, seeds, list(configs), cols=len(seeds), tile=256))
+    print(json.dumps(report, indent=2))
+
+
+def turbo_graph(args, prompt, seed, lora, loader, steps):
+    """--sft (with `lora` through `loader`, if given) at euler / simple / CFG 1 and `steps`."""
+    g = build_graph(args, args.sft, False, prompt, seed)
+    if lora:
+        g["lora"] = {"class_type": loader, "inputs": {"model": ["unet", 0], "lora_name": lora, "strength_model": 1.0}}
+        g["ks"]["inputs"]["model"] = ["lora", 0]
+    g["ks"]["inputs"].update(steps=steps, cfg=1.0, sampler_name="euler", scheduler="simple")
+    return g
+
+
+def run_turbo(args, jobs):
+    configs = {"ref": None}
+    for name, (lora, steps, fused) in TURBO_LORAS.items():
+        configs[f"{name}_weights"] = (lora, "LoraLoaderModelOnly", steps)
+        configs[f"{name}_bypass"] = (fused, "LoraLoaderBypassModelOnly", steps)
+        configs[f"sft_alone_{steps}"] = (None, None, steps)
+    samples = [(name, prompt, seed) for name, prompt, seeds in jobs for seed in seeds]
+    _request(args.server, "/free", json.dumps({"unload_models": True, "free_memory": True}).encode())
+    argv = json.loads(_request(args.server, "/system_stats"))["system"].get("argv")
+    print(f"server argv: {argv}", flush=True)
+    timings_path = os.path.join(args.out, "timings.json")
+    timings = json.load(open(timings_path, encoding="utf-8")) if os.path.exists(timings_path) else {}
+    feats, total, done, t0 = {}, len(configs) * len(samples), 0, time.time()
+    for c, spec in configs.items():
+        feats[c] = {}
+        for name, prompt, seed in samples:
+            os.makedirs(os.path.join(args.out, c, name), exist_ok=True)
+            path = os.path.join(args.out, c, name, f"{seed}.png")
+            if not os.path.exists(path):
+                g = build_graph(args, args.sft, False, prompt, seed) if spec is None else turbo_graph(args, prompt, seed, *spec)
+                info = {}
+                run_graph(args.server, g, info).save(path)
+                cached = {"unet", "pos", "neg"} | ({"lora"} if spec and spec[0] else set())
+                timings[f"{c}/{name}/{seed}"] = {"seconds": info["seconds"], "sampling_only": cached <= set(info["cached"])}
+                with open(timings_path, "w", encoding="utf-8") as f:
+                    json.dump(timings, f, indent=1)
+            feats[c][f"{name}_{seed}"] = features(Image.open(path).convert("RGB"))
+            done += 1
+            print(f"[{done}/{total}] {c} {name} {seed} ({time.time() - t0:.0f}s)", flush=True)
+    keys = list(feats["ref"])
+    mean_dist = lambda a, b: {m: round(float(np.mean([distance(feats[a][s], feats[b][s])[m] for s in keys])), 3) for m in METRICS}
+    rows = {}
+    for c in configs:
+        secs = [v["seconds"] for k, v in timings.items() if k.startswith(c + "/") and v["sampling_only"]]
+        rows[c] = {"median_seconds": round(float(np.median(secs)), 2) if secs else None, "timed_images": len(secs),
+                   "detail_vs_ref": round(float(np.mean([feats[c][s]["detail"] - feats["ref"][s]["detail"] for s in keys])), 3)}
+        if c != "ref":
+            rows[c]["vs_ref"] = mean_dist(c, "ref")
+    for name in TURBO_LORAS:
+        rows[f"{name}_weights"]["vs_bypass"] = mean_dist(f"{name}_weights", f"{name}_bypass")
+    report = {"samples": len(keys), "sft": args.sft, "reference": f"{args.sampler} / {args.scheduler} / {args.steps} steps / CFG {args.cfg}",
+              "server_argv": argv, "configs": rows}
+    with open(os.path.join(args.out, "report_turbo.json"), "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=2)
+    for name, prompt, seeds in jobs:
+        print(contact_sheet(args.out, name, prompt, seeds, list(configs), cols=len(seeds), tile=256))
+    print(json.dumps(report, indent=2))
+
+
+def run_turbo_groups(args, jobs):
+    configs = {}
+    for name, (lora, steps, _) in TURBO_LORAS.items():
+        for gname, kept in TURBO_GROUP_SETS.items():
+            configs[f"{name}_{gname}"] = (lora, steps, {g: 1.0 if g in kept else 0.0 for g in LORA_GROUPS})
+    samples = [(name, prompt, seed) for name, prompt, seeds in jobs for seed in seeds]
+    argv = json.loads(_request(args.server, "/system_stats"))["system"].get("argv")
+    print(f"server argv: {argv}", flush=True)
+    feats, total, done, t0 = {}, len(configs) * len(samples), 0, time.time()
+    for c, (lora, steps, weights) in configs.items():
+        feats[c] = {}
+        for name, prompt, seed in samples:
+            os.makedirs(os.path.join(args.out, c, name), exist_ok=True)
+            path = os.path.join(args.out, c, name, f"{seed}.png")
+            if not os.path.exists(path):
+                g = turbo_graph(args, prompt, seed, None, None, steps)
+                g["lora"] = {"class_type": "HaDeSMossLoraBlockWeight", "inputs": {"model": ["unet", 0], "lora_name": lora, "strength_model": 1.0, **weights}}
+                g["ks"]["inputs"]["model"] = ["lora", 0]
+                run_graph(args.server, g).save(path)
+            feats[c][f"{name}_{seed}"] = features(Image.open(path).convert("RGB"))
+            done += 1
+            print(f"[{done}/{total}] {c} {name} {seed} ({time.time() - t0:.0f}s)", flush=True)
+    rows = {}
+    for name in TURBO_LORAS:
+        full = f"{name}_all"
+        keys = list(feats[full])
+        for gname in TURBO_GROUP_SETS:
+            c = f"{name}_{gname}"
+            rows[c] = {"detail_vs_full": round(float(np.mean([feats[c][s]["detail"] - feats[full][s]["detail"] for s in keys])), 3)}
+            if c != full:
+                rows[c].update({m: round(float(np.mean([distance(feats[c][s], feats[full][s])[m] for s in keys])), 3) for m in METRICS})
+    report = {"samples": len(samples), "sft": args.sft, "server_argv": argv, "reference": "the same LoRA with every group", "configs": rows}
+    with open(os.path.join(args.out, "report_turbo_groups.json"), "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=2)
+    for name, prompt, seeds in jobs:
+        print(contact_sheet(args.out, name, prompt, seeds, list(configs), cols=len(seeds), tile=200))
     print(json.dumps(report, indent=2))
 
 

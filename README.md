@@ -85,6 +85,7 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 - **Inputs:** `aspect_ratio`, `megapixels` (`0.25..4.0`, default `1.0`), `custom_width`, `custom_height`, `batch_size`; optional `vae` (rejects a VAE that is not the 128-channel FLUX.2 one).
 - **Outputs:** `latent`, `width`, `height`, `info`.
 - **Measured:** square images from 768 to 2048 render clean at the model's default shift 5.0, with no repeated subjects; larger canvases show more of the scene. Raising the shift is not needed at any of these sizes. Non-square ratios are not measured. See [`tools/RESULTS.md`](tools/RESULTS.md).
+- **Upscaling a MOSS latent (hi-res fix):** use the core `Upscale Latent By` (`LatentUpscaleBy`), not `Upscale Latent` (`LatentUpscale`). The latter takes a size in pixels and divides it by 8, as for SD VAEs, while the MOSS latent is 16 px per cell: asked for 1024 x 1024, it gives a 2048 x 2048 image.
 
 ### `MOSS Layout Compiler` (`HaDeS/MOSS Pipeline`)
 - **Class:** `HaDeSMossLayoutCompiler`
