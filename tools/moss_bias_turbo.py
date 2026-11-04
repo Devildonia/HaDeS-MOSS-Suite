@@ -61,6 +61,7 @@ def main():
     p.add_argument("--test-prompts", nargs="+", choices=list(PROMPTS), default=list(TEST_PROMPTS))
     p.add_argument("--bias-steps", nargs="+", metavar="STEPS", help='comma-separated step indices per config, e.g. "0" "0,1"')
     p.add_argument("--calib-only", action="store_true", help="save the calibrated biases (biases.safetensors in --out) and stop")
+    p.add_argument("--biases", help="biases.safetensors to test instead of calibrating (e.g. from tools/moss_bias_fit.py)")
     p.add_argument("--out", required=True)
     args = p.parse_args(ARGV)
     os.makedirs(args.out, exist_ok=True)
@@ -119,16 +120,25 @@ def main():
         return fn
 
     lora_model = with_lora(False)
-    for pname in args.calib_prompts:
-        for seed in args.calib_seeds:
-            sample(lora_model, PROMPTS[pname], seed, [(n, "pre", recorder(n)) for n in factors])
-            print(f"calibrated {pname} {seed}", flush=True)
-    biases = {key: factors[key[0]][0] @ (s / n) for key, (s, n) in sums.items()}  # out-dim vector
     import safetensors.torch
-    safetensors.torch.save_file({f"{name}.step{step}.{kind}": b.contiguous() for (name, step, kind), b in biases.items()},
-                                os.path.join(args.out, "biases.safetensors"),
-                                metadata={"lora": args.lora, "steps": str(args.steps), "calib_prompts": ",".join(args.calib_prompts),
-                                          "calib_seeds": ",".join(map(str, args.calib_seeds))})
+    if args.biases:
+        loaded = safetensors.torch.load_file(args.biases)
+        biases = {}
+        for k, v in loaded.items():
+            name, step, kind = k.rsplit(".", 2)
+            biases[(name, int(step[len("step"):]), kind)] = v.float()
+        print(f"loaded {len(biases)} biases from {args.biases}", flush=True)
+    else:
+        for pname in args.calib_prompts:
+            for seed in args.calib_seeds:
+                sample(lora_model, PROMPTS[pname], seed, [(n, "pre", recorder(n)) for n in factors])
+                print(f"calibrated {pname} {seed}", flush=True)
+        biases = {key: factors[key[0]][0] @ (s / n) for key, (s, n) in sums.items()}  # out-dim vector
+    if not args.biases:
+        safetensors.torch.save_file({f"{name}.step{step}.{kind}": b.contiguous() for (name, step, kind), b in biases.items()},
+                                    os.path.join(args.out, "biases.safetensors"),
+                                    metadata={"lora": args.lora, "steps": str(args.steps), "calib_prompts": ",".join(args.calib_prompts),
+                                              "calib_seeds": ",".join(map(str, args.calib_seeds))})
     if args.calib_only:
         return
 

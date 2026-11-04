@@ -225,7 +225,34 @@ steps 1–3 the same) only say that the two numbers of mean(z) keep their ratio.
 - Across the 18 layers the vectors differ (9–12 of 18 components for 90% of the energy): one vector per layer and weight.
 - So the measured turbo effect is close to adding one bias vector to each of the 72 late-layer linears (MOSS's linears have
   none), with a per-step scale: about 571 thousand numbers. Its directions still come from a LoRA; finding them without one, for
-  example by fitting only these biases to SFT at many steps, is not measured. The 4-step file measured here
+  example by fitting only these biases to SFT at many steps, is not measured.
+
+**Biases fitted with no LoRA** (`tools/moss_bias_fit.py`, 512 x 512, PyTorch attention). Student: SFT at 4 euler / simple steps,
+CFG 1, one bias per linear of layers 24–41 and per step (2.3 M numbers), zeros at the start. Teacher: the same SFT at 25 euler /
+simple steps, CFG 2.5, biases off. Objective (`teacher_step`): from the student's state at each step the teacher runs its own
+schedule down to the next student sigma, and the student's single euler step must land there (mean squared error). 24 training
+prompts (photos, illustrations, signs, posters; none of them a test prompt) x 1 seed, Adam lr 5e-4, gradient clip 1.0, 200
+iterations (about 19 minutes on the RTX 5090; one iteration with a non-finite gradient skipped).
+
+- The objective does not score what the LoRA does: the LoRA-calibrated biases give a higher loss than zero biases with both
+  objectives tried (`final`, the clean-image prediction against the teacher's last latent: 0.870 against 0.470 at 1024 x 1024;
+  `teacher_step`: 0.029 against 0.017 at 512 x 512). The LoRA does not follow the teacher's path, so the loss cannot rank results,
+  only the images can.
+- Fitting lowered the loss from 0.0172 to 0.0029. A first run at lr 2e-3 with no clip went to NaN within 20 iterations.
+
+Test of the fitted biases (`moss_bias_turbo.py --biases`, 512 x 512, held-out prompts and seeds 2000–2002):
+
+| Config | Distance to the LoRA, layout / edges / texture / color | By eye |
+|---|---|---|
+| the 4-step LoRA (reference) | — | clean |
+| fitted biases, all 4 steps | 12.1 / 0.59 / 0.73 / 7.2 | coherent scenes, sign spelled right in 3 of 3; faces over-textured, some clutter (fruit in a cup, a doubled fox), a little haze |
+| fitted biases, steps 0–1 | 12.5 / 0.59 / 1.16 / 9.7 | softer and hazier, "DAiLY" on one sign |
+| SFT alone, 4 steps | 14.6 / 0.75 / 1.90 / 13.7 | broken |
+
+- With no LoRA and 19 minutes of fitting against SFT itself, the biases turn SFT at 4 steps from broken into coherent images with
+  legible text, below the LoRA's quality. Unlike the LoRA-calibrated biases, the fitted ones need all four steps.
+- Longer fits, more prompts, 1024 x 1024 (the first try there ran at about 49 s per iteration, cause not found) and other
+  objectives are not measured. The 4-step file measured here
   carries no source in its metadata (it says "Dynamic resize with sv_fro: 0.99 from 128").
 
 ## Two-resolution sampling (prototype)
