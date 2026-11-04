@@ -10,6 +10,8 @@ Test, on held-out seeds (--test-seeds) and TEST_PROMPTS, decoded and saved as PN
   qkv_bias   the LoRA without its qkv part, plus the calibrated qkv biases
   all_bias   no LoRA, the calibrated biases on every weight
   none       the model alone at the same settings
+With --bias-steps, all_bias is replaced by one config per entry: the calibrated biases on every weight at those steps only
+(e.g. "0", "0,1", "1,2,3"). --calib-prompts / --test-prompts pick the prompts (moss_eval GROUP_PROMPTS and COMPARE names).
 Reports distances to `lora` per config (tools/moss_eval.py image metrics) and writes contact sheets.
 
 Run from the ComfyUI folder with the server's models freed (POST /free):
@@ -43,7 +45,6 @@ _spec.loader.exec_module(moss_eval)
 CALIB_PROMPTS = ("neutral_woman", "photo_portrait", "illustration")
 TEST_PROMPTS = ("neutral_woman", "photo_portrait", "illustration", "text_sign")
 PROMPTS = {**moss_eval.GROUP_PROMPTS, **moss_eval.COMPARE}
-CONFIGS = ("lora", "no_qkv", "qkv_bias", "all_bias", "none")
 
 
 def main():
@@ -56,6 +57,9 @@ def main():
     p.add_argument("--calib-seeds", type=int, nargs="+", default=[1000, 1001])
     p.add_argument("--test-seeds", type=int, nargs="+", default=[2000, 2001, 2002])
     p.add_argument("--size", type=int, default=1024)
+    p.add_argument("--calib-prompts", nargs="+", choices=list(PROMPTS), default=list(CALIB_PROMPTS))
+    p.add_argument("--test-prompts", nargs="+", choices=list(PROMPTS), default=list(TEST_PROMPTS))
+    p.add_argument("--bias-steps", nargs="+", metavar="STEPS", help='comma-separated step indices per config, e.g. "0" "0,1"')
     p.add_argument("--out", required=True)
     args = p.parse_args(ARGV)
     os.makedirs(args.out, exist_ok=True)
@@ -114,16 +118,16 @@ def main():
         return fn
 
     lora_model = with_lora(False)
-    for pname in CALIB_PROMPTS:
+    for pname in args.calib_prompts:
         for seed in args.calib_seeds:
             sample(lora_model, PROMPTS[pname], seed, [(n, "pre", recorder(n)) for n in factors])
             print(f"calibrated {pname} {seed}", flush=True)
     biases = {key: factors[key[0]][0] @ (s / n) for key, (s, n) in sums.items()}  # out-dim vector
 
-    def adder(name):
+    def adder(name, steps=None):
         def fn(module, inputs, output):
             b_img = biases.get((name, state["step"], "img"))
-            if b_img is None:
+            if b_img is None or (steps is not None and state["step"] not in steps):
                 return output
             out = output.clone()
             out[:, :n_img] += b_img.to(out.device, out.dtype)
@@ -139,10 +143,18 @@ def main():
         "all_bias": (base, [(n, "post", adder(n)) for n in factors]),
         "none": (base, []),
     }
+    if args.bias_steps:
+        del plans["no_qkv"], plans["qkv_bias"], plans["all_bias"]
+        none = plans.pop("none")
+        for spec in args.bias_steps:
+            steps = {int(s) for s in spec.split(",")}
+            plans[f"bias_steps_{spec.replace(',', '')}"] = (base, [(n, "post", adder(n, steps)) for n in factors])
+        plans["none"] = none
+    configs = list(plans)
     feats = {}
     for c, (model, hooks) in plans.items():
         feats[c] = {}
-        for pname in TEST_PROMPTS:
+        for pname in args.test_prompts:
             os.makedirs(os.path.join(args.out, c, pname), exist_ok=True)
             for seed in args.test_seeds:
                 path = os.path.join(args.out, c, pname, f"{seed}.png")
@@ -153,13 +165,13 @@ def main():
                 feats[c][f"{pname}_{seed}"] = moss_eval.features(Image.open(path).convert("RGB"))
                 print(f"{c} {pname} {seed}", flush=True)
     rows = {c: {m: round(float(np.mean([moss_eval.distance(feats[c][s], feats["lora"][s])[m] for s in feats["lora"]])), 3) for m in moss_eval.METRICS}
-            for c in CONFIGS if c != "lora"}
-    report = {"lora": args.lora, "steps": args.steps, "calib": {"prompts": CALIB_PROMPTS, "seeds": args.calib_seeds},
-              "test": {"prompts": TEST_PROMPTS, "seeds": args.test_seeds}, "distance_to_lora": rows}
+            for c in configs if c != "lora"}
+    report = {"lora": args.lora, "steps": args.steps, "calib": {"prompts": args.calib_prompts, "seeds": args.calib_seeds},
+              "test": {"prompts": args.test_prompts, "seeds": args.test_seeds}, "distance_to_lora": rows}
     with open(os.path.join(args.out, "report_bias_turbo.json"), "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
-    for pname in TEST_PROMPTS:
-        print(moss_eval.contact_sheet(args.out, pname, PROMPTS[pname], args.test_seeds, list(CONFIGS), cols=len(args.test_seeds), tile=256))
+    for pname in args.test_prompts:
+        print(moss_eval.contact_sheet(args.out, pname, PROMPTS[pname], args.test_seeds, configs, cols=len(args.test_seeds), tile=256))
     print(json.dumps(report, indent=2))
 
 

@@ -183,7 +183,27 @@ fox x seeds 1000–1001 with the LoRA: for every LoRA weight, step and token kin
 - The bias-only images differ from the LoRA's more (layout 14 against 10), and by eye they are more alike between seeds (same
   centred pose on the three café images); diversity is not measured.
 - The biases are computed from the LoRA's own activations, so this replaces the LoRA's weights, not its training. Whether the
-  biases can be found without a LoRA, and how they behave on Base, at other sizes or step counts, is not measured. The 4-step file measured here
+  biases can be found without a LoRA, and how they behave on Base, at other sizes or step counts, is not measured.
+
+**One calibration prompt, and which steps** (`--calib-prompts illustration --bias-steps ...`): biases calibrated on the watercolor
+fox alone (seeds 1000–1001), applied with no LoRA at some of the 4 steps only, tested on five prompts the calibration never saw
+(café woman, fisherman, bakery sign, three-line poster, layout JSON poster) x seeds 2000–2002. Text = images with every string
+right out of 9 (3 text prompts x 3 seeds):
+
+| Biases at steps | Distance to the LoRA, layout / edges / texture / color | Text | By eye |
+|---|---|---|---|
+| the LoRA (reference) | — | 9 / 9 | clean |
+| 0, 1, 2, 3 | 15.1 / 0.47 / 0.65 / 7.6 | 8 / 9 | clean; on layout seed 2000 the title letters overlap |
+| 0 | 11.8 / 0.44 / 0.74 / 4.7 | 8 / 9 | composition and text in place, the whole image hazy and soft |
+| 0, 1 | 13.3 / 0.45 / 0.43 / 5.2 | 8 / 9 | clean, like all four steps; layout seed 2000 garbled ("NORTHEAN") |
+| 3 | 17.4 / 0.68 / 2.62 / 16.2 | 0 / 9 | broken, as SFT alone |
+| 1, 2, 3 | 18.1 / 0.66 / 0.76 / 6.8 | 6 / 9 | sharp but off: invented captions on two café images, a fish in a fisherman's hand, doubled words |
+| none (SFT alone) | 17.0 / 0.69 / 3.72 / 17.5 | 0 / 9 | broken |
+
+- Biases calibrated on one watercolor prompt fix photos, the sign and the line-break poster at 4 steps; the layout poster fails on
+  one of three seeds with every bias set (the LoRA gets it right), so they are general but not complete.
+- The first step carries the structure: alone it gives the right composition and text, only soft; without it the image is sharp
+  but the model invents content. Steps 0 and 1 together are as clean as all four, so steps 2 and 3 need no bias. The 4-step file measured here
   carries no source in its metadata (it says "Dynamic resize with sv_fro: 0.99 from 128").
 
 ## Two-resolution sampling (prototype)
