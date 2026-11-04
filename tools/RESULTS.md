@@ -118,7 +118,34 @@ direction inside that subspace; chance = 64 / dimension). Means over the 18 laye
   LoRA reads from residual directions qkv already reads strongly), mostly near chance, and ΔW is orthogonal to W (no rescaling).
   A turbo patch computed from the SFT weights alone, by their spectrum, is not supported by this; whether activations would give
   the directions is not measured.
-- Base, other step counts and the official `akhaliq/MOSS-Image-SFT-4-steps` files are not measured. The 4-step file measured here
+**Official `akhaliq/MOSS-Image-SFT-4-steps` files** (`moss_image_sft_4step_v2.0`, `_3step_v1.0`, `_2step_v0.1`; each rank 128,
+fp32, all 42 layers, split q/k/v). Their deltas against each other and against the files above, cosine on three weights
+(layer 5 q, layer 30 ffn_down, layer 36 ffn_up_gate):
+
+| Pair | 5 q | 30 ffn_down | 36 ffn_up_gate |
+|---|---|---|---|
+| the 4-step file measured above vs official 4-step v2.0 | 0.99 | 1.00 | 1.00 |
+| 4-step v2.0 vs 3-step v1.0 | 1.00 | 1.00 | 1.00 |
+| 4-step v2.0 vs 2-step v0.1 | 0.98 | 0.99 | 1.00 |
+| 4-step v2.0 vs lodestones DMD2 | 0.00 | 0.57 | 0.53 |
+
+- The 4-step file measured above is a resize of the official 4-step v2.0, so the results above hold for it. The three official
+  files are nearly the same LoRA, used at 4, 3 or 2 steps.
+- Against DMD2 they are unrelated in the early layers and half aligned in the late ones: the two trainings agree where the LoRAs do
+  their work (layers 24–41) and not where they do not.
+
+Cut to layers 24–41 at rank 8 and 2 (fused qkv, from the official files), each at its own step count, against the original file:
+
+| LoRA, steps | Seconds per image | rank 8, photo / text layout distance | rank 2, photo / text layout distance | By eye |
+|---|---|---|---|---|
+| 4-step v2.0, 4 | 1.54 | 3.8 / 3.1 | 4.5 / 3.6 | cuts render the original's images |
+| 3-step v1.0, 3 | 1.25 | 2.6 / 2.0 | 3.4 / 3.2 | cuts render the original's images |
+| 2-step v0.1, 2 | 0.96 | 1.7 / 1.6 | 2.4 / 2.1 | original already hazy, glyph edges soft; the cuts the same |
+
+- Text: every string is spelled right in all 81 text and layout images (3 LoRAs x 3 versions x 3 prompts x 3 seeds), cuts included.
+- The 2-step LoRA's haze and soft glyphs are the LoRA's own (the original shows them); the rank-2 cut keeps the original's look at
+  every step count tried.
+- Base and other sizes with the official files are not measured. The 4-step file measured here
   carries no source in its metadata (it says "Dynamic resize with sv_fro: 0.99 from 128").
 
 ## Two-resolution sampling (prototype)

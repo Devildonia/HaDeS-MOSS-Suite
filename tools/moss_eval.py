@@ -215,6 +215,10 @@ ATTENTION_SIZES = (1024, 2048)
 TURBO_LORAS = {
     "dmd2_8": ("MOSS\\lodestones-8-steps-dmd2-lora.safetensors", 8, "HaDeS_test_dmd2_8_fused.safetensors"),
     "rapid_4": ("MOSS\\moss_image_sft_4_steps_lora_v2_600_avg_rank_72_bf16.safetensors", 4, "HaDeS_test_rapid_4_fused.safetensors"),
+    # official akhaliq/MOSS-Image-SFT-4-steps files (rapid_4 above is a resize of the 4-step one); no fused copies
+    "akh4_4": ("MOSS\\moss_image_sft_4step_v2.0.safetensors", 4, None),
+    "akh3_3": ("MOSS\\moss_image_sft_3step_v1.0.safetensors", 3, None),
+    "akh2_2": ("MOSS\\moss_image_sft_2step_v0.1.safetensors", 2, None),
 }
 # name -> LORA_GROUPS kept at 1.0 (the rest at 0)
 TURBO_GROUP_SETS = {
@@ -705,7 +709,8 @@ def run_turbo(args, jobs):
     configs = {"ref": None}
     for name, (lora, steps, fused) in TURBO_LORAS.items():
         configs[f"{name}_weights"] = (lora, "LoraLoaderModelOnly", steps)
-        configs[f"{name}_bypass"] = (fused, "LoraLoaderBypassModelOnly", steps)
+        if fused:
+            configs[f"{name}_bypass"] = (fused, "LoraLoaderBypassModelOnly", steps)
         configs[f"sft_alone_{steps}"] = (None, None, steps)
     samples = [(name, prompt, seed) for name, prompt, seeds in jobs for seed in seeds]
     _request(args.server, "/free", json.dumps({"unload_models": True, "free_memory": True}).encode())
@@ -740,7 +745,8 @@ def run_turbo(args, jobs):
         if c != "ref":
             rows[c]["vs_ref"] = mean_dist(c, "ref")
     for name in TURBO_LORAS:
-        rows[f"{name}_weights"]["vs_bypass"] = mean_dist(f"{name}_weights", f"{name}_bypass")
+        if f"{name}_bypass" in configs:
+            rows[f"{name}_weights"]["vs_bypass"] = mean_dist(f"{name}_weights", f"{name}_bypass")
     report = {"samples": len(keys), "sft": args.sft, "reference": f"{args.sampler} / {args.scheduler} / {args.steps} steps / CFG {args.cfg}",
               "server_argv": argv, "configs": rows}
     with open(os.path.join(args.out, "report_turbo.json"), "w", encoding="utf-8") as f:
