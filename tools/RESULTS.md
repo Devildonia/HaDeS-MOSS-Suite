@@ -267,7 +267,34 @@ designs) x 2 seeds, teacher at 12 steps instead of 25 to halve its cost, tested 
   direction, one vector per linear is too rigid.
 - B with 7 times the data and 5 times the iterations is not better than the first round; the change it shares with A is the
   teacher at 12 steps, whose targets are less converged (euler at 15 steps still differs from 60, see "Samplers and schedulers").
-  The teacher's step count is the likely cause; a run that changes only it is not measured. The 4-step file measured here
+  The teacher's step count is the likely cause; a run that changes only it is not measured.
+
+C: B again with the teacher at 25 steps, the only change (14 of 1000 iterations skipped as non-finite, against 8 for B; 96 minutes):
+
+| Fit | Sign (3 seeds) | Café woman | Fisherman | Fox |
+|---|---|---|---|---|
+| B (teacher 12 steps) | legible 2 / 3 | ghosted | two of three coherent | some haze |
+| C (teacher 25 steps) | legible 3 / 3, one smudged "DAILY" | ghosted, blurred faces | three of three coherent, one over-textured | a little clearer than B, some haze |
+| first round (24 prompts x 1, 200 iterations, teacher 25) | legible 3 / 3, one rough | faces clear, some ghosting | coherent, over-textured | a little haze |
+
+- The better teacher helps (C over B on the sign and the fisherman), but C, with 7 times the data and 5 times the iterations, is
+  still not better than the 200-iteration first round, and its café faces are blurrier. A longer fit on this objective seems to
+  drift toward blur rather than away from it; checkpoints along one run were not kept, so where it peaks is not measured.
+
+**The LoRA as the teacher** (`--teacher-lora HaDeS_test_akh4_L24-41_r2 --blend 1`): the teacher is SFT with the rank-2 4-step cut
+added exactly (fp32, beside the weights) taking one euler step at CFG 1; from the student's state, the student's step must land
+where the teacher's does. The student is SFT + biases, no LoRA. 24 prompts x 1 seed, 512 x 512, lr 2e-4, 300 iterations (5
+minutes; 16 skipped as non-finite). Because of an ordering bug, fixed since, the run started from zero biases, not from the
+calibrated ones it was given, and its "zero" and "compare" losses both measured the calibrated biases (0.00074); the fit ended at
+0.00325.
+
+Tested at 1024 x 1024 on the held-out prompts and seeds: clean images on all four prompts, the sign spelled right and sharp in 3 of
+3, at the LoRA's quality by eye (layout distance to the LoRA's images 14.6: a different image, not a worse one). The café women
+share one centred pose, as the LoRA-calibrated biases do.
+
+- With a teacher that does what we want, fitting biases from zero works in 5 minutes, where the SFT teacher stalled at hazy
+  images after 96. The objective, not the bias form or the fitting, was what held the SFT-teacher fits back.
+- These biases come from a LoRA (Apache 2.0, akhaliq/MOSS-Image-SFT-4-steps) through its outputs, so they derive from it. The 4-step file measured here
   carries no source in its metadata (it says "Dynamic resize with sv_fro: 0.99 from 128").
 
 ## Two-resolution sampling (prototype)

@@ -116,6 +116,10 @@ def main():
                    help="final: the clean-image prediction against the teacher's final latent; teacher_step: from the student's state the "
                         "teacher runs its own --teacher-steps schedule (CFG) down to the next student sigma, and the student's one euler step "
                         "must land there")
+    p.add_argument("--teacher-lora", help="models/loras file (fused proj.qkv, layers 24-41, e.g. a rank-2 cut): a second teacher, the model "
+                                          "with this LoRA added exactly (fp32, beside the weights) taking one euler step at CFG 1")
+    p.add_argument("--blend", type=float, default=0.0, help="teacher_step target = blend x LoRA teacher + (1 - blend) x SFT teacher")
+    p.add_argument("--init-biases", help="biases.safetensors (moss_bias_turbo / moss_bias_fit format) to start from instead of zeros")
     p.add_argument("--out", required=True)
     args = p.parse_args(ARGV)
     os.makedirs(args.out, exist_ok=True)
@@ -157,6 +161,9 @@ def fit(args):
             key = f"{hashlib.md5(prompt.encode()).hexdigest()[:12]}_{seed}_{args.teacher_steps}_{args.teacher_cfg:g}"
             latent = torch.zeros([1, 128, lat_hw, lat_hw])
             noise = comfy.sample.prepare_noise(latent, seed)
+            if args.objective == "teacher_step":  # the teacher runs from the student's states; no final latent needed
+                data.append((pos[0][0], noise, None))
+                continue
             if key not in saved:
                 with torch.no_grad():  # not inference_mode: its tensors could not be reused under autograd
                     saved[key] = comfy.sample.sample(patcher, noise, args.teacher_steps, args.teacher_cfg, "euler", "simple", pos, neg, latent,
@@ -174,7 +181,26 @@ def fit(args):
     else:  # one vector per linear, one scale per linear and step
         biases = torch.nn.ParameterDict({f"{n.replace('.', '_')}__v": torch.nn.Parameter(torch.zeros(out_dim[n], device=device)) for n in names})
         biases.update({f"{n.replace('.', '_')}__s{s}": torch.nn.Parameter(torch.ones((), device=device)) for n in names for s in range(args.steps)})
-    state = {"step": 0, "on": True}
+    state = {"step": 0, "on": True, "lora": False}
+    lora = {}
+    if args.teacher_lora:
+        lsd = safetensors.torch.load_file(folder_paths.get_full_path_or_raise("loras", args.teacher_lora))
+        for n in names:
+            pre = f"diffusion_model.{n}"
+            if f"{pre}.lora_up.weight" in lsd:
+                dn = lsd[f"{pre}.lora_down.weight"].float()
+                up = lsd[f"{pre}.lora_up.weight"].float() * (lsd[f"{pre}.alpha"].float().item() / dn.shape[0])
+                lora[n] = (up.to(device), dn.to(device))
+        print(f"teacher LoRA: {len(lora)} of {len(names)} linears", flush=True)
+
+    def load_into(path):
+        loaded = safetensors.torch.load_file(path)
+        with torch.no_grad():
+            for n in names:
+                for s in range(args.steps):
+                    k = f"{n}.step{s}.img"
+                    if k in loaded and args.param == "per_step":
+                        biases[f"{n.replace('.', '_')}__{s}"].copy_(loaded[k].to(device))
 
     def bias_of(name, step):
         key = name.replace(".", "_")
@@ -184,6 +210,9 @@ def fit(args):
 
     def adder(name):
         def fn(module, inputs, output):
+            if state["lora"] and name in lora:
+                up, dn = lora[name]
+                return output + ((inputs[0].float() @ dn.T) @ up.T).to(output.dtype)
             if not state["on"]:
                 return output
             return output + bias_of(name, state["step"]).to(output.dtype)
@@ -218,14 +247,35 @@ def fit(args):
         timing["teacher"] += time.time() - t
         return x
 
+    def lora_teacher_to(x, s_from, s_to, context):
+        """The LoRA teacher (exact LoRA, biases off, CFG 1): one euler step from x at s_from to s_to."""
+        t = time.time()
+        state["on"], state["lora"] = False, True
+        try:
+            with torch.no_grad():
+                x = euler(x, denoise(x, torch.tensor(s_from, device=device), context), s_from, s_to)
+        finally:
+            state["on"], state["lora"] = True, False
+        timing["teacher"] += time.time() - t
+        return x
+
+    def step_goal(x, s, context):
+        a, b = sigmas[s].item(), sigmas[s + 1].item()
+        goal = 0.0
+        if args.blend > 0:
+            goal = goal + args.blend * lora_teacher_to(x, a, b, context)
+        if args.blend < 1:
+            goal = goal + (1 - args.blend) * teacher_to(x, a, b, context)
+        return goal
+
     def episode(context, noise, target, train):
         """Student trajectory from noise; returns the mean per-step loss (and backpropagates it when training)."""
         x = noise.to(device)  # flow model at full denoise: x_T = noise
-        target = bm.process_latent_in(target.to(device))
+        target = None if target is None else bm.process_latent_in(target.to(device))
         total = 0.0
         for s in range(args.steps):
             state["step"] = s
-            goal = target if args.objective == "final" else teacher_to(x, sigmas[s].item(), sigmas[s + 1].item(), context)
+            goal = target if args.objective == "final" else step_goal(x, s, context)
             if train:
                 comfy.model_management.in_training = True
                 try:
@@ -258,17 +308,14 @@ def fit(args):
     if args.compare_biases and args.param != "per_step":
         print("--compare-biases needs --param per_step; skipped", flush=True)
     elif args.compare_biases:
-        cmp = safetensors.torch.load_file(args.compare_biases)
-        with torch.no_grad():
-            for n in names:
-                for s in range(args.steps):
-                    k = f"{n}.step{s}.img"
-                    if k in cmp:
-                        biases[f"{n.replace('.', '_')}__{s}"].copy_(cmp[k].to(device))
+        load_into(args.compare_biases)
         report["loss_compare"] = score(f"compare ({os.path.basename(os.path.dirname(args.compare_biases))})")
         with torch.no_grad():
             for b in biases.values():
                 b.zero_()
+    if args.init_biases:  # after the zero / compare scores, so they measure what they say
+        load_into(args.init_biases)
+        report["loss_init"] = score(f"init ({os.path.basename(os.path.dirname(args.init_biases))})")
 
     # shared: Adam on the scales at the vectors' rate would move them as fast as a whole vector element; keep them slower
     groups = [{"params": [b for k, b in biases.items() if not k.split("__")[1].startswith("s")], "lr": args.lr}]
@@ -303,7 +350,7 @@ def fit(args):
     for h in handles:
         h.remove()
     report.update(iters=args.iters, lr=args.lr, grad_clip=args.grad_clip, skipped=skipped, objective=args.objective, size=args.size,
-                  param=args.param, prompt_set=args.prompt_set, prompts=len(prompts), seeds=args.seeds, teacher_steps=args.teacher_steps, log=log)
+                  param=args.param, teacher_lora=args.teacher_lora, blend=args.blend, init_biases=args.init_biases, prompt_set=args.prompt_set, prompts=len(prompts), seeds=args.seeds, teacher_steps=args.teacher_steps, log=log)
     with open(os.path.join(args.out, "report_bias_fit.json"), "w", encoding="utf-8") as f:
         json.dump(report, f, indent=1)
 
