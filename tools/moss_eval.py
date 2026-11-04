@@ -43,6 +43,9 @@ Modes:
             few-step settings. Reports seconds per image and distances to the --steps / --cfg / --sampler render of the same seed.
   turbo_groups  Each TURBO_LORAS LoRA at its few-step settings with only some layer groups kept (TURBO_GROUP_SETS, through HaDeS MOSS
             LoRA Block Weight, the usual weight patch); distances to the full LoRA's render of the same seed. Judge broken / clean by eye.
+  turbo_files  --turbo-files NAME=FILE ...: models/loras files derived from a TURBO_LORAS LoRA (NAME starts with its key, which sets
+            the step count), rendered with --loader; distances to that LoRA's full render in --ref-dir/<key>_all (a turbo_groups run),
+            or, without --ref-dir, to the NAME <key>_orig of the same run. --prompts picks COMPARE prompts instead of the default three.
   bias_merge  The two neutral prompts (café woman, fisherman) over --neutral-seeds seeds on SFT and Base with and without the
             Base template's SLG, and on SFT with its later layer groups taken from Base. Count the results by hand.
 
@@ -225,7 +228,9 @@ TURBO_GROUP_SETS = {
 
 def jobs_for(args):
     """[(prompt name, prompt, seeds)]"""
-    if args.mode in ("groups", "lora", "shift", "schedulers", "attention", "progressive", "turbo", "turbo_groups"):
+    if args.mode == "turbo_files" and args.prompts:
+        return [(n, COMPARE[n], list(range(args.seed0, args.seed0 + args.seeds))) for n in args.prompts]
+    if args.mode in ("groups", "lora", "shift", "schedulers", "attention", "progressive", "turbo", "turbo_groups", "turbo_files"):
         return [(n, p, list(range(args.seed0, args.seed0 + args.seeds))) for n, p in GROUP_PROMPTS.items()]
     if args.mode == "slg":
         return [(n, COMPARE[n], list(range(args.seed0, args.seed0 + args.seeds))) for n in SLG_PROMPTS]
@@ -355,7 +360,7 @@ def contact_sheet(out_dir, name, prompt, seeds, models, cols=8, tile=256):
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--mode", choices=("bias", "compare", "groups", "lora", "bias_merge", "shift", "slg", "schedulers", "attention", "progressive",
-                                      "turbo", "turbo_groups"),
+                                      "turbo", "turbo_groups", "turbo_files"),
                    default="bias")
     p.add_argument("--server", default="http://127.0.0.1:8188")
     p.add_argument("--sft", default="mossImage_sft_bf16.safetensors")
@@ -381,6 +386,10 @@ def main():
     p.add_argument("--switch", type=int, nargs="+", default=[5, 8, 10, 13], help="steps run at --low-size (progressive mode)")
     p.add_argument("--methods", nargs="+", choices=("renoise", "leftover"), default=["renoise", "leftover"], help="progressive mode")
     p.add_argument("--resume", nargs="+", metavar="K:B", help="progressive mode: K steps at --low-size, then --size from step B <= K (re-noised)")
+    p.add_argument("--turbo-files", nargs="+", metavar="NAME=FILE", help="turbo_files mode")
+    p.add_argument("--loader", default="LoraLoaderModelOnly", help="turbo_files mode: LoraLoaderModelOnly or LoraLoaderBypassModelOnly")
+    p.add_argument("--ref-dir", help="turbo_files mode: a turbo_groups --out")
+    p.add_argument("--prompts", nargs="+", choices=list(COMPARE), help="turbo_files mode: COMPARE prompts to render")
     args = p.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
@@ -408,6 +417,9 @@ def main():
         return
     if args.mode == "turbo_groups":
         run_turbo_groups(args, jobs)
+        return
+    if args.mode == "turbo_files":
+        run_turbo_files(args, jobs)
         return
     total, done = len(args.models) * sum(len(s) for _, _, s in jobs), 0
     t0 = time.time()
@@ -774,6 +786,47 @@ def run_turbo_groups(args, jobs):
         json.dump(report, f, indent=2)
     for name, prompt, seeds in jobs:
         print(contact_sheet(args.out, name, prompt, seeds, list(configs), cols=len(seeds), tile=200))
+    print(json.dumps(report, indent=2))
+
+
+def run_turbo_files(args, jobs):
+    files = dict(item.split("=", 1) for item in args.turbo_files)
+    key_of = {name: next(k for k in TURBO_LORAS if name.startswith(k)) for name in files}
+    samples = [(name, prompt, seed) for name, prompt, seeds in jobs for seed in seeds]
+    argv = json.loads(_request(args.server, "/system_stats"))["system"].get("argv")
+    print(f"server argv: {argv}", flush=True)
+    timings_path = os.path.join(args.out, "timings.json")
+    timings = json.load(open(timings_path, encoding="utf-8")) if os.path.exists(timings_path) else {}
+    feats, total, done, t0 = {}, len(files) * len(samples), 0, time.time()
+    for c, lora in files.items():
+        feats[c] = {}
+        for name, prompt, seed in samples:
+            os.makedirs(os.path.join(args.out, c, name), exist_ok=True)
+            path = os.path.join(args.out, c, name, f"{seed}.png")
+            if not os.path.exists(path):
+                info = {}
+                g = turbo_graph(args, prompt, seed, lora, args.loader, TURBO_LORAS[key_of[c]][1])
+                g["latent"]["inputs"].update(width=args.size, height=args.size)
+                run_graph(args.server, g, info).save(path)
+                timings[f"{c}/{name}/{seed}"] = {"seconds": info["seconds"], "sampling_only": {"unet", "pos", "neg", "lora"} <= set(info["cached"])}
+                with open(timings_path, "w", encoding="utf-8") as f:
+                    json.dump(timings, f, indent=1)
+            feats[c][f"{name}_{seed}"] = features(Image.open(path).convert("RGB"))
+            done += 1
+            print(f"[{done}/{total}] {c} {name} {seed} ({time.time() - t0:.0f}s)", flush=True)
+    rows = {}
+    for c in files:
+        ref_dir = os.path.join(args.ref_dir, f"{key_of[c]}_all") if args.ref_dir else os.path.join(args.out, f"{key_of[c]}_orig")
+        ref = {f"{n}_{s}": features(Image.open(os.path.join(ref_dir, n, f"{s}.png")).convert("RGB")) for n, _, s in samples}
+        secs = [v["seconds"] for k, v in timings.items() if k.startswith(c + "/") and v["sampling_only"]]
+        rows[c] = {"median_seconds": round(float(np.median(secs)), 2) if secs else None,
+                   "detail_vs_full": round(float(np.mean([feats[c][s]["detail"] - ref[s]["detail"] for s in ref])), 3),
+                   **{m: round(float(np.mean([distance(feats[c][s], ref[s])[m] for s in ref])), 3) for m in METRICS}}
+    report = {"samples": len(samples), "sft": args.sft, "loader": args.loader, "server_argv": argv, "files": files, "configs": rows}
+    with open(os.path.join(args.out, "report_turbo_files.json"), "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=2)
+    for name, prompt, seeds in jobs:
+        print(contact_sheet(args.out, name, prompt, seeds, list(files), cols=len(seeds), tile=200))
     print(json.dumps(report, indent=2))
 
 

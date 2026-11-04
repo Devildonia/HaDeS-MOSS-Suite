@@ -68,6 +68,59 @@ seed, layout / edges / texture / color):
 - The early layers, where the usual loader loses about half of the change to bf16 rounding, are the ones that matter least, which
   is why the usual loader works anyway.
 
+**Reduced LoRAs** (`--mode turbo_files`, usual loader): layers 24–41 only, from the fused copies, each weight cut to rank r by the
+exact SVD of LoRA Resize, factors in bf16. Distance to the full LoRA's image of the same seed, layout / edges / texture / color:
+
+| Layers 24–41 at rank | DMD2: size | DMD2 distance | 4-step: size | 4-step distance |
+|---|---|---|---|---|
+| (original file, all layers) | 1189 MB | 0 | 327 MB | 0 |
+| full rank | 340 MB | 4.3 / 0.11 / 0.09 / 0.9 | 65 MB | 3.0 / 0.10 / 0.08 / 0.7 |
+| 32 | 57 MB | 4.4 / 0.11 / 0.10 / 1.0 | 31 MB | 2.9 / 0.10 / 0.11 / 0.7 |
+| 16 | 28 MB | 3.6 / 0.10 / 0.10 / 0.7 | 19 MB | 3.3 / 0.11 / 0.09 / 0.7 |
+| 8 | 14 MB | 3.0 / 0.10 / 0.08 / 0.8 | 11 MB | 2.9 / 0.11 / 0.10 / 0.5 |
+| 4 | 7 MB | 4.1 / 0.12 / 0.09 / 0.8 | 6 MB | 3.1 / 0.12 / 0.09 / 0.6 |
+| 2 | 3.6 MB | 4.8 / 0.13 / 0.12 / 1.0 | 3.6 MB | 3.9 / 0.16 / 0.12 / 1.1 |
+
+- Every reduced file renders the full LoRA's images by eye, rank 2 included, at the same speed (2.7 s / 1.5 s per image); the 4-step
+  LoRA's ghosted café image comes back in every version, so they reproduce the LoRA, defects too. The distances stay at the level the
+  full-rank 24–41 file has (its 5–6 mean pixel difference from the Block Weight route to the same layers is bf16 rounding noise).
+- On these 9 images (three prompts, 1024 x 1024) a 3.6 MB rank-2 LoRA on layers 24–41 replaces the 1189 MB DMD2 LoRA.
+
+Text, layout and 2048 x 2048, against each original LoRA file rendered in the same run (usual loader, 3 seeds per prompt):
+
+| Version | Text and layout, 1024 x 1024: layout distance / strings right | 2048 x 2048: seconds / layout distance |
+|---|---|---|
+| DMD2 original | 0 / 9 of 9 | 12.81 / 0 |
+| DMD2, 24–41 rank 8 | 2.4 / 9 of 9 | 12.61 / 3.3 |
+| DMD2, 24–41 rank 2 | 2.8 / 9 of 9 | 12.65 / 4.5 |
+| 4-step original | 0 / 9 of 9 | 7.02 / 0 |
+| 4-step, 24–41 rank 8 | 2.2 / 9 of 9 | 6.95 / 2.2 |
+| 4-step, 24–41 rank 2 | 2.7 / 9 of 9 | 6.97 / 2.9 |
+
+- Text: the bakery sign ("FRESH BREAD DAILY" / "open 7am - 3pm"), the three-line poster and the layout JSON poster ("NORTHERN
+  LIGHTS" / "14 MARCH 2027 · OSLO") are spelled right in all 54 images, the reduced versions setting the same text as the originals.
+- 2048 x 2048: the reduced versions render the originals' images. DMD2 at 8 steps takes 12.8 s against 72.0 s for SFT at 25 steps
+  (5.6x). The 4-step LoRA at 4 steps comes out darker and hazier at this size; its card asks for 6–8 steps above 1024, not measured.
+**Can the directions be read from the model?** Offline, per weight of layers 24–41 (fused files): the rank-2 directions of each
+LoRA's delta, compared between the two LoRAs and with the top 64 singular directions of the SFT weight (fraction of the LoRA's
+direction inside that subspace; chance = 64 / dimension). Means over the 18 layers:
+
+| Weight | DMD2 vs 4-step, output / input side (chance ~0.0005) | Inside SFT's top 64, output side (chance) | Inside SFT's top 64, input side (chance) | cos(ΔW, W) |
+|---|---|---|---|---|
+| qkv | 0.54 / 0.22 | 0.012 (0.007) | 0.166 (0.021) | 0.000 |
+| o | 0.42 / 0.11 | 0.022 (0.021) | 0.021 (0.021) | 0.000 |
+| ffn_up_gate | 0.33 / 0.21 | 0.007 (0.004) | 0.051 (0.021) | 0.000 |
+| ffn_down | 0.40 / 0.21 | 0.049 (0.021) | 0.010 (0.008) | 0.000 |
+
+- The two LoRAs share a large part of their directions, far above chance, but the 4-step LoRA's own card says it was distilled
+  from lodestones' DMD, so the two are not independent evidence of a property of the model.
+- The directions are not the weight's own: at most 17% of a direction lies in SFT's top 64 (qkv input side, 8x chance: the
+  LoRA reads from residual directions qkv already reads strongly), mostly near chance, and ΔW is orthogonal to W (no rescaling).
+  A turbo patch computed from the SFT weights alone, by their spectrum, is not supported by this; whether activations would give
+  the directions is not measured.
+- Base, other step counts and the official `akhaliq/MOSS-Image-SFT-4-steps` files are not measured. The 4-step file measured here
+  carries no source in its metadata (it says "Dynamic resize with sv_fro: 0.99 from 128").
+
 ## Two-resolution sampling (prototype)
 
 `--mode progressive`, `mossImage_sft_bf16`, SageAttention, 1024 x 1024 output, er_sde / simple / 25 steps / CFG 2.5, café woman,
