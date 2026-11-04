@@ -27,6 +27,10 @@ Modes:
   slg       SFT and Base (--models) without SLG and with SkipLayerGuidanceDiTSimple on single block 22 (first half / all steps),
             24 and 26 (first half), on text, line-break, layout and portrait prompts. Count text errors by eye on the sheets.
   schedulers  --sft with er_sde / euler x simple / beta / normal x 15 / 25 steps against a 60-step euler / simple reference.
+  attention  --attn-models at ATTENTION_SIZES with the attention backend the server was started with, named by --tag (the server's
+            argv is saved next to the images). Seconds per image count only runs where the model and both prompts came from
+            ComfyUI's cache (sampling + decode). The cache is cleared first. --compare TAG [TAG ...] then reports every tag
+            against the first: mean absolute pixel difference (0-255), the image metrics and median seconds per image.
   bias_merge  The two neutral prompts (café woman, fisherman) over --neutral-seeds seeds on SFT and Base with and without the
             Base template's SLG, and on SFT with its later layer groups taken from Base. Count the results by hand.
 
@@ -104,7 +108,8 @@ def _request(server, path, data=None):
         return r.read()
 
 
-def run_graph(server, graph):
+def run_graph(server, graph, info=None):
+    """The output image; `info`, when given, receives the run's seconds and the node ids ComfyUI served from its cache."""
     prompt_id = json.loads(_request(server, "/prompt", json.dumps({"prompt": graph}).encode()))["prompt_id"]
     while True:
         hist = json.loads(_request(server, f"/history/{prompt_id}"))
@@ -112,6 +117,10 @@ def run_graph(server, graph):
             entry = hist[prompt_id]
             if entry.get("status", {}).get("status_str") == "error":
                 raise RuntimeError(f"ComfyUI failed on prompt {prompt_id}: {entry['status'].get('messages')}")
+            if info is not None:
+                msgs = dict(entry["status"]["messages"])
+                info["seconds"] = (msgs["execution_success"]["timestamp"] - msgs["execution_start"]["timestamp"]) / 1000.0
+                info["cached"] = msgs.get("execution_cached", {}).get("nodes", [])
             img = entry["outputs"]["out"]["images"][0]
             query = urllib.parse.urlencode({"filename": img["filename"], "subfolder": img["subfolder"], "type": img["type"]})
             return Image.open(io.BytesIO(_request(server, f"/view?{query}"))).convert("RGB")
@@ -184,11 +193,12 @@ SLG_CONFIGS = {
 SLG_PROMPTS = ("text_sign", "text_linebreaks", "layout_json", "photo_portrait")
 # (sampler, scheduler, steps); the reference is euler / simple at 60 steps
 SCHEDULER_CONFIGS = [(s, sch, st) for s in ("er_sde", "euler") for sch in ("simple", "beta", "normal") for st in (15, 25)]
+ATTENTION_SIZES = (1024, 2048)
 
 
 def jobs_for(args):
     """[(prompt name, prompt, seeds)]"""
-    if args.mode in ("groups", "lora", "shift", "schedulers"):
+    if args.mode in ("groups", "lora", "shift", "schedulers", "attention"):
         return [(n, p, list(range(args.seed0, args.seed0 + args.seeds))) for n, p in GROUP_PROMPTS.items()]
     if args.mode == "slg":
         return [(n, COMPARE[n], list(range(args.seed0, args.seed0 + args.seeds))) for n in SLG_PROMPTS]
@@ -317,7 +327,7 @@ def contact_sheet(out_dir, name, prompt, seeds, models, cols=8, tile=256):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--mode", choices=("bias", "compare", "groups", "lora", "bias_merge", "shift", "slg", "schedulers"), default="bias")
+    p.add_argument("--mode", choices=("bias", "compare", "groups", "lora", "bias_merge", "shift", "slg", "schedulers", "attention"), default="bias")
     p.add_argument("--server", default="http://127.0.0.1:8188")
     p.add_argument("--sft", default="mossImage_sft_bf16.safetensors")
     p.add_argument("--base", default="mossImage_base_bf16.safetensors")
@@ -335,6 +345,9 @@ def main():
     p.add_argument("--cfg", type=float, default=2.5)
     p.add_argument("--sampler", default="er_sde")
     p.add_argument("--scheduler", default="simple")
+    p.add_argument("--attn-models", nargs="+", default=["mossImage_sft_bf16.safetensors"], help="diffusion_models files (attention mode)")
+    p.add_argument("--tag", help="name of the attention backend the server runs (attention mode)")
+    p.add_argument("--compare", nargs="+", metavar="TAG", help="compare attention runs, the first tag is the reference")
     args = p.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
@@ -350,6 +363,9 @@ def main():
         return
     if args.mode == "schedulers":
         run_schedulers(args, jobs)
+        return
+    if args.mode == "attention":
+        compare_attention(args, jobs) if args.compare else run_attention(args, jobs)
         return
     total, done = len(args.models) * sum(len(s) for _, _, s in jobs), 0
     t0 = time.time()
@@ -482,6 +498,69 @@ def run_schedulers(args, jobs):
             for c in configs if c != "ref"}
     report = {"samples": len(keys), "sft": args.sft, "cfg": args.cfg, "reference": "euler / simple / 60 steps", "distance_to_reference": rows}
     with open(os.path.join(args.out, "report_schedulers.json"), "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=2)
+    print(json.dumps(report, indent=2))
+
+
+def attention_configs(args):
+    return [(os.path.splitext(m)[0], m, size) for m in args.attn_models for size in ATTENTION_SIZES]
+
+
+def run_attention(args, jobs):
+    """Every --attn-models file at every ATTENTION_SIZES side under the server's current attention; images and timings per --tag."""
+    if not args.tag:
+        raise SystemExit("--tag is required: name the attention backend the server was started with")
+    tag_dir = os.path.join(args.out, args.tag)
+    os.makedirs(tag_dir, exist_ok=True)
+    argv = json.loads(_request(args.server, "/system_stats"))["system"].get("argv")
+    print(f"server argv: {argv}", flush=True)
+    with open(os.path.join(tag_dir, "server.json"), "w", encoding="utf-8") as f:
+        json.dump({"argv": argv}, f, indent=2)
+    # a cached graph would not sample again, so timings would read zero
+    _request(args.server, "/free", json.dumps({"unload_models": True, "free_memory": True}).encode())
+    timings_path = os.path.join(tag_dir, "timings.json")
+    timings = json.load(open(timings_path, encoding="utf-8")) if os.path.exists(timings_path) else {}
+    samples = [(name, prompt, seed) for name, prompt, seeds in jobs for seed in seeds]
+    total, done, t0 = len(attention_configs(args)) * len(samples), 0, time.time()
+    for c, unet, size in attention_configs(args):
+        for name, prompt, seed in samples:
+            os.makedirs(os.path.join(tag_dir, f"{c}_{size}", name), exist_ok=True)
+            path = os.path.join(tag_dir, f"{c}_{size}", name, f"{seed}.png")
+            if not os.path.exists(path):
+                g = build_graph(args, unet, False, prompt, seed)
+                g["latent"]["inputs"].update(width=size, height=size)
+                info = {}
+                run_graph(args.server, g, info).save(path)
+                clean = {"unet", "pos", "neg"} <= set(info["cached"])
+                timings[f"{c}_{size}/{name}/{seed}"] = {"seconds": info["seconds"], "sampling_only": clean}
+                with open(timings_path, "w", encoding="utf-8") as f:
+                    json.dump(timings, f, indent=1)
+            done += 1
+            print(f"[{done}/{total}] {args.tag} {c}_{size} {name} {seed} ({time.time() - t0:.0f}s)", flush=True)
+
+
+def compare_attention(args, jobs):
+    ref, others = args.compare[0], args.compare[1:]
+    keys = [f"{name}/{seed}" for name, _, seeds in jobs for seed in seeds]
+    timings = {t: json.load(open(os.path.join(args.out, t, "timings.json"), encoding="utf-8")) for t in args.compare}
+    report = {"reference": ref, "samples": len(keys), "steps": args.steps, "sampler": args.sampler, "scheduler": args.scheduler, "configs": {}}
+    for c, _, size in attention_configs(args):
+        cfg = f"{c}_{size}"
+        row = {}
+        for t in args.compare:
+            secs = [v["seconds"] for k, v in timings[t].items() if k.startswith(cfg + "/") and v["sampling_only"]]
+            row[t] = {"median_seconds": round(float(np.median(secs)), 2) if secs else None, "timed_images": len(secs)}
+        for t in others:
+            pixel, feats = [], []
+            for k in keys:
+                a = Image.open(os.path.join(args.out, ref, cfg, f"{k}.png")).convert("RGB")
+                b = Image.open(os.path.join(args.out, t, cfg, f"{k}.png")).convert("RGB")
+                pixel.append(float(np.abs(np.asarray(a, dtype=np.float64) - np.asarray(b, dtype=np.float64)).mean()))
+                feats.append(distance(features(a), features(b)))
+            row[t].update(pixel_diff_mean=round(float(np.mean(pixel)), 2), pixel_diff_max=round(float(np.max(pixel)), 2),
+                          **{m: round(float(np.mean([f[m] for f in feats])), 3) for m in METRICS})
+        report["configs"][cfg] = row
+    with open(os.path.join(args.out, "report_attention.json"), "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
     print(json.dumps(report, indent=2))
 

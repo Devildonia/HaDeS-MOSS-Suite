@@ -3,7 +3,48 @@
 Measured with `tools/moss_eval.py` on an RTX 5090, ComfyUI 0.43.0 local API. 1024x1024, er_sde / simple / 25 steps / CFG 2.5,
 model shift 5.0, negative `nsfw, worst quality, bad anatomy, watermark, jpeg artifact` (the official ComfyUI templates),
 text encoder `mossImage_base_txt_int4` (w4a8 with codebook), VAE `flux2-vae`. Models: `mossImage_sft_bf16` and `mossImage_base_bf16`
-(fused `proj.qkv`, 42 layers). Ethnicity counts are by eye on the contact sheets.
+(fused `proj.qkv`, 42 layers). Ethnicity counts are by eye on the contact sheets. ComfyUI runs with `--use-sage-attention` (the
+launcher's flag, read from the server on 2026-11-04), so every image here was sampled with SageAttention.
+
+## Attention backends and int8 speed
+
+`--mode attention`, RTX 5090 (32 GB, the whole model in VRAM in every run), café woman, fisherman and watercolor fox x seeds
+1000–1002, er_sde / simple / 25 steps / CFG 2.5. Seconds per image count only runs where the model and both prompts came from the
+cache (sampling + decode), median of 6 per cell. The server ran with `--use-sage-attention` or `--use-pytorch-cross-attention`
+(checked from its argv). int8 = `mossImage_sft_bf16` saved by HaDeS MOSS Model Saver as int8 ConvRot (Comfy-Org layout, which sets
+comfy-kitchen int8 attention per layer); "int8, no attention setting" = the same file with the 42 `comfy_attention.config` keys
+removed, so it uses the server's attention.
+
+| Model / attention | 1024 x 1024 | 2048 x 2048 |
+|---|---|---|
+| bf16, PyTorch SDPA | 16.31 s | 91.76 s |
+| bf16, SageAttention | 15.13 s | 71.98 s |
+| int8, no attention setting, PyTorch SDPA | 25.32 s | 129.69 s |
+| int8, no attention setting, SageAttention | 23.70 s | 107.55 s |
+| int8, comfy-kitchen int8 attention (Comfy-Org layout) | 24.08 s | 109.12 s |
+
+Mean absolute pixel difference (0–255) over the 9 images, mean / worst image:
+
+| Comparison | 1024 x 1024 | 2048 x 2048 |
+|---|---|---|
+| SageAttention, two runs | 0.0 / 0.0 | 0.0 / 0.0 |
+| bf16: SageAttention vs PyTorch SDPA | 6.1 / 13.1 | 3.8 / 8.5 |
+| int8: SageAttention vs PyTorch SDPA | 6.6 / 18.0 | 5.2 / 13.2 |
+| int8: comfy-kitchen vs SageAttention | 7.6 / 17.2 | 7.1 / 18.5 |
+| PyTorch SDPA: int8 vs bf16 | 8.2 / 15.5 | 5.7 / 10.3 |
+
+- SageAttention saves 7% of the time per image at 1024 x 1024 and 22% at 2048 x 2048 on bf16 (6% / 17% on int8): the larger the
+  canvas, the more of the time is attention.
+- It renders the same image for the same seed (two runs identical pixel for pixel), so it adds no run-to-run noise to the
+  measurements in this file, all of which ran with SageAttention.
+- Against PyTorch SDPA it changes details, not the image: in the worst pair (a café collage) the same layout, person and scene, with
+  a different head turn, cup and chairs (layout distance 3.0 at 1024, against ~20 between two seeds). The change is about 3/4 of what
+  int8 quantization does. A seed shared between machines with different attention backends will not reproduce exactly.
+- int8 is slower than bf16 on this GPU: +57% at 1024 and +49% at 2048 with SageAttention. With the same int8 weights, comfy-kitchen
+  int8 attention runs at SageAttention's speed (+2%), so the cost is in the int8 layers, not the attention. int8 saves VRAM (5162 MB
+  staged against 9693 MB for bf16); on a GPU where bf16 does not fit, the trade-off was not measured.
+- Community int8 files checked here (`pornmasterMoss_sftV1`, `realismByStableYogi_v15INT8_MOSS`) carry no attention setting and use the
+  server's attention.
 
 ## Resolution and flow shift
 

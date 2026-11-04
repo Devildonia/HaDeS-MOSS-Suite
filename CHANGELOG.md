@@ -7,6 +7,9 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **`tools/moss_eval.py`:** an `attention` mode that times images under the attention backend the server runs and compares runs pixel by pixel. `tools/RESULTS.md` records that every measurement used SageAttention, and compares it with PyTorch attention and int8 files in speed and images.
+
 ## [0.1.1] - 2026-11-04
 
 Fixes from the pre-publication audit; 0.1.0 never reached the Comfy Registry.
