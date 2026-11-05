@@ -361,6 +361,28 @@ fell from 25.2 to 11.1 GB). 37 minutes (about 3.7 s per full update), 13.3 GB pe
 - Variety went down step by step (12.65 -> 12.24 -> 11.88), further from akhaliq's 13.18: more of the same DMD objective narrows the
   seeds, as the mode-seeking of DMD would predict. Raising quality or variety needs a different change than more updates at 1024.
 
+**Biases on top of our LoRA** (`moss_bias_fit.py --student-lora`): the student is SFT + the v0.1 update-1,000 LoRA (exact, fp32,
+beside the weights) + per-step biases on layers 24–41 from zero; the teacher's step is half the same LoRA's step and half SFT at 25
+steps / CFG 2.5 (`--teacher-lora` the same file, `--blend 0.5`, `teacher_step`), the blend that kept quality in the bias chain above.
+512 x 512, the 24 base prompts x 1 seed, lr 2e-4, 300 iterations, 31 minutes, none skipped; loss 0.00736 with zero biases (the LoRA
+alone), 0.00209 fitted. Tested at 1024 x 1024 with `moss_bias_turbo.py --biases-on-lora` (stock loader for the LoRA, biases added
+by hooks, SageAttention), 6 held-out prompts x seeds 2000–2005:
+
+| Prompt | LoRA alone | LoRA + biases |
+|---|---|---|
+| Three-line poster | 6 / 6 | 3 / 6: letters broken into fragments on three seeds |
+| Sign | 6 / 6 | 6 / 6 large text; small line rough on one, split over two lines on another |
+| Fisherman, street, watercolor | clean | hazier, lower contrast, darker; the street more film-like |
+| Café woman | one centred pose, 6 / 6 East Asian | poses and framing vary, 2 / 6 not East Asian |
+| Mean variety (as above) | 12.60 | 12.40 |
+
+- The biases pull the LoRA toward SFT's 25-step images, with what that brought in the bias chain: more varied compositions (the
+  café prompt), but haze, lower contrast and broken poster lettering. A loss three times lower did not give better images.
+- The pixel variety measure does not see the café change, as the lower contrast shrinks every pairwise difference; by eye the biased
+  seeds differ more. Ethnicity on 6 seeds is too few to count as a change in the bias.
+- On a LoRA that already renders clean images, half-SFT biases cost quality; no gain in quality was found. Other blends were not
+  tried.
+
 ## Two-resolution sampling (prototype)
 
 `--mode progressive`, `mossImage_sft_bf16`, SageAttention, 1024 x 1024 output, er_sde / simple / 25 steps / CFG 2.5, café woman,

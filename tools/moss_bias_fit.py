@@ -118,6 +118,8 @@ def main():
                         "must land there")
     p.add_argument("--teacher-lora", help="models/loras file (fused proj.qkv, layers 24-41, e.g. a rank-2 cut): a second teacher, the model "
                                           "with this LoRA added exactly (fp32, beside the weights) taking one euler step at CFG 1")
+    p.add_argument("--student-lora", help="models/loras file (same layout as --teacher-lora) added exactly to the student, under its biases: "
+                                          "fit biases on top of a few-step LoRA. The SFT teacher runs without it")
     p.add_argument("--blend", type=float, default=0.0, help="teacher_step target = blend x LoRA teacher + (1 - blend) x SFT teacher")
     p.add_argument("--init-biases", help="biases.safetensors (moss_bias_turbo / moss_bias_fit format) to start from instead of zeros")
     p.add_argument("--out", required=True)
@@ -182,16 +184,23 @@ def fit(args):
         biases = torch.nn.ParameterDict({f"{n.replace('.', '_')}__v": torch.nn.Parameter(torch.zeros(out_dim[n], device=device)) for n in names})
         biases.update({f"{n.replace('.', '_')}__s{s}": torch.nn.Parameter(torch.ones((), device=device)) for n in names for s in range(args.steps)})
     state = {"step": 0, "on": True, "lora": False}
-    lora = {}
-    if args.teacher_lora:
-        lsd = safetensors.torch.load_file(folder_paths.get_full_path_or_raise("loras", args.teacher_lora))
+    def load_lora(file):
+        lsd = safetensors.torch.load_file(folder_paths.get_full_path_or_raise("loras", file))
+        out = {}
         for n in names:
             pre = f"diffusion_model.{n}"
             if f"{pre}.lora_up.weight" in lsd:
                 dn = lsd[f"{pre}.lora_down.weight"].float()
                 up = lsd[f"{pre}.lora_up.weight"].float() * (lsd[f"{pre}.alpha"].float().item() / dn.shape[0])
-                lora[n] = (up.to(device), dn.to(device))
+                out[n] = (up.to(device), dn.to(device))
+        return out
+
+    lora = load_lora(args.teacher_lora) if args.teacher_lora else {}
+    if args.teacher_lora:
         print(f"teacher LoRA: {len(lora)} of {len(names)} linears", flush=True)
+    student_lora = load_lora(args.student_lora) if args.student_lora else {}
+    if args.student_lora:
+        print(f"student LoRA: {len(student_lora)} of {len(names)} linears", flush=True)
 
     def load_into(path):
         loaded = safetensors.torch.load_file(path)
@@ -215,6 +224,9 @@ def fit(args):
                 return output + ((inputs[0].float() @ dn.T) @ up.T).to(output.dtype)
             if not state["on"]:
                 return output
+            if name in student_lora:
+                up, dn = student_lora[name]
+                output = output + ((inputs[0].float() @ dn.T) @ up.T).to(output.dtype)
             return output + bias_of(name, state["step"]).to(output.dtype)
         return fn
 
@@ -350,7 +362,7 @@ def fit(args):
     for h in handles:
         h.remove()
     report.update(iters=args.iters, lr=args.lr, grad_clip=args.grad_clip, skipped=skipped, objective=args.objective, size=args.size,
-                  param=args.param, teacher_lora=args.teacher_lora, blend=args.blend, init_biases=args.init_biases, prompt_set=args.prompt_set, prompts=len(prompts), seeds=args.seeds, teacher_steps=args.teacher_steps, log=log)
+                  param=args.param, teacher_lora=args.teacher_lora, student_lora=args.student_lora, blend=args.blend, init_biases=args.init_biases, prompt_set=args.prompt_set, prompts=len(prompts), seeds=args.seeds, teacher_steps=args.teacher_steps, log=log)
     with open(os.path.join(args.out, "report_bias_fit.json"), "w", encoding="utf-8") as f:
         json.dump(report, f, indent=1)
 

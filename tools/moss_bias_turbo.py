@@ -62,6 +62,7 @@ def main():
     p.add_argument("--bias-steps", nargs="+", metavar="STEPS", help='comma-separated step indices per config, e.g. "0" "0,1"')
     p.add_argument("--calib-only", action="store_true", help="save the calibrated biases (biases.safetensors in --out) and stop")
     p.add_argument("--biases", help="biases.safetensors to test instead of calibrating (e.g. from tools/moss_bias_fit.py)")
+    p.add_argument("--biases-on-lora", action="store_true", help="with --biases: test only --lora and the biases added on top of it (config lora_bias)")
     p.add_argument("--out", required=True)
     args = p.parse_args(ARGV)
     os.makedirs(args.out, exist_ok=True)
@@ -168,6 +169,8 @@ def main():
             steps = {int(s) for s in spec.split(",")}
             plans[f"bias_steps_{spec.replace(',', '')}"] = (base, [(n, "post", adder(n, steps)) for n in factors])
         plans["none"] = none
+    if args.biases and args.biases_on_lora:
+        plans = {"lora": plans["lora"], "lora_bias": (lora_model, [(n, "post", adder(n)) for n in factors])}
     configs = list(plans)
     feats = {}
     for c, (model, hooks) in plans.items():
