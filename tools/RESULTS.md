@@ -317,6 +317,31 @@ steps, CFG 1, no LoRA, held-out prompts and seeds 2000–2002.
 - Layout distance to the LoRA falls as the LoRA share falls (to 0.25): the blended biases follow the 25-step SFT layout more; by eye
   that is where the extra variety at blend 0.5 comes from. Not measured against the 25-step SFT images.
 
+**Our own few-step LoRA, trained by DMD** (`tools/moss_dmd_train.py`): akhaliq's recipe (teacher SFT at CFG 3 with the negative
+pass skipping layer 22, a fake score trained 1:1 by flow matching, generator gradient v_real - v_fake at noise ~ Beta(2.5, 1), Adam
+betas (0, 0.999), clip 1, EMA 0.999) with one bf16 base and hooked fp32 LoRAs. Generator LoRA at rank 2 on layers 24–41 starting
+from zero (no warm start from any LoRA), trained on euler / simple, 4 steps, CFG 1; fake score rank 32 on all layers; lr 5e-5 /
+1e-4; 1,024 generated prompts, batch 1; 512 x 512 only. 2,000 updates in 30 minutes (0.9 s per update, 26.0 GB peak, PyTorch
+attention), 19 skipped as non-finite. The LoRA file is 7.1 MB in fp32.
+
+The 512 x 512 preview prompts (not in the training set) went from SFT's 4-step blur at update 0 to clean images with the sign spelled
+right at update 200, and stayed clean to 2,000.
+
+Tested at 1024 x 1024 (never trained there) through the stock `LoraLoaderModelOnly`, euler / simple / 4 steps / CFG 1, SageAttention,
+moss_eval `turbo_files` on the five COMPARE prompts below x seeds 1000–1002, against akhaliq's 4-step v2.0 file at the same settings:
+
+| LoRA | Sign, both lines | Three-line poster | Portraits, street, watercolor | Detail vs akhaliq | Layout distance to akhaliq |
+|---|---|---|---|---|---|
+| akhaliq 4-step v2.0 (rank 128, all layers, 1.2 GB) | 3 / 3 | 3 / 3 | clean | 0 | 0 |
+| ours, update 1,000 | 3 / 3 | 3 / 3 | clean | +0.374 | 11.0 |
+| ours, update 2,000 | 3 / 3 | 3 / 3 | clean | +0.264 | 13.0 |
+
+- A rank-2 LoRA on layers 24–41, trained from zero in 30 minutes at 512 x 512 on one GPU, renders these prompts at 1024 x 1024 at the
+  quality of the published 4-step LoRA by eye, text included, with a little more measured detail. Same speed (1.5 s per image).
+- Less variety across seeds than akhaliq's: the sign is a frontal board in all three seeds and the street is a centred
+  vanishing-point view each time, where akhaliq's vary angle and decoration. Not measured beyond these three seeds.
+- Not tested yet: 2048 x 2048, other aspect ratios, layout JSON prompts, the ethnic-bias prompts, a larger seed count.
+
 ## Two-resolution sampling (prototype)
 
 `--mode progressive`, `mossImage_sft_bf16`, SageAttention, 1024 x 1024 output, er_sde / simple / 25 steps / CFG 2.5, café woman,
