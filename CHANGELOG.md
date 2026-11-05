@@ -7,7 +7,9 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-Fixes from the 0.2.0 audit.
+## [0.2.1] - 2026-11-05
+
+Fixes from the 0.2.0 audit (`docs/AUDIT_0.2.0.md`); 0.2.0 never reached the Comfy Registry.
 
 ### Added
 - **MOSS Sampler Metadata:** a `turbo` output, the turbo LoRA file and strength the KSampler used (empty without one), so image-saver metadata can name it. Appended after the existing outputs; saved links keep their slots.
