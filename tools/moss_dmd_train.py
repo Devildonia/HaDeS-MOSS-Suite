@@ -38,6 +38,7 @@ import comfy.cli_args  # noqa: E402,F401
 import numpy as np  # noqa: E402
 import safetensors.torch  # noqa: E402
 import torch  # noqa: E402
+import torch.utils.checkpoint  # noqa: E402
 from PIL import Image  # noqa: E402
 
 import comfy.model_management  # noqa: E402
@@ -162,6 +163,9 @@ def main():
     p.add_argument("--save-every", type=int, default=50)
     p.add_argument("--sample-every", type=int, default=100)
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--init-lora", default=None, help="start the generator from this LoRA file (written by this trainer, same --layers / --rank) instead of zero")
+    p.add_argument("--fake-warmup", type=int, default=0, help="first N updates train only the fake score (for a generator that does not start from zero)")
+    p.add_argument("--checkpoint", action="store_true", help="gradient checkpointing per block (recomputes each block in backward: less memory, needed at 1024)")
     p.add_argument("--out", required=True)
     args = p.parse_args(ARGV)
     os.makedirs(args.out, exist_ok=True)
@@ -204,9 +208,18 @@ def train(args):
     sigmas = comfy.samplers.calculate_sigmas(bm.model_sampling, "simple", args.steps).to(device)
     print("generator sigmas: " + ", ".join(f"{s:.4f}" for s in sigmas.tolist()), flush=True)
 
+    dm.requires_grad_(False)
     init_gen = torch.Generator(device=device).manual_seed(args.seed)
     gen = LoRASet(dm, layer_names(args.layers), args.rank, device, init_gen)
     fake = LoRASet(dm, layer_names(args.fake_layers), args.fake_rank, device, init_gen)
+    if args.init_lora:
+        sd = comfy.utils.load_torch_file(args.init_lora)
+        with torch.no_grad():
+            for n in gen.names:
+                up, down = gen.factors(n)
+                up.copy_(sd[f"diffusion_model.{n}.lora_up.weight"].to(device))
+                down.copy_(sd[f"diffusion_model.{n}.lora_down.weight"].to(device))
+        print(f"generator starts from {args.init_lora}", flush=True)
     ema = {k: v.detach().clone() for k, v in gen.named_parameters()}
     hooked = sorted(set(gen.names) | set(fake.names))
     for n in hooked:
@@ -249,8 +262,28 @@ def train(args):
     def ctx(prompt):
         return cache[prompt].to(device)
 
+    def ckpt_block(i):
+        # calls dm.layers[i] itself: the core's original_block closure reads its loop variable late, which a recompute in
+        # backward would see as the last block. No references or attention bias here (ref, ref_kv, mask = None).
+        def fn(a, extra):
+            mode = state["mode"]  # the recompute runs in backward, after denoise() has reset the mode
+
+            def run(img):
+                old, state["mode"] = state["mode"], mode
+                try:
+                    return dm.layers[i](img, a["mod"], a["pe"], a["transformer_options"], None, None, mask=None)
+                finally:
+                    state["mode"] = old
+            return {"img": torch.utils.checkpoint.checkpoint(run, a["img"], use_reentrant=False)}
+        return fn
+
+    ckpt_options = {"patches_replace": {"dit": {("single_block", i): ckpt_block(i) for i in range(len(dm.layers))}}}
+
     def denoise(x, sigma, context, mode, options=None):
         state["mode"] = mode
+        if args.checkpoint and torch.is_grad_enabled():
+            assert options is None
+            options = ckpt_options
         try:
             return bm.apply_model(x, sigma.view(1), c_crossattn=context, transformer_options=options or {}).float()
         finally:
@@ -334,7 +367,12 @@ def train(args):
         with torch.no_grad():
             for s in range(k):
                 x = euler(x, denoise(x, sigmas[s], context, "gen"), sigmas[s], sigmas[s + 1])
-        x0 = with_grad(lambda: denoise(x, sigmas[k], context, "gen"))
+        warm = update <= args.fake_warmup
+        if warm:
+            with torch.no_grad():
+                x0 = denoise(x, sigmas[k], context, "gen")
+        else:
+            x0 = with_grad(lambda: denoise(x, sigmas[k], context, "gen"))
         x0_det = x0.detach()
 
         # fake score: flow matching on the generator's image (v-space loss, as the recipe)
@@ -352,6 +390,14 @@ def train(args):
         fake_ok = torch.isfinite(fake_loss) and all(torch.isfinite(q.grad).all() for q in fake.parameters() if q.grad is not None)
         if fake_ok:
             fake_opt.step()
+        if warm:
+            log.append({"u": update, "k": k, "fake_loss": round(fake_loss.item(), 5), "warmup": True})
+            if update % 10 == 0 or update == start:
+                print(f"u{update} (fake warm-up): fake_loss {np.mean([e['fake_loss'] for e in log[-10:]]):.4f} "
+                      f"({torch.cuda.max_memory_allocated() / 2**30:.1f} GB peak)", flush=True)
+            if update % args.save_every == 0:
+                save_ckpt(update)
+            continue
 
         # generator DMD gradient: v_real - v_fake = (den_fake - den_real) / tau_g at a noised copy of its image
         tau_g = torch.tensor(float(np_rng.beta(2.5, 1.0)) * 0.96 + 0.02, device=device)
@@ -372,7 +418,8 @@ def train(args):
             continue
         gn = torch.nn.utils.clip_grad_norm_(list(gen.parameters()), 1.0)
         opt.step()
-        decay = min(args.ema_decay, (1 + update) / (10 + update))  # warm-up: the run starts from zero, not from a warm start
+        u = update - args.fake_warmup
+        decay = min(args.ema_decay, (1 + u) / (10 + u))  # warm-up of the EMA from the starting generator
         with torch.no_grad():
             for kk, v in gen.named_parameters():
                 ema[kk].mul_(decay).add_(v.detach(), alpha=1 - decay)
@@ -381,7 +428,7 @@ def train(args):
                     "grad_norm": round(float(gn), 4), "up_norm": round(sum(q.detach().square().sum().item() for q in gen.up.values()) ** 0.5, 5)})
         if update % 10 == 0 or update == start:
             el = time.time() - t0
-            print(f"u{update}: fake_loss {np.mean([e['fake_loss'] for e in log[-10:]]):.4f} gap {np.mean([e['gap'] for e in log[-10:]]):.4f} "
+            print(f"u{update}: fake_loss {np.mean([e['fake_loss'] for e in log[-10:]]):.4f} gap {np.mean([e['gap'] for e in log[-10:] if 'gap' in e]):.4f} "
                   f"grad_norm {log[-1]['grad_norm']:.3g} up_norm {log[-1]['up_norm']:.4f} "
                   f"({el / (update - start + 1):.1f} s/update, {torch.cuda.max_memory_allocated() / 2**30:.1f} GB peak)", flush=True)
         if update % args.save_every == 0 or update == args.updates:

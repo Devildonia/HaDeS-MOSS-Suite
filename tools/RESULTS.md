@@ -342,6 +342,25 @@ moss_eval `turbo_files` on the five COMPARE prompts below x seeds 1000–1002, a
   vanishing-point view each time, where akhaliq's vary angle and decoration. Not measured beyond these three seeds.
 - Not tested yet: 2048 x 2048, other aspect ratios, layout JSON prompts, the ethnic-bias prompts, a larger seed count.
 
+**Continuing at 1024 x 1024 (v0.2):** the update-1,000 LoRA above as the starting generator (`--init-lora`), 600 updates at
+1024 x 1024, the first 100 training only a fresh fake score (`--fake-warmup 100`), generator lr 2e-5, per-block gradient checkpointing
+(`--checkpoint`; at 512 x 512 its first-update gradient matched the run without it, 6565 against 6542 before clipping, and the peak
+fell from 25.2 to 11.1 GB). 37 minutes (about 3.7 s per full update), 13.3 GB peak, none skipped. Same test as above with seeds
+1000–1005 and the café woman prompt added. Variety = mean pixel difference between every pair of seeds of one prompt at 64 x 64
+(0–100, higher = seeds differ more):
+
+| LoRA | Sign | Poster | Portrait | Street | Watercolor | Café woman | Mean variety |
+|---|---|---|---|---|---|---|---|
+| akhaliq 4-step v2.0 | 6 / 6 | 6 / 6 | clean | clean | clean | clean | 13.18 |
+| v0.1, update 1,000 (512) | 6 / 6 | 6 / 6 | clean | clean | clean | clean | 12.65 |
+| v0.2, update 300 (1024) | 6 / 6 | 6 / 6 | clean | clean | clean | clean | 12.24 |
+| v0.2, update 600 (1024) | 6 / 6 | 6 / 6 | clean | clean | clean | clean | 11.88 |
+
+- The 1024 continuation changed little: same compositions seed for seed, skin a little softer and less contrasted, wood grain on the
+  sign smoother. By eye neither is better; no gain in quality was found.
+- Variety went down step by step (12.65 -> 12.24 -> 11.88), further from akhaliq's 13.18: more of the same DMD objective narrows the
+  seeds, as the mode-seeking of DMD would predict. Raising quality or variety needs a different change than more updates at 1024.
+
 ## Two-resolution sampling (prototype)
 
 `--mode progressive`, `mossImage_sft_bf16`, SageAttention, 1024 x 1024 output, er_sde / simple / 25 steps / CFG 2.5, café woman,
