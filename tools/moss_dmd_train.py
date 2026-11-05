@@ -169,6 +169,8 @@ def main():
                    "before training at --reg-teacher-steps; each update the generator's step-k prediction from that noise is pulled toward its image")
     p.add_argument("--reg-weight", type=float, default=0.25, help="regression gradient = weight x (prediction - teacher latent), beside the DMD gradient")
     p.add_argument("--reg-teacher-steps", type=int, default=25, help="euler / simple steps of the regression teacher (same CFG and layer-22 skip as the DMD teacher)")
+    p.add_argument("--fake-updates", type=int, default=1, help="fake score updates per generator update, each on a fresh generator sample "
+                   "(DMD2's two time-scale update rule; DMD2 used 5). 1 = the recipe's 1:1")
     p.add_argument("--checkpoint", action="store_true", help="gradient checkpointing per block (recomputes each block in backward: less memory, needed at 1024)")
     p.add_argument("--out", required=True)
     args = p.parse_args(ARGV)
@@ -393,7 +395,36 @@ def train(args):
             reg.append((prompt, i, done[key]))
 
     t0 = time.time()
+    def fake_update(context, x0_det):
+        """One flow-matching step of the fake score on a generator image (v-space loss, as the recipe). Returns (loss, applied)."""
+        tau = torch.tensor(rng.random() * 0.96 + 0.02, device=device)
+        eps = torch.randn(x0_det.shape, device=device, generator=noise_gen)
+        x_t = (1 - tau) * x0_det + tau * eps
+
+        def step():
+            den = denoise(x_t, tau, context, "fake")
+            loss = ((den - x0_det) / tau).square().mean()
+            fake_opt.zero_grad(set_to_none=True)
+            loss.backward()
+            return loss
+        loss = with_grad(step)
+        ok = bool(torch.isfinite(loss)) and all(torch.isfinite(q.grad).all() for q in fake.parameters() if q.grad is not None)
+        if ok:
+            fake_opt.step()
+        return loss, ok
+
     for update in range(start, args.updates + 1):
+        # TTUR: the extra fake score updates, each on a fresh prompt, noise and step of the current generator (no gradient)
+        if update > args.fake_warmup:
+            for _ in range(args.fake_updates - 1):
+                c_f = ctx(prompts[rng.randrange(len(prompts))])
+                x_f = torch.randn(1, 128, hw, hw, device=device, generator=noise_gen)
+                k_f = rng.randrange(args.steps)
+                with torch.no_grad():
+                    for s in range(k_f):
+                        x_f = euler(x_f, denoise(x_f, sigmas[s], c_f, "gen"), sigmas[s], sigmas[s + 1])
+                    x0_f = denoise(x_f, sigmas[k_f], c_f, "gen")
+                fake_update(c_f, x0_f)
         context = ctx(prompts[rng.randrange(len(prompts))])
         x = torch.randn(1, 128, hw, hw, device=device, generator=noise_gen)
         k = rng.randrange(args.steps)
@@ -410,21 +441,8 @@ def train(args):
             x0 = with_grad(lambda: denoise(x, sigmas[k], context, "gen"))
         x0_det = x0.detach()
 
-        # fake score: flow matching on the generator's image (v-space loss, as the recipe)
-        tau = torch.tensor(rng.random() * 0.96 + 0.02, device=device)
-        eps = torch.randn(x0_det.shape, device=device, generator=noise_gen)
-        x_t = (1 - tau) * x0_det + tau * eps
-
-        def fake_step():
-            den = denoise(x_t, tau, context, "fake")
-            loss = ((den - x0_det) / tau).square().mean()
-            fake_opt.zero_grad(set_to_none=True)
-            loss.backward()
-            return loss
-        fake_loss = with_grad(fake_step)
-        fake_ok = torch.isfinite(fake_loss) and all(torch.isfinite(q.grad).all() for q in fake.parameters() if q.grad is not None)
-        if fake_ok:
-            fake_opt.step()
+        # fake score on this update's generator image (the last of its --fake-updates)
+        fake_loss, fake_ok = fake_update(context, x0_det)
         if warm:
             log.append({"u": update, "k": k, "fake_loss": round(fake_loss.item(), 5), "warmup": True})
             if update % 10 == 0 or update == start:
