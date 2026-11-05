@@ -43,6 +43,9 @@ class HaDeSMossTurbo:
                                "Turbo Diverse kept SFT's spread of faces on an open prompt (tools/RESULTS.md)."}),
                 "strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
                                        "tooltip": "1.0 is the only strength measured."}),
+                "steps": ("INT", {"default": TURBO_SETTINGS["steps"], "min": 1, "max": 50,
+                                  "tooltip": "4 is the step count the LoRAs were trained on and the only one measured; other counts run, "
+                                             "their quality is untested."}),
             },
         }
 
@@ -51,10 +54,10 @@ class HaDeSMossTurbo:
     FUNCTION = "pick"
     CATEGORY = "HaDeS/MOSS Samplers"
     DESCRIPTION = ("Few-step LoRA for the MOSS KSampler's turbo input: the KSampler applies it to its model and samples at the settings it "
-                   "was trained for (4 steps, CFG 1, euler / simple), whatever its own widgets say.")
+                   "was trained for (CFG 1, euler / simple, and this node's steps, 4 by default), whatever its own widgets say.")
 
-    def pick(self, lora_name, strength):
-        return ({"lora_name": lora_name, "strength": float(strength), **TURBO_SETTINGS},)
+    def pick(self, lora_name, strength, steps=TURBO_SETTINGS["steps"]):
+        return ({"lora_name": lora_name, "strength": float(strength), **TURBO_SETTINGS, "steps": int(steps)},)
 
 
 class HaDeSMossKSampler:
@@ -87,8 +90,9 @@ class HaDeSMossKSampler:
             "optional": {
                 "vae": ("VAE", {"tooltip": "Optional: also decode the result. Needed when the image output is connected."}),
                 "turbo": ("MOSS_TURBO", {"tooltip": "Optional: a MOSS Turbo LoRA. When connected, the LoRA is applied to the model and the KSampler "
-                                                    "samples at 4 steps, CFG 1, euler / simple with SLG off, ignoring those widgets; seed, denoise and "
-                                                    "flow_shift still apply. Measured at denoise 1.0 and the model's shift 5.0 (tools/RESULTS.md)."}),
+                                                    "samples at CFG 1, euler / simple with SLG off and the turbo node's steps, ignoring those widgets; "
+                                                    "seed, denoise and flow_shift still apply. Measured at 4 steps, denoise 1.0 and the model's "
+                                                    "shift 5.0 (tools/RESULTS.md)."}),
             },
             "hidden": {"prompt": "PROMPT", "unique_id": "UNIQUE_ID"},
         }

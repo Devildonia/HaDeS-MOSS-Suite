@@ -338,6 +338,14 @@ class TestSaverAndSampler(unittest.TestCase):
         self.assertEqual((meta["turbo"], meta["slg"], meta["steps"]), ("turbo_test.safetensors", "off", 4))
         values = sampler.HaDeSMossSamplerMetadata().read(info)["result"]
         self.assertEqual((values[1], values[2], values[7]), (4, 1.0, "turbo_test.safetensors:1"))
+        # the turbo node's steps widget replaces the default 4; the KSampler's own steps (25) stay ignored
+        sampler.nodes.common_ksampler = fake_ksampler
+        try:
+            info = sampler.HaDeSMossKSampler().sample(load(tiny_state_dict(10)), None, None, None, 7, 25, 2.5, "er_sde", "beta", 1.0, 0.0,
+                                                      "off", turbo=sampler.HaDeSMossTurbo().pick("turbo_test.safetensors", 1.0, 6)[0])[2]
+        finally:
+            sampler.nodes.common_ksampler = original
+        self.assertEqual((seen["steps"], common.parse_info_meta(info)["steps"]), (6, 6))
 
 
 class TestTelemetry(unittest.TestCase):
@@ -347,10 +355,12 @@ class TestTelemetry(unittest.TestCase):
         cases = {"measured": (dict(denoise=1.0, turbo="t.safetensors", turbo_strength=1.0), 0),
                  "strength": (dict(denoise=1.0, turbo="t.safetensors", turbo_strength=0.5), 1),
                  "denoise": (dict(denoise=0.6, turbo="t.safetensors", turbo_strength=1.0), 1),
-                 "no turbo, denoise": (dict(denoise=0.6), 0)}
+                 "steps": (dict(denoise=1.0, turbo="t.safetensors", turbo_strength=1.0, steps=6), 1),
+                 "no turbo, denoise": (dict(denoise=0.6), 0),
+                 "no turbo, 25 steps": (dict(denoise=1.0, steps=25), 0)}
         for name, (extra, notes) in cases.items():
             with self.subTest(name):
-                data = telemetry.HaDeSMossSuiteTelemetry().audit("T", info_1=f("x", "ksampler", **base, **extra))["result"][1]
+                data = telemetry.HaDeSMossSuiteTelemetry().audit("T", info_1=f("x", "ksampler", **{**base, **extra}))["result"][1]
                 self.assertEqual(sum("Turbo" in x["message"] for x in json.loads(data)["findings"]), notes)
 
     def test_findings(self):

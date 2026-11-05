@@ -176,7 +176,8 @@
    "inputs": [],
    "widgets_values": [
     "HaDeS-MOSS-Turbo-v0.6.safetensors",
-    1.0
+    1.0,
+    4
    ],
    "properties": {
     "Node name for S&R": "HaDeSMossTurbo",

@@ -170,12 +170,19 @@ const INSTALLERS = {
         // a connected turbo input overrides these in the backend: draw them faded (still editable for when it is unplugged)
         const TURBO_OVERRIDES = new Set(["steps", "cfg", "sampler_name", "scheduler", "slg"]);
         const turboLinked = () => node.inputs?.find((i) => i.name === "turbo")?.link != null;
+        // the steps widget of the MOSS Turbo LoRA node feeding the turbo input (4, its default, if it cannot be read)
+        const turboSteps = () => {
+            const slot = node.inputs?.findIndex((i) => i.name === "turbo") ?? -1;
+            const src = slot >= 0 ? node.getInputNode?.(slot) : null;
+            const steps = src && widget(src, "steps")?.value;
+            return Number.isFinite(steps) ? steps : 4;
+        };
         banner(node, {
             title: "MOSS KSAMPLER",
             getStatusText: () => {
                 const shift = ` · shift ${num(node, "flow_shift") > 0 ? num(node, "flow_shift") : "model"}`;
                 // a connected turbo input overrides steps / CFG / sampler / scheduler / SLG in the backend
-                if (turboLinked()) return `TURBO · euler / simple · 4 steps · CFG 1.0${shift}`;
+                if (turboLinked()) return `TURBO · euler / simple · ${turboSteps()} steps · CFG 1.0${shift}`;
                 return `${widget(node, "sampler_name")?.value} / ${widget(node, "scheduler")?.value} · ${num(node, "steps")} steps · CFG ${num(node, "cfg").toFixed(1)}`
                     + `${shift}${widget(node, "slg")?.value !== "off" ? " · SLG" : ""}`;
             },
@@ -207,7 +214,7 @@ const GENERIC = {
     HaDeSMossLoraResize: { title: "LORA RESIZE", sliders: { dynamic_energy: [0, 1] } },
     HaDeSMossLayoutCompiler: { title: "LAYOUT COMPILER" },
     HaDeSMossSamplerMetadata: { title: "SAMPLER METADATA" },
-    HaDeSMossTurbo: { title: "TURBO LORA · 4 STEPS · CFG 1", sliders: { strength: [0, 2] } },
+    HaDeSMossTurbo: { title: "TURBO LORA · CFG 1", sliders: { strength: [0, 2] } },
     HaDeSMossSuiteTelemetry: { title: "SUITE TELEMETRY" },
 };
 for (const [cls, { title, sliders = {} }] of Object.entries(GENERIC)) {

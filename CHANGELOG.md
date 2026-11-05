@@ -7,6 +7,10 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **MOSS Turbo LoRA:** a `steps` widget (default 4, the step count the LoRAs were trained on and the only one measured), so a few more or fewer steps can be tried; the MOSS KSampler uses it in place of the fixed 4, and its status line shows it. Workflows saved before keep 4.
+- **Suite Telemetry:** a note when a turbo LoRA runs at a step count other than 4.
+
 ## [0.2.1] - 2026-11-05
 
 Fixes from the 0.2.0 audit (`docs/AUDIT_0.2.0.md`); 0.2.0 never reached the Comfy Registry.

@@ -81,7 +81,7 @@ EXAMPLES = {
         "unet": ("UNETLoader", {"unet_name": SFT, "weight_dtype": "default"}),
         **loaders(),
         # the turbo LoRA and the settings it was trained at (4 steps, CFG 1, euler / simple), applied by the KSampler
-        "turbo": ("HaDeSMossTurbo", {"lora_name": TURBO, "strength": 1.0}),
+        "turbo": ("HaDeSMossTurbo", {"lora_name": TURBO, "strength": 1.0, "steps": 4}),
         "pos": ("CLIPTextEncode", {"clip": ("clip", 0), "text": "Photograph of a hand-painted wooden sign outside a bakery that reads \"FRESH BREAD DAILY\" "
                                                                  "in large white letters and \"open 7am - 3pm\" in smaller letters below, morning light."}),
         "latent": ("HaDeSMossLatent", {"aspect_ratio": "1:1", "megapixels": 1.0, "custom_width": 1024, "custom_height": 1024, "batch_size": 1}),
