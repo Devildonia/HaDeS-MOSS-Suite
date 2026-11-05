@@ -165,6 +165,10 @@ def main():
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--init-lora", default=None, help="start the generator from this LoRA file (written by this trainer, same --layers / --rank) instead of zero")
     p.add_argument("--fake-warmup", type=int, default=0, help="first N updates train only the fake score (for a generator that does not start from zero)")
+    p.add_argument("--reg-pairs", type=int, default=0, help="regression term (DMD v1): N teacher images, one per (prompt, seed), rendered "
+                   "before training at --reg-teacher-steps; each update the generator's step-k prediction from that noise is pulled toward its image")
+    p.add_argument("--reg-weight", type=float, default=0.25, help="regression gradient = weight x (prediction - teacher latent), beside the DMD gradient")
+    p.add_argument("--reg-teacher-steps", type=int, default=25, help="euler / simple steps of the regression teacher (same CFG and layer-22 skip as the DMD teacher)")
     p.add_argument("--checkpoint", action="store_true", help="gradient checkpointing per block (recomputes each block in backward: less memory, needed at 1024)")
     p.add_argument("--out", required=True)
     args = p.parse_args(ARGV)
@@ -357,6 +361,37 @@ def train(args):
         preview(0)
     neg = ctx("")
     hw = args.size // 16
+
+    # regression pairs: the teacher's image for a fixed noise per pair, cached in --out (resumable)
+    reg = []
+    if args.reg_pairs:
+        if args.reg_pairs > len(prompts):
+            raise SystemExit(f"--reg-pairs {args.reg_pairs} > {len(prompts)} prompts")
+        reg_prompts = random.Random(args.seed + 7).sample(prompts, args.reg_pairs)
+        reg_path = os.path.join(args.out, "reg_pairs.pt")
+        done = torch.load(reg_path) if os.path.exists(reg_path) else {}
+        t_sig = comfy.samplers.calculate_sigmas(bm.model_sampling, "simple", args.reg_teacher_steps).to(device)
+
+        def reg_noise(i):
+            return torch.randn(1, 128, hw, hw, device=device, generator=torch.Generator(device=device).manual_seed(10000 + i))
+
+        t1 = time.time()
+        for i, prompt in enumerate(reg_prompts):
+            key = f"{i}_{args.reg_teacher_steps}_{args.size}"
+            if key not in done:
+                x, c = reg_noise(i), ctx(prompt)
+                with torch.no_grad():
+                    for s in range(args.reg_teacher_steps):
+                        cond = denoise(x, t_sig[s], c, None)
+                        uncond = denoise(x, t_sig[s], neg, None, skip22)
+                        x = euler(x, uncond + args.guidance * (cond - uncond), t_sig[s], t_sig[s + 1])
+                done[key] = x.cpu()
+                if (i + 1) % 16 == 0 or i + 1 == len(reg_prompts):
+                    torch.save(done, reg_path + ".tmp")
+                    os.replace(reg_path + ".tmp", reg_path)
+                    print(f"regression pairs: {i + 1} / {len(reg_prompts)} ({time.time() - t1:.0f}s)", flush=True)
+            reg.append((prompt, i, done[key]))
+
     t0 = time.time()
     for update in range(start, args.updates + 1):
         context = ctx(prompts[rng.randrange(len(prompts))])
@@ -411,6 +446,18 @@ def train(args):
             grad = (fake_den - real) / tau_g
         opt.zero_grad(set_to_none=True)
         with_grad(lambda: x0.backward(grad))
+        reg_loss = None
+        if reg:  # regression: from a pair's noise, no gradient down to step k, then the step-k prediction toward the teacher's image
+            prompt_r, i_r, target = reg[rng.randrange(len(reg))]
+            k_r = rng.randrange(args.steps)
+            xr, cr = reg_noise(i_r), ctx(prompt_r)
+            with torch.no_grad():
+                for s in range(k_r):
+                    xr = euler(xr, denoise(xr, sigmas[s], cr, "gen"), sigmas[s], sigmas[s + 1])
+            x0r = with_grad(lambda: denoise(xr, sigmas[k_r], cr, "gen"))
+            diff = x0r.detach() - target.to(device)
+            reg_loss = diff.square().mean()
+            with_grad(lambda: x0r.backward(args.reg_weight * diff))
         grads = [q.grad for q in gen.parameters() if q.grad is not None]
         if not fake_ok or not torch.isfinite(grad).all() or any(not torch.isfinite(g).all() for g in grads):
             skipped += 1
@@ -425,11 +472,12 @@ def train(args):
                 ema[kk].mul_(decay).add_(v.detach(), alpha=1 - decay)
 
         log.append({"u": update, "k": k, "fake_loss": round(fake_loss.item(), 5), "gap": round((fake_den - real).abs().mean().item(), 5),
-                    "grad_norm": round(float(gn), 4), "up_norm": round(sum(q.detach().square().sum().item() for q in gen.up.values()) ** 0.5, 5)})
+                    "grad_norm": round(float(gn), 4), **({} if reg_loss is None else {"reg_loss": round(reg_loss.item(), 5)}), "up_norm": round(sum(q.detach().square().sum().item() for q in gen.up.values()) ** 0.5, 5)})
         if update % 10 == 0 or update == start:
             el = time.time() - t0
             print(f"u{update}: fake_loss {np.mean([e['fake_loss'] for e in log[-10:]]):.4f} gap {np.mean([e['gap'] for e in log[-10:] if 'gap' in e]):.4f} "
-                  f"grad_norm {log[-1]['grad_norm']:.3g} up_norm {log[-1]['up_norm']:.4f} "
+                  + (f"reg_loss {np.mean([e['reg_loss'] for e in log[-10:] if 'reg_loss' in e]):.4f} " if reg else "")
+                  + f"grad_norm {log[-1]['grad_norm']:.3g} up_norm {log[-1]['up_norm']:.4f} "
                   f"({el / (update - start + 1):.1f} s/update, {torch.cuda.max_memory_allocated() / 2**30:.1f} GB peak)", flush=True)
         if update % args.save_every == 0 or update == args.updates:
             save_ckpt(update)

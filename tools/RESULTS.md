@@ -383,6 +383,42 @@ by hooks, SageAttention), 6 held-out prompts x seeds 2000–2005:
 - On a LoRA that already renders clean images, half-SFT biases cost quality; no gain in quality was found. Other blends were not
   tried.
 
+**DMD plus a regression term (v0.4)** (`--reg-pairs 256 --reg-weight 0.25`, DMD v1's term without its LPIPS): before training, the
+DMD teacher (CFG 3, layer 22 skipped in the negative pass) renders 256 training prompts at 25 euler / simple steps from fixed noises
+(18.6 minutes at 512 x 512). Each update then also rolls the generator from one pair's noise down to a random step k (no gradient)
+and adds 0.25 x (its step-k prediction - the teacher's latent) to the gradient of that prediction, beside the DMD gradient. Everything
+else as v0.1 (from zero, 512 x 512, 2,000 updates, same seed): 1.2 s per update, 26.1 GB peak, 18 skipped. Regression loss (mean
+squared, latent): 0.36 at update 1, 0.43–0.66 to update 1,000, 0.39 at 2,000. Same 1024 x 1024 test as v0.2:
+
+| LoRA | Poster | Sign | Café woman | Fisherman | Street | Watercolor | Mean variety |
+|---|---|---|---|---|---|---|---|
+| akhaliq 4-step v2.0 | 6 / 6 | 6 / 6 | clean | clean | clean | clean | 13.18 |
+| v0.1, update 1,000 | 6 / 6 | 6 / 6 | clean, one pose | clean | clean | clean | 12.65 |
+| v0.4, update 1,000 | 1 / 6 | 3 / 6 (doubled, chalky letters) | ghosted, double exposures | gritty, a little hazy | clean | smeared | 14.52 |
+| v0.4, update 2,000 | 4 / 6 | 4 / 6 (chalky, doubled on two) | varied poses, ghosting on two | varied, clean | clean | looser, some smears | 14.83 |
+
+- The regression term brings the variety back, past akhaliq's (14.83 against 13.18, highest on the café, the sign and the street).
+  Seed by seed, v0.4's images follow the same composition as akhaliq's (the scarf on fisherman seed 1002, the croissant on café seed
+  1004, the ghost lettering on café seed 1001): the noise-to-image map of the 25-step teacher, which akhaliq's LoRA kept as well.
+- It costs quality: ghosting and double exposures, doubled letters. That is what a mean-squared pull toward a fixed image does where
+  the generator cannot predict it (it averages candidates); DMD v1 used LPIPS on decoded images instead. From update 1,000 to 2,000
+  the ghosting receded and text improved, so the run had not settled.
+
+**v0.4 continued by DMD alone (v0.5):** v0.4's update-2,000 LoRA as the starting generator, 700 updates at 512 x 512 with no
+regression term, the first 100 training only a fresh fake score, lr 5e-5 (v0.1's). 0.8 s per update, 4 skipped. Same test:
+
+| LoRA | Poster | Sign | Café woman | Fisherman | Watercolor | Mean variety |
+|---|---|---|---|---|---|---|
+| v0.4, update 2,000 | 4 / 6 | 4 / 6 | varied, ghosting on two | varied | looser, smears | 14.83 |
+| v0.5, update 400 (300 DMD updates) | 6 / 6 | 6 / 6 | clean, one pose | clean, one pose | clean | 13.56 |
+| v0.5, update 700 (600 DMD updates) | 6 / 6 | 6 / 6 | clean, one pose | clean, one pose | clean | 12.93 |
+
+- 300 DMD updates remove the ghosting and the doubled letters, and with them most of the teacher's compositions: the café, the
+  fisherman and the fox are back to one pose for every seed, as in v0.1. What stays varied is the sign (18.1) and the poster's skyline;
+  the variety measure falls back toward v0.1's as DMD continues.
+- DMD's pull to one image per prompt erases the regression's seed-to-image map within a few hundred updates. The two terms would have
+  to act together through training (a smaller regression weight kept on, or a weight that falls slowly), not one after the other.
+
 ## Two-resolution sampling (prototype)
 
 `--mode progressive`, `mossImage_sft_bf16`, SageAttention, 1024 x 1024 output, er_sde / simple / 25 steps / CFG 2.5, café woman,
