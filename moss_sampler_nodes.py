@@ -45,8 +45,8 @@ class HaDeSMossTurbo:
                 "strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
                                        "tooltip": "1.0 is the only strength measured."}),
                 "steps": ("INT", {"default": TURBO_SETTINGS["steps"], "min": 1, "max": 50,
-                                  "tooltip": "4 for Turbo and Turbo Diverse, 8 for Turbo 8-steps: the counts measured. At 1024 and above Turbo and "
-                                             "Turbo Diverse give 6-10% less colour than SFT at 4 steps and are back near it at 8 (only colour measured "
+                                  "tooltip": "4 for Turbo and Turbo Diverse, 8 for Turbo 8-steps: the counts measured. At 1024 Turbo and "
+                                             "Turbo Diverse give 6-10% less colour than SFT at 4 steps (6-14% at 2048) and are back near it at 8 (only colour measured "
                                              "at 8 for them). Other counts run, their quality is untested (tools/RESULTS.md)."}),
             },
         }
