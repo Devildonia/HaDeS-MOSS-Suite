@@ -297,6 +297,26 @@ share one centred pose, as the LoRA-calibrated biases do.
 - These biases come from a LoRA (Apache 2.0, akhaliq/MOSS-Image-SFT-4-steps) through its outputs, so they derive from it. The 4-step file measured here
   carries no source in its metadata (it says "Dynamic resize with sv_fro: 0.99 from 128").
 
+**Retiring the LoRA teacher** (`--blend`): a chain of fits, each started from the previous one's biases (`--init-biases`), with the
+teacher's step a blend of the LoRA teacher's and the SFT teacher's (blend x LoRA + (1 - blend) x SFT, both from the student's state).
+Same settings as above, 300 iterations each (about 30 minutes; the first, blend 1, is the run above). Tested at 1024 x 1024, 4
+steps, CFG 1, no LoRA, held-out prompts and seeds 2000–2002.
+
+| Blend (LoRA share) | Fitted loss | Layout distance to the LoRA | Sign (3 seeds) | Faces and photos |
+|---|---|---|---|---|
+| 1.00 | 0.00325 | 14.6 | 3 / 3 sharp | clean; one café pose for every seed |
+| 0.75 | 0.00126 | 12.8 | 3 / 3 sharp | clean |
+| 0.50 | 0.00190 | 10.3 | 3 / 3 sharp, both lines | clean; café women vary by seed (seed 2002 a different woman from the LoRA's) |
+| 0.25 | 0.00237 | 9.1 | 3 / 3 right, one "BREAD" rough | coherent; chalky, grainy texture on faces and the sign |
+| 0.00 | 0.00272 | 11.1 | big letters right, small line garbled once and "DAIL," once | coherent; skin over-textured, translucent ghost objects (a cup) |
+
+- Losses are not comparable across rows: each row has its own teacher.
+- Quality holds down to a half-LoRA teacher and degrades below it the same way the SFT-teacher fits did (texture and ghosting,
+  not blur), so starting from good biases does not keep the SFT objective from pulling them back. Fixed biases still need the few-step
+  LoRA's step as part of their teacher.
+- Layout distance to the LoRA falls as the LoRA share falls (to 0.25): the blended biases follow the 25-step SFT layout more; by eye
+  that is where the extra variety at blend 0.5 comes from. Not measured against the 25-step SFT images.
+
 ## Two-resolution sampling (prototype)
 
 `--mode progressive`, `mossImage_sft_bf16`, SageAttention, 1024 x 1024 output, er_sde / simple / 25 steps / CFG 2.5, café woman,
