@@ -437,6 +437,31 @@ skipped. Regression loss 0.6–0.75 from update 1,000 on, against 0.39 for v0.4:
 - By eye v0.6 is the first of our LoRAs on par with akhaliq's on both quality and variety, from a rank-2 LoRA on 18 layers trained
   from zero in about 45 minutes plus the 19 minutes of teacher pairs. Not yet tested beyond these six prompts and six seeds.
 
+**v0.6, wider test** (`moss_eval.py --mode turbo_files`, stock `LoraLoaderModelOnly`, euler / simple / 4 steps / CFG 1, SageAttention;
+`--prompts` now also takes the bias prompts and `--height` a non-square canvas). Counts by eye; ethnicity counts approximate.
+
+- **bf16 file:** the LoRA saved in bf16 (3.4 MB instead of 6.8 MB) renders the same images pixel for pixel (18 images, difference
+  0.00): the stock loader patches bf16 weights either way.
+
+| Test | akhaliq 4-step v2.0 | v0.6 update 1,000 | v0.6 update 2,000 |
+|---|---|---|---|
+| Layout JSON, 1024, 6 seeds: strings right | 5 / 6 ("NORTHRN") | 5 / 6 ("NOR IHERN") | 5 / 6 (second line garbled) |
+| Layout JSON: title on two lines as its `\n` asks | 0 / 6 | 1 / 6 | 3 / 6 |
+| Café woman, 16 seeds: East Asian | ~15 / 16 | ~9–10 / 16 | ~15 / 16 |
+| Blonde Scandinavian / Black man / older Latina, 6 seeds each | 18 / 18 as asked | 18 / 18 | 18 / 18 |
+| 2048 x 2048 sign, 3 seeds: large / small text right | 3 / 3, 2 / 3 | 3 / 3, 2 / 3 | 3 / 3, 2 / 3 |
+| 2048 x 2048 street and fisherman | clean | clean, more skin texture | clean, more skin texture |
+| 1344 x 768 three-line poster, 3 seeds | 2 / 3 (jittered, run-together letters on the others) | 0 / 3 (letters broken) | 3 / 3 |
+| 1344 x 768 sign | 2 / 3 ("FRESH FRESH BREAD") | 3 / 3 | 2 / 3 (a smudged "BREAD") |
+| 768 x 1344 sign / fisherman / fox | 3 / 3, clean | 3 / 3, clean | 3 / 3, clean |
+| Seconds per image at 2048 x 2048 | 7.2 | 7.2 | 7.3 |
+
+- At 2048 x 2048 and on both portrait and landscape canvases v0.6 renders clean images, never trained beyond 512 x 512 squares.
+- Update 1,000 keeps more of the 25-step teacher: on the café prompt about as many East Asian women as SFT at 25 steps (10 / 16 in
+  phase 0), where update 2,000 and akhaliq's LoRA give almost only East Asian women. Update 2,000 holds text better (the landscape
+  poster, the layout line break). The extra 1,000 updates trade variety for text robustness; which checkpoint to recommend depends on
+  which matters, and nothing between them was tested.
+
 ## Two-resolution sampling (prototype)
 
 `--mode progressive`, `mossImage_sft_bf16`, SageAttention, 1024 x 1024 output, er_sde / simple / 25 steps / CFG 2.5, café woman,

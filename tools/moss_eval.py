@@ -233,7 +233,8 @@ TURBO_GROUP_SETS = {
 def jobs_for(args):
     """[(prompt name, prompt, seeds)]"""
     if args.mode == "turbo_files" and args.prompts:
-        return [(n, COMPARE[n], list(range(args.seed0, args.seed0 + args.seeds))) for n in args.prompts]
+        named = {**GROUP_PROMPTS, **BIAS_NEUTRAL, **BIAS_EXPLICIT, **COMPARE}
+        return [(n, named[n], list(range(args.seed0, args.seed0 + args.seeds))) for n in args.prompts]
     if args.mode in ("groups", "lora", "shift", "schedulers", "attention", "progressive", "turbo", "turbo_groups", "turbo_files"):
         return [(n, p, list(range(args.seed0, args.seed0 + args.seeds))) for n, p in GROUP_PROMPTS.items()]
     if args.mode == "slg":
@@ -393,7 +394,9 @@ def main():
     p.add_argument("--turbo-files", nargs="+", metavar="NAME=FILE", help="turbo_files mode")
     p.add_argument("--loader", default="LoraLoaderModelOnly", help="turbo_files mode: LoraLoaderModelOnly or LoraLoaderBypassModelOnly")
     p.add_argument("--ref-dir", help="turbo_files mode: a turbo_groups --out")
-    p.add_argument("--prompts", nargs="+", choices=list(COMPARE), help="turbo_files mode: COMPARE prompts to render")
+    p.add_argument("--prompts", nargs="+", choices=list({**GROUP_PROMPTS, **BIAS_NEUTRAL, **BIAS_EXPLICIT, **COMPARE}),
+                   help="turbo_files mode: prompts to render (COMPARE, GROUP, bias names)")
+    p.add_argument("--height", type=int, help="turbo_files mode: latent height in pixels (width = --size); default square")
     args = p.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
@@ -812,7 +815,7 @@ def run_turbo_files(args, jobs):
             if not os.path.exists(path):
                 info = {}
                 g = turbo_graph(args, prompt, seed, lora, args.loader, TURBO_LORAS[key_of[c]][1])
-                g["latent"]["inputs"].update(width=args.size, height=args.size)
+                g["latent"]["inputs"].update(width=args.size, height=args.height or args.size)
                 run_graph(args.server, g, info).save(path)
                 timings[f"{c}/{name}/{seed}"] = {"seconds": info["seconds"], "sampling_only": {"unet", "pos", "neg", "lora"} <= set(info["cached"])}
                 with open(timings_path, "w", encoding="utf-8") as f:
