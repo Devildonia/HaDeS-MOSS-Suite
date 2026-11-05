@@ -4,6 +4,8 @@ ComfyUI nodes for the **MOSS-Image** model family (OpenMOSS / Comfy Org: 42-laye
 
 Claims about what layer groups do are measured with [`tools/moss_eval.py`](tools/moss_eval.py), not assumed.
 
+**Turbo (0.2.0):** two few-step LoRAs we trained for MOSS-Image SFT, [HaDeS MOSS Turbo and Turbo Diverse](https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo) (4 steps at CFG 1, 3.4 MB each), and a `turbo` input on `MOSS KSampler` that applies them with their settings. How they were trained and measured: [`tools/RESULTS.md`](tools/RESULTS.md), [`tools/moss_dmd_train.py`](tools/moss_dmd_train.py).
+
 ## Installation
 
 ```bash
@@ -138,6 +140,7 @@ In [`examples/`](examples) (drag a file into ComfyUI). They use the official Com
 
 - **Merge, Save and Telemetry:** SFT with layers 24–35 from Base through the Block Merger, MOSS Latent and MOSS KSampler, telemetry report. Model Saver and a SLERP Multi-Model Merger come muted, ready to switch on.
 - **Layout Poster:** an OpenMOSS layout draft through the Layout Compiler, whose prompt and latent feed the sampler, with telemetry.
+- **Turbo:** MOSS Turbo LoRA into the MOSS KSampler's `turbo` input, 4 steps at CFG 1 on SFT; ComfyUI offers to download the LoRA from Hugging Face.
 - **LoRA Toolkit:** a LoRA through LoRA Block Weight into the sampler; LoRA Merger, LoRA Resize and LoRA Extractor (with a finetune loader) come muted, since they write files. Pick your own LoRA in `lora_name`.
 
 Every example was run end to end in ComfyUI 0.43.0 (muted nodes left out). `tools/make_examples.py` regenerates them from the node definitions of a running ComfyUI.
@@ -159,3 +162,7 @@ python custom_nodes/HaDeS-MOSS-Suite/tests/test_moss_suite.py
 - `tools/moss_eval.py --mode shift`: square sizes x flow shifts (composition scale, native detail).
 - `tools/moss_eval.py --mode slg`: skip-layer guidance blocks on text and portrait prompts, SFT and Base.
 - `tools/moss_eval.py --mode schedulers`: sampler x scheduler x steps against a 60-step reference.
+- `tools/moss_eval.py --mode attention | progressive`: attention backends and int8 speed; two-resolution sampling.
+- `tools/moss_eval.py --mode turbo | turbo_groups | turbo_files`: few-step LoRAs against each other, which layer groups carry them, LoRA files at any prompt set, size or aspect (`--height`).
+- `tools/moss_dmd_train.py`: trains a few-step LoRA by DMD on one GPU (shared base, hooked LoRAs, regression term, gradient checkpointing, atomic checkpoints and resume); the turbo LoRAs come from it.
+- `tools/moss_activations.py`, `tools/moss_bias_turbo.py`, `tools/moss_bias_fit.py`: per-step biases in place of (or on top of) a few-step LoRA.

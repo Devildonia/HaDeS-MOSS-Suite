@@ -23,7 +23,12 @@ TE, VAE = "qwen3.5_9b_w4a8_gptq.safetensors", "flux2-vae.safetensors"
 NEGATIVE = "nsfw, worst quality, bad anatomy, watermark, jpeg artifact"
 # Download links the editor offers for missing models (fetched only when the user asks), as in the official templates
 HF = "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main"
-MODEL_FILES = {SFT: "diffusion_models", BASE: "diffusion_models", TE: "text_encoders", VAE: "vae"}
+TURBO, TURBO_DIVERSE = "HaDeS-MOSS-Turbo-v0.6.safetensors", "HaDeS-MOSS-Turbo-Diverse-v0.6.safetensors"
+HF_TURBO = "https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo/resolve/main"
+# file -> (models folder, download URL)
+MODEL_FILES = {SFT: ("diffusion_models", f"{HF}/diffusion_models/{SFT}"), BASE: ("diffusion_models", f"{HF}/diffusion_models/{BASE}"),
+               TE: ("text_encoders", f"{HF}/text_encoders/{TE}"), VAE: ("vae", f"{HF}/vae/{VAE}"),
+               TURBO: ("loras", f"{HF_TURBO}/{TURBO}"), TURBO_DIVERSE: ("loras", f"{HF_TURBO}/{TURBO_DIVERSE}")}
 LORA = "moss_lora.safetensors"
 
 
@@ -70,6 +75,19 @@ EXAMPLES = {
         "ks": ksampler(("unet", 0), ("layout", 1)),
         "save": ("SaveImage", {"images": ("ks", 1), "filename_prefix": "HaDeS_MOSS_layout"}),
         "tel": ("HaDeSMossSuiteTelemetry", {"report_title": "HaDeS MOSS Suite Telemetry", "info_1": ("layout", 4), "info_2": ("ks", 2)}),
+        "report": ("PreviewAny", {"source": ("tel", 0)}),
+    },
+    "HaDeS MOSS Suite - Turbo": {
+        "unet": ("UNETLoader", {"unet_name": SFT, "weight_dtype": "default"}),
+        **loaders(),
+        # the turbo LoRA and the settings it was trained at (4 steps, CFG 1, euler / simple), applied by the KSampler
+        "turbo": ("HaDeSMossTurbo", {"lora_name": TURBO, "strength": 1.0}),
+        "pos": ("CLIPTextEncode", {"clip": ("clip", 0), "text": "Photograph of a hand-painted wooden sign outside a bakery that reads \"FRESH BREAD DAILY\" "
+                                                                 "in large white letters and \"open 7am - 3pm\" in smaller letters below, morning light."}),
+        "latent": ("HaDeSMossLatent", {"aspect_ratio": "1:1", "megapixels": 1.0, "custom_width": 1024, "custom_height": 1024, "batch_size": 1}),
+        "ks": (lambda k: (k[0], {**k[1], "turbo": ("turbo", 0)}))(ksampler(("unet", 0), ("latent", 0))),
+        "save": ("SaveImage", {"images": ("ks", 1), "filename_prefix": "HaDeS_MOSS_turbo"}),
+        "tel": ("HaDeSMossSuiteTelemetry", {"report_title": "HaDeS MOSS Suite Telemetry", "info_1": ("latent", 3), "info_2": ("ks", 2)}),
         "report": ("PreviewAny", {"source": ("tel", 0)}),
     },
     "HaDeS MOSS Suite - LoRA Toolkit": {
@@ -174,7 +192,7 @@ def to_editor(graph, object_info):
         # HaDeS MOSS nodes add a banner and draw one 25 px row per widget; the layout compiler opens at 520 px
         rows[col] = y + (560 if cls == "HaDeSMossLayoutCompiler" else 190 + 30 * (len(widgets) + len(node_inputs)))
         properties = {"Node name for S&R": cls}
-        models = [{"name": w, "url": f"{HF}/{MODEL_FILES[w]}/{w}", "directory": MODEL_FILES[w]} for w in widgets if w in MODEL_FILES]
+        models = [{"name": w, "url": MODEL_FILES[w][1], "directory": MODEL_FILES[w][0]} for w in widgets if w in MODEL_FILES]
         if models:
             properties["models"] = models
         nodes.append({"id": ids[name], "type": cls, "pos": [col * 500, y], "size": [380, 100], "flags": {}, "order": 0, "mode": mode[0] if mode else 0,

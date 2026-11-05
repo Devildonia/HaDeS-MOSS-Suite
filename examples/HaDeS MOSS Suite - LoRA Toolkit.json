@@ -381,6 +381,12 @@
      "type": "VAE",
      "link": 8,
      "shape": 7
+    },
+    {
+     "name": "turbo",
+     "type": "MOSS_TURBO",
+     "link": null,
+     "shape": 7
     }
    ],
    "widgets_values": [

@@ -1,6 +1,6 @@
 from . import moss_lora_nodes, moss_merger_nodes, moss_pipeline_nodes, moss_sampler_nodes, moss_saver_nodes, moss_telemetry_nodes
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 _MODULES = (moss_merger_nodes, moss_saver_nodes, moss_lora_nodes, moss_pipeline_nodes, moss_sampler_nodes, moss_telemetry_nodes)
 NODE_CLASS_MAPPINGS = {k: v for m in _MODULES for k, v in m.NODE_CLASS_MAPPINGS.items()}

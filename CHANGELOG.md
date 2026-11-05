@@ -7,11 +7,16 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-05
+
+Turbo: our own few-step LoRAs for MOSS-Image SFT (4 steps, CFG 1, 3.4 MB each, on Hugging Face) and a turbo input on the MOSS KSampler.
+
 ### Documentation
 - **README / `tools/RESULTS.md`:** upscaling a MOSS latent needs the core `Upscale Latent By`; `Upscale Latent` assumes a x8 VAE and doubles the image size on MOSS.
 
 ### Added
 - **MOSS Turbo LoRA** and a `turbo` input on **MOSS KSampler**: the KSampler applies the few-step LoRA (as the stock `LoraLoaderModelOnly`) and samples at 4 steps, CFG 1, euler / simple with SLG off, the settings it was trained and measured at; its info and status line show it, and Telemetry notes a strength other than 1.0 or denoise below 1.0. Made for HaDeS MOSS Turbo and Turbo Diverse v0.6 ([Hugging Face](https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo), 3.4 MB each), trained with `tools/moss_dmd_train.py`.
+- **Example workflow "Turbo":** MOSS Turbo LoRA into the MOSS KSampler on SFT, with the LoRA's Hugging Face download link; run end to end in ComfyUI like the other examples.
 - **`tools/moss_eval.py`:** an `attention` mode that times images under the attention backend the server runs and compares runs pixel by pixel. `tools/RESULTS.md` records that every measurement used SageAttention, and compares it with PyTorch attention and int8 files in speed and images.
 - **`tools/moss_eval.py`:** `progressive` mode (two-resolution sampling through stock `KSamplerAdvanced`, with re-noise and backtracking), `turbo` mode (few-step LoRAs with the usual and the bypass loader) and `turbo_groups` mode (which layer groups of a few-step LoRA carry its effect). Results in `tools/RESULTS.md`: two-resolution sampling saves about 15% cleanly at 1024 x 1024; the DMD2 8-step and the 4-step LoRAs render 5.6x / 9.8x faster, lose about half their change to bf16 rounding in the early layers with the usual loader, and do their work in layers 24–41.
 - **`tools/moss_eval.py`:** `turbo_files` mode (renders LoRA files derived from a few-step LoRA, any prompt set or size, against the original). Results in `tools/RESULTS.md`: cut to layers 24–41 at rank 2 (3.6 MB), both few-step LoRAs render their originals' images, text and layout prompts (54 of 54 spelled right) and 2048 x 2048 included; their directions are not readable from the SFT weights' own spectrum.

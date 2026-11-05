@@ -396,6 +396,12 @@
      "type": "VAE",
      "link": 9,
      "shape": 7
+    },
+    {
+     "name": "turbo",
+     "type": "MOSS_TURBO",
+     "link": null,
+     "shape": 7
     }
    ],
    "widgets_values": [
@@ -474,7 +480,7 @@
    "type": "HaDeSMossModelSaver",
    "pos": [
     1000,
-    610
+    640
    ],
    "size": [
     380,
