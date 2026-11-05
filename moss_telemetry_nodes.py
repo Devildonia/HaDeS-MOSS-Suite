@@ -28,6 +28,10 @@ def diagnose(metas):
             out.append(("note", f"KSampler at {w}x{h}: outside the measured 768x768 to 2048x2048 range."))
         if abs(m["flow_shift"] - 5.0) > 1e-3:
             out.append(("note", f"KSampler shift {m['flow_shift']:g}: 5.0 measured clean from 768 to 2048 px; other shifts changed images less than a new seed."))
+        if m.get("turbo") and abs(m.get("turbo_strength", 1.0) - 1.0) > 1e-6:
+            out.append(("note", f"Turbo LoRA at strength {m['turbo_strength']:g}: the turbo LoRAs were measured at 1.0 only."))
+        if m.get("turbo") and m.get("denoise", 1.0) < 1.0:
+            out.append(("note", f"Turbo LoRA at denoise {m['denoise']:.2f}: measured at denoise 1.0 only."))
         if m.get("slg", "off") != "off":
             out.append(("note", f"KSampler SLG '{m['slg']}': measured, it did not change text accuracy on SFT or Base."))
 

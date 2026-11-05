@@ -1,6 +1,7 @@
 import copy
 
 import comfy.samplers
+import folder_paths
 import nodes
 from comfy_extras.nodes_slg import SkipLayerGuidanceDiTSimple
 
@@ -25,6 +26,35 @@ def with_shift(model, shift):
     new_ms.set_parameters(shift=shift, multiplier=float(ms.multiplier))
     m.add_object_patch("model_sampling", new_ms)
     return m
+
+
+# the settings the turbo LoRAs were trained and measured at (tools/RESULTS.md, "Our own few-step LoRA")
+TURBO_SETTINGS = {"steps": 4, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple"}
+
+
+class HaDeSMossTurbo:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "lora_name": (folder_paths.get_filename_list("loras"), {
+                    "tooltip": "A few-step MOSS-Image LoRA, e.g. HaDeS MOSS Turbo or Turbo Diverse (Hugging Face). Both were measured on SFT at "
+                               "4 steps, CFG 1, euler / simple, strength 1.0: Turbo held text best (layout JSON 6 / 6, 16:9 poster 3 / 3), "
+                               "Turbo Diverse kept SFT's spread of faces on an open prompt (tools/RESULTS.md)."}),
+                "strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
+                                       "tooltip": "1.0 is the only strength measured."}),
+            },
+        }
+
+    RETURN_TYPES = ("MOSS_TURBO",)
+    RETURN_NAMES = ("turbo",)
+    FUNCTION = "pick"
+    CATEGORY = "HaDeS/MOSS Samplers"
+    DESCRIPTION = ("Few-step LoRA for the MOSS KSampler's turbo input: the KSampler applies it to its model and samples at the settings it "
+                   "was trained for (4 steps, CFG 1, euler / simple), whatever its own widgets say.")
+
+    def pick(self, lora_name, strength):
+        return ({"lora_name": lora_name, "strength": float(strength), **TURBO_SETTINGS},)
 
 
 class HaDeSMossKSampler:
@@ -56,6 +86,9 @@ class HaDeSMossKSampler:
             },
             "optional": {
                 "vae": ("VAE", {"tooltip": "Optional: also decode the result. Needed when the image output is connected."}),
+                "turbo": ("MOSS_TURBO", {"tooltip": "Optional: a MOSS Turbo LoRA. When connected, the LoRA is applied to the model and the KSampler "
+                                                    "samples at 4 steps, CFG 1, euler / simple with SLG off, ignoring those widgets; seed, denoise and "
+                                                    "flow_shift still apply. Measured at denoise 1.0 and the model's shift 5.0 (tools/RESULTS.md)."}),
             },
             "hidden": {"prompt": "PROMPT", "unique_id": "UNIQUE_ID"},
         }
@@ -67,10 +100,13 @@ class HaDeSMossKSampler:
     DESCRIPTION = "KSampler with the official MOSS-Image settings as defaults, optional shift and SLG, optional decode, and the settings used in info."
 
     def sample(self, model, positive, negative, latent_image, seed, steps, cfg, sampler_name, scheduler, denoise, flow_shift, slg, vae=None,
-               prompt=None, unique_id=None):
+               turbo=None, prompt=None, unique_id=None):
         # the image output connected without a VAE would reach the next node as None; say so here instead
         if vae is None and any(v == [str(unique_id), 1] for node in (prompt or {}).values() for v in node.get("inputs", {}).values()):
             raise ValueError("HaDeS MOSS KSampler: the image output is connected but no VAE is; connect the VAE input to decode.")
+        if turbo is not None:  # the stock LoraLoaderModelOnly path, then the settings the LoRA was trained at
+            model = nodes.LoraLoaderModelOnly().load_lora_model_only(model, turbo["lora_name"], turbo["strength"])[0]
+            steps, cfg, sampler_name, scheduler, slg = turbo["steps"], turbo["cfg"], turbo["sampler_name"], turbo["scheduler"], "off"
         m = with_shift(model, flow_shift)
         if SLG_MODES[slg] is not None:
             layers, start, end = SLG_MODES[slg]
@@ -83,8 +119,12 @@ class HaDeSMossKSampler:
         h, w = out["samples"].shape[-2] * 16, out["samples"].shape[-1] * 16
         text = (f"HaDeS MOSS KSampler | {w}x{h} | {sampler_name} / {scheduler} | {steps} steps | CFG {cfg:.2f} | shift {shift:g} | "
                 f"denoise {denoise:.2f} | SLG {slg} | seed {seed}")
+        extra = {}
+        if turbo is not None:
+            text += f" | turbo {turbo['lora_name']} x {turbo['strength']:g}"
+            extra = {"turbo": turbo["lora_name"], "turbo_strength": turbo["strength"]}
         return (out, image, format_info(text, "ksampler", width=w, height=h, steps=int(steps), cfg=float(cfg), flow_shift=shift,
-                                        sampler=sampler_name, scheduler=scheduler, seed=int(seed), denoise=float(denoise), slg=slg))
+                                        sampler=sampler_name, scheduler=scheduler, seed=int(seed), denoise=float(denoise), slg=slg, **extra))
 
 
 class HaDeSMossSamplerMetadata:
@@ -106,5 +146,5 @@ class HaDeSMossSamplerMetadata:
         return {"ui": {"settings": [list(values)]}, "result": values}
 
 
-NODE_CLASS_MAPPINGS = {"HaDeSMossKSampler": HaDeSMossKSampler, "HaDeSMossSamplerMetadata": HaDeSMossSamplerMetadata}
-NODE_DISPLAY_NAME_MAPPINGS = {"HaDeSMossKSampler": "MOSS KSampler", "HaDeSMossSamplerMetadata": "MOSS Sampler Metadata"}
+NODE_CLASS_MAPPINGS = {"HaDeSMossKSampler": HaDeSMossKSampler, "HaDeSMossTurbo": HaDeSMossTurbo, "HaDeSMossSamplerMetadata": HaDeSMossSamplerMetadata}
+NODE_DISPLAY_NAME_MAPPINGS = {"HaDeSMossKSampler": "MOSS KSampler", "HaDeSMossTurbo": "MOSS Turbo LoRA", "HaDeSMossSamplerMetadata": "MOSS Sampler Metadata"}

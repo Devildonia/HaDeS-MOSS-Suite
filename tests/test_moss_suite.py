@@ -313,6 +313,30 @@ class TestSaverAndSampler(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "no VAE"):
             sampler.HaDeSMossKSampler().sample(None, None, None, None, 0, 1, 1.0, "euler", "simple", 1.0, 0.0, "off", prompt=prompt, unique_id="9")
 
+    def test_turbo_applies_lora_and_its_settings(self):
+        g = torch.Generator().manual_seed(9)
+        name = "layers.3.proj.o"
+        lora = {f"diffusion_model.{name}.lora_up.weight": torch.randn(DIM, 2, generator=g), f"diffusion_model.{name}.lora_down.weight": torch.randn(2, DIM, generator=g),
+                f"diffusion_model.{name}.alpha": torch.tensor(2.0)}
+        safetensors.torch.save_file(lora, os.path.join(TMP, "turbo_test.safetensors"))
+        turbo = sampler.HaDeSMossTurbo().pick("turbo_test.safetensors", 1.0)[0]
+        seen = {}
+
+        def fake_ksampler(model, seed, steps, cfg, sampler_name, scheduler, positive, negative, latent, denoise=1.0):
+            seen.update(steps=steps, cfg=cfg, sampler=sampler_name, scheduler=scheduler, patched=sorted(model.patches))
+            return ({"samples": torch.zeros(1, 128, 4, 4)},)
+
+        original, sampler.nodes.common_ksampler = sampler.nodes.common_ksampler, fake_ksampler
+        try:
+            info = sampler.HaDeSMossKSampler().sample(load(tiny_state_dict(10)), None, None, None, 7, 25, 2.5, "er_sde", "beta", 1.0, 0.0,
+                                                      "block 22, all steps", turbo=turbo)[2]
+        finally:
+            sampler.nodes.common_ksampler = original
+        self.assertEqual({k: seen[k] for k in ("steps", "cfg", "sampler", "scheduler")}, {"steps": 4, "cfg": 1.0, "sampler": "euler", "scheduler": "simple"})
+        self.assertEqual(seen["patched"], [f"diffusion_model.{name}.weight"])
+        meta = common.parse_info_meta(info)
+        self.assertEqual((meta["turbo"], meta["slg"], meta["steps"]), ("turbo_test.safetensors", "off", 4))
+
 
 class TestTelemetry(unittest.TestCase):
     def test_findings(self):

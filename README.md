@@ -98,9 +98,16 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 ### `MOSS KSampler` (`HaDeS/MOSS Samplers`)
 - **Class:** `HaDeSMossKSampler`
 - **Purpose:** KSampler with the official ComfyUI MOSS-Image template settings as defaults (25 steps, CFG 2.5, `er_sde` / `simple`, the model's shift 5.0), an optional flow shift, optional skip-layer guidance and optional decode. With the same settings it renders the same image as the stock graph (`KSampler`, `ModelSamplingAuraFlow`, `SkipLayerGuidanceDiTSimple`, `VAEDecode`).
-- **Inputs:** `model`, `positive`, `negative`, `latent_image`, `seed`, `steps`, `cfg`, `sampler_name`, `scheduler`, `denoise`, `flow_shift` (`0` keeps the model's 5.0), `slg` (`off`, `block 22, first half (Base template)`, `block 22, all steps`); optional `vae`.
+- **Inputs:** `model`, `positive`, `negative`, `latent_image`, `seed`, `steps`, `cfg`, `sampler_name`, `scheduler`, `denoise`, `flow_shift` (`0` keeps the model's 5.0), `slg` (`off`, `block 22, first half (Base template)`, `block 22, all steps`); optional `vae`, optional `turbo` (from `MOSS Turbo LoRA`: applies the LoRA and samples at 4 steps, CFG 1, euler / simple, SLG off, whatever those widgets say).
 - **Outputs:** `latent`, `image` (when a VAE is connected), `info` (the settings actually used).
 - **Measured** ([`tools/RESULTS.md`](tools/RESULTS.md)): shift 5.0 is clean from 768 to 2048 px; SLG on block 22 did not change text accuracy on SFT or Base (blocks 24 / 26 made the only errors, on Base), so it is off by default; with euler, 25 steps render nearly the 60-step image with any scheduler and euler / beta does so at 15.
+
+### `MOSS Turbo LoRA` (`HaDeS/MOSS Samplers`)
+- **Class:** `HaDeSMossTurbo`
+- **Purpose:** picks a few-step LoRA for the `turbo` input of `MOSS KSampler`, which loads it the way the stock `LoraLoaderModelOnly` does and samples at the settings it was trained for: 4 steps, CFG 1, euler / simple (seed, denoise and flow shift still come from the KSampler). Checked in ComfyUI: it renders the stock `LoraLoaderModelOnly` + `KSampler` image pixel for pixel (both LoRAs, 8 images, with the KSampler's own widgets left at 25 steps, CFG 2.5, er_sde / beta and SLG on).
+- **Inputs:** `lora_name` (from `models/loras`), `strength` (default `1.0`, the only strength measured).
+- **The LoRAs:** HaDeS MOSS Turbo and Turbo Diverse v0.6, 3.4 MB each, on [Hugging Face](https://huggingface.co/Devildonia/HaDeS-MOSS-Turbo); put them in `models/loras`. Trained in this repository (`tools/moss_dmd_train.py`) from MOSS-Image SFT, which they are for.
+- **Measured** ([`tools/RESULTS.md`](tools/RESULTS.md), 1024 x 1024 against akhaliq's 4-step v2.0 LoRA at the same settings): Turbo spelled every test string right on signs and posters, 6 / 6 on layout JSON and 3 / 3 on a 16:9 poster; Turbo Diverse keeps SFT's spread of faces on an open prompt (about 10 East Asian women in 16 seeds, against about 15 for Turbo and akhaliq's LoRA). Not measured: other base models, other strengths or step counts, denoise below 1.0.
 
 ### `MOSS Sampler Metadata` (`HaDeS/MOSS Samplers`)
 - **Class:** `HaDeSMossSamplerMetadata`
@@ -111,7 +118,7 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 - **Purpose:** reads the `info` outputs of up to 8 HaDeS MOSS nodes (their `HADES_META` trailer) and checks the pipeline against what was measured:
   - **error:** layout, latent and KSampler on different canvas sizes (a layout prompt places its boxes on its own canvas);
   - **warning:** quantized models in a merge, TIES / DARE with a quantized model, LoRAs extracted / resized / merged below 90% energy;
-  - **note:** KSampler size outside 768²–2048², shift other than 5.0, SLG on, fp16-fixed residual scale normalized, multi-line layout text with its box proportions.
+  - **note:** KSampler size outside 768²–2048², shift other than 5.0, SLG on, turbo LoRA at a strength other than 1.0 or denoise below 1.0, fp16-fixed residual scale normalized, multi-line layout text with its box proportions.
 - **Outputs:** `report` (Markdown), `json`, `summary` (one line).
 
 ## Interface
@@ -121,7 +128,7 @@ The nodes draw their own moss-green rows on the canvas (the HaDeS Anima Suite wi
 - every widget becomes a styled row by type (combo, slider, number, toggle, text); the layout draft keeps ComfyUI's text editor;
 - tooltips are the node's own, with the measurements behind each value;
 - **Block Merger:** a bar chart of the 42 layers and 3 parts colored by depth group, each group labeled with the share of the SFT → Base change it carries, and buttons **M1**, **50/50**, **24–35 M2** (the groups that carry most of that change) and **M2**;
-- **LoRA Block Weight:** a bar per layer group; **KSampler** and **Latent:** a status line with the settings or the final size.
+- **LoRA Block Weight:** a bar per layer group; **KSampler** and **Latent:** a status line with the settings (TURBO when the turbo input is connected) or the final size.
 
 *Settings → HaDeS MOSS Suite → Use standard ComfyUI widgets* (or *HaDeS MOSS Suite* in a node's right-click menu) switches to the plain widgets. It does not affect HaDeS Anima Suite nodes when both suites are installed.
 

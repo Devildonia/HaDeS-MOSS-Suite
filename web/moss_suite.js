@@ -168,8 +168,13 @@ const INSTALLERS = {
     HaDeSMossKSampler(node) {
         banner(node, {
             title: "MOSS KSAMPLER",
-            getStatusText: () => `${widget(node, "sampler_name")?.value} / ${widget(node, "scheduler")?.value} · ${num(node, "steps")} steps · CFG ${num(node, "cfg").toFixed(1)}`
-                + ` · shift ${num(node, "flow_shift") > 0 ? num(node, "flow_shift") : "model"}${widget(node, "slg")?.value !== "off" ? " · SLG" : ""}`,
+            getStatusText: () => {
+                const shift = ` · shift ${num(node, "flow_shift") > 0 ? num(node, "flow_shift") : "model"}`;
+                // a connected turbo input overrides steps / CFG / sampler / scheduler / SLG in the backend
+                if (node.inputs?.find((i) => i.name === "turbo")?.link != null) return `TURBO · euler / simple · 4 steps · CFG 1.0${shift}`;
+                return `${widget(node, "sampler_name")?.value} / ${widget(node, "scheduler")?.value} · ${num(node, "steps")} steps · CFG ${num(node, "cfg").toFixed(1)}`
+                    + `${shift}${widget(node, "slg")?.value !== "off" ? " · SLG" : ""}`;
+            },
         });
         styleWidgets(node, { sliders: { cfg: [1, 8], denoise: [0, 1], flow_shift: [0, 12] } });
     },
@@ -198,6 +203,7 @@ const GENERIC = {
     HaDeSMossLoraResize: { title: "LORA RESIZE", sliders: { dynamic_energy: [0, 1] } },
     HaDeSMossLayoutCompiler: { title: "LAYOUT COMPILER" },
     HaDeSMossSamplerMetadata: { title: "SAMPLER METADATA" },
+    HaDeSMossTurbo: { title: "TURBO LORA · 4 STEPS · CFG 1", sliders: { strength: [0, 2] } },
     HaDeSMossSuiteTelemetry: { title: "SUITE TELEMETRY" },
 };
 for (const [cls, { title, sliders = {} }] of Object.entries(GENERIC)) {
