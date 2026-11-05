@@ -493,6 +493,88 @@ The published files (Hugging Face `DeVilDoNia/HaDeS-MOSS-Turbo`): Turbo = update
 - At 2048 x 2048 the large lettering is right on every file and the small line is where they slip; Turbo slips more on these three
   seeds. The 2048 text robustness of the update-1,600 file is below what its 1024 / 16:9 poster results suggest.
 
+**Two time-scale updates (v0.7a)** (`--fake-updates 5`, DMD2's rule: five fake-score updates per generator update, the four extra
+ones on fresh generator samples from other prompts): v0.6 otherwise (regression 0.05, the same 256 teacher pairs, seed 0), from
+zero, 2,000 updates, then resumed from its checkpoint to 3,000. 3.4 s per update (v0.6: 1.3 s), 26.2 GB peak, 31 skipped. With
+`--fake-updates 1` the first update matches v0.6's exactly (fake loss 0.9297, regression 0.3599). Same tests and seeds as the v0.6
+checkpoints above, same `moss_eval` settings (4 steps); the two runs of update 2,000 (one per batch) gave the 16:9 poster 2 / 3 and
+1 / 3, so a one-image difference on three seeds is noise:
+
+| v0.7a update | Café, 16 seeds: East Asian | 1344 x 768 poster | Layout JSON: strings right | Layout JSON: two-line title | 2048 sign: small line |
+|---|---|---|---|---|---|
+| 1,000 | ~9–11 / 16 | 0 / 3 | 6 / 6 | 0 / 6 | 1 / 3 |
+| 1,200 | — | 0 / 3 | 6 / 6 | 0 / 6 | 1 / 3 |
+| 1,400 | — | 1–2 / 3 | 6 / 6 | 0 / 6 | 0 / 3 |
+| 1,600 | — | 1 / 3 | 6 / 6 | 0 / 6 | 1 / 3 |
+| 1,800 | — | 1 / 3 | 6 / 6 | 0 / 6 | 1 / 3 |
+| 2,000 | ~10–11 / 16 | 1–2 / 3 | 5 / 6 | 1 / 6 | 2 / 3 |
+| 2,200 | — | 2 / 3 | 5 / 6 | 2 / 6 | 1 / 3 |
+| 2,400 | ~13 / 16 | 3 / 3 | 5 / 6 | 2 / 6 | 1–2 / 3 |
+| 2,600 | — | 3 / 3 | 5 / 6 | 1 / 6 | 2 / 3 |
+| 2,800 | ~13 / 16 | 3 / 3 | 5 / 6 | 2 / 6 | 1 / 3 |
+| 3,000 | ~13 / 16 | 2 / 3 | 5–6 / 6 | 3 / 6 | 1 / 3 |
+| v0.6 Turbo (1,600) / Diverse (1,000) | ~14–15 / ~7–9 | 3 / 3, 0 / 3 | 6 / 6, 6 / 6 | 4 / 6, 0 / 6 | 1 / 3, 2 / 3 |
+
+(— = not counted. The v0.6 café counts are this batch's, on the same 16 seeds; Diverse came out a little lower than the ~9–10 above.)
+
+- TTUR moves the trade-off, it does not remove it: the seed-to-image map stays the same from update 1,000 to 3,000 (each seed keeps
+  its composition) and the café mix holds to update 2,000 where v0.6 lost it by 1,400, then drifts to ~13 / 16 from 2,400 on while
+  the text settles (16:9 poster 3 / 3 from 2,400 to 2,800, two-line title up to 3 / 6). No checkpoint beats v0.6 Turbo on every row.
+- The pixel variety metric (mean pairwise distance at 64 x 64) stays at 20.5–21.0 for every checkpoint while the café faces change:
+  it measures composition, which the regression term holds, not ethnicity. Counted by eye instead.
+- From update 2,200 the layout's seed 1004 draws two stray bars beside its title (`| NORTHERN |`).
+
+**At 8 steps (v0.7a update 3,000 in bf16, 3.4 MB).** Hand tests at 8 steps favoured it over the other few-step LoRAs, so a blind
+comparison: 20 prompts in natural language (portrait, full-body pose, two people, hands, animals, neon and chalkboard text,
+watercolor, anime, food, interior, product, market, band, astronaut, aerial landscape, knight), one seed each (100 + index), at
+512 and 1024, the first five also at 2048. Stock `LoraLoaderModelOnly` + `KSampler`, 8 steps, CFG 1, euler / simple, model shift 5,
+strength 1.0, SFT bf16, `qwen3.5_9b_int8_convrot`, flux2-vae. Scripts: `steps8_compare.py`, `steps8_color.py` (session tools, not in
+the repository); images and keys kept outside the repository.
+
+Three LoRAs per row in a shuffled order, the best one picked or a tie, two judges separately (Claude and the maintainer), against the
+two others cut the same way (rank 2, layers 24–41, 3.6 MB; akhaliq's 4-step v2.0 and lodestones' 8-step DMD2, full files rank 128):
+
+| Judge | v0.7a | akhaliq cut | lodestones cut | Tie |
+|---|---|---|---|---|
+| Claude (512 / 1024 / 2048) | 17 (7 / 8 / 2) | 12 (2 / 9 / 1) | 6 (2 / 2 / 2) | 10 |
+| Maintainer | 19 | 11 | 6 | 9 |
+
+- Found afterwards: akhaliq's LoRA was warm-started from lodestones' (its card), so at 512 and 1024 those two draw nearly the same
+  image and ours is the odd one out (by pixel distance, 17 / 20 prompts at 512, 16 / 20 at 1024, 2 / 5 at 2048). A judge who knew
+  could pick ours out; neither judge had noticed it while judging, but a three-way sheet is not blind once this is known.
+
+Then the full files at 8 steps, judged in pairs (ours against one of them, left / right at random, 50 pairs, the maintainer; with two
+images there is no odd one out). In a quick test before, the maintainer picked ours out of the three-way full sheets 1 time in 4
+(chance: 1 in 3).
+
+| Against (full file, 8 steps) | 1024: ours / theirs / tie | 2048: ours / theirs / tie | Total |
+|---|---|---|---|
+| akhaliq 4-step v2.0 | 14 / 4 / 2 | 4 / 1 / 0 | **18 / 5 / 2** |
+| lodestones 8-step DMD2 | 10 / 7 / 3 | 0 / 5 / 0 | 10 / 12 / 3 |
+
+Colour against SFT itself at its template settings (25 steps, CFG 2.5, er_sde / simple, same prompts and seeds): mean Lab chroma
+(and Hasler–Süsstrunk colourfulness, which agrees within 0.09) as a ratio to SFT per prompt, then averaged; in brackets the prompts
+under 85% of SFT's chroma.
+
+| Render | 1024 (20 prompts) | 2048 (5 prompts) |
+|---|---|---|
+| v0.6 Turbo, 4 / 8 steps | 0.94 (7) / 1.09 (4) | 0.94 (2) / 1.03 (0) |
+| v0.6 Turbo Diverse, 4 / 8 steps | 0.90 (10) / 1.02 (8) | 0.86 (3) / 0.91 (0) |
+| v0.7a update 3,000, 4 / 8 steps | 0.87 (8) / 1.01 (7) | 0.85 (3) / 0.90 (2) |
+| akhaliq 4-step v2.0, 8 steps, cut / full | 1.28 (2) / 1.27 (2) | 1.06 (1) / 1.11 (0) |
+| lodestones 8-step DMD2, 8 steps, cut / full | 1.12 (4) / 1.11 (4) | 0.99 (2) / 0.99 (2) |
+
+- At 4 steps our LoRAs give 6–15% less colour than SFT already at 1024, not only above it; at 8 steps they come back to SFT's level
+  at 1024. Trained at 512 and 4 steps with a regression term toward SFT's 25-step images, at 8 steps they follow SFT's colour.
+  akhaliq's and lodestones' LoRAs are more saturated than SFT itself (+11 to +28% at 1024), so beside them ours look paler.
+- At 2048 and 8 steps v0.7a stays at 0.90 of SFT's colour against lodestones' 0.99, and lost all five pairs there.
+- Cut against full: the same colour (within 0.05) and the same compositions (mean pixel distance 9–12 of 255 between a cut and its
+  full file, 25–35 between different LoRAs); finer detail differs.
+- What holds: at 8 steps v0.7a update 3,000 beats akhaliq's 4-step LoRA (full file, 18 to 5) and is on par with lodestones' native
+  8-step LoRA up to 1024 (10 to 7), from a 3.4 MB file against 1.2 GB; at 2048 lodestones' wins. One seed per prompt, by eye.
+- Not measured: 8 steps on the separating text tests above, other seeds, sizes between 1024 and 2048 (the hand tests were 1024 x
+  1536), Turbo and Turbo Diverse at 8 steps beyond colour.
+
 ## Two-resolution sampling (prototype)
 
 `--mode progressive`, `mossImage_sft_bf16`, SageAttention, 1024 x 1024 output, er_sde / simple / 25 steps / CFG 2.5, café woman,

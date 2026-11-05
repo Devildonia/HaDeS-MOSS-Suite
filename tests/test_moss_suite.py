@@ -356,6 +356,7 @@ class TestTelemetry(unittest.TestCase):
                  "strength": (dict(denoise=1.0, turbo="t.safetensors", turbo_strength=0.5), 1),
                  "denoise": (dict(denoise=0.6, turbo="t.safetensors", turbo_strength=1.0), 1),
                  "steps": (dict(denoise=1.0, turbo="t.safetensors", turbo_strength=1.0, steps=6), 1),
+                 "8 steps": (dict(denoise=1.0, turbo="t.safetensors", turbo_strength=1.0, steps=8), 0),
                  "no turbo, denoise": (dict(denoise=0.6), 0),
                  "no turbo, 25 steps": (dict(denoise=1.0, steps=25), 0)}
         for name, (extra, notes) in cases.items():

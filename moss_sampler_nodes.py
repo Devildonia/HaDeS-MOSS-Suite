@@ -38,14 +38,16 @@ class HaDeSMossTurbo:
         return {
             "required": {
                 "lora_name": (folder_paths.get_filename_list("loras"), {
-                    "tooltip": "A few-step MOSS-Image LoRA, e.g. HaDeS MOSS Turbo or Turbo Diverse (Hugging Face). Both were measured on SFT at "
-                               "4 steps, CFG 1, euler / simple, strength 1.0: Turbo held text best (layout JSON 6 / 6, 16:9 poster 3 / 3), "
-                               "Turbo Diverse kept SFT's spread of faces on an open prompt (tools/RESULTS.md)."}),
+                    "tooltip": "A few-step MOSS-Image LoRA, e.g. HaDeS MOSS Turbo, Turbo Diverse or Turbo 8-steps (Hugging Face), measured on SFT "
+                               "at CFG 1, euler / simple, strength 1.0. At 4 steps Turbo held text best (layout JSON 6 / 6, 16:9 poster 3 / 3) "
+                               "and Turbo Diverse kept SFT's spread of faces on an open prompt; Turbo 8-steps at 8 steps beat akhaliq's 4-step "
+                               "LoRA 18 to 5 in blind pairs and matched lodestones' 8-step LoRA up to 1024 (tools/RESULTS.md)."}),
                 "strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
                                        "tooltip": "1.0 is the only strength measured."}),
                 "steps": ("INT", {"default": TURBO_SETTINGS["steps"], "min": 1, "max": 50,
-                                  "tooltip": "4 is the step count the LoRAs were trained on and the only one measured; other counts run, "
-                                             "their quality is untested."}),
+                                  "tooltip": "4 for Turbo and Turbo Diverse, 8 for Turbo 8-steps: the counts measured. At 1024 and above Turbo and "
+                                             "Turbo Diverse give 6-10% less colour than SFT at 4 steps and are back near it at 8 (only colour measured "
+                                             "at 8 for them). Other counts run, their quality is untested (tools/RESULTS.md)."}),
             },
         }
 
@@ -91,8 +93,8 @@ class HaDeSMossKSampler:
                 "vae": ("VAE", {"tooltip": "Optional: also decode the result. Needed when the image output is connected."}),
                 "turbo": ("MOSS_TURBO", {"tooltip": "Optional: a MOSS Turbo LoRA. When connected, the LoRA is applied to the model and the KSampler "
                                                     "samples at CFG 1, euler / simple with SLG off and the turbo node's steps, ignoring those widgets; "
-                                                    "seed, denoise and flow_shift still apply. Measured at 4 steps, denoise 1.0 and the model's "
-                                                    "shift 5.0 (tools/RESULTS.md)."}),
+                                                    "seed, denoise and flow_shift still apply. Measured at 4 or 8 steps, denoise 1.0 and the "
+                                                    "model's shift 5.0 (tools/RESULTS.md)."}),
             },
             "hidden": {"prompt": "PROMPT", "unique_id": "UNIQUE_ID"},
         }

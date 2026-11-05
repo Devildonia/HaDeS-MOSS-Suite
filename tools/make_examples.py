@@ -24,11 +24,13 @@ NEGATIVE = "nsfw, worst quality, bad anatomy, watermark, jpeg artifact"
 # Download links the editor offers for missing models (fetched only when the user asks), as in the official templates
 HF = "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main"
 TURBO, TURBO_DIVERSE = "HaDeS-MOSS-Turbo-v0.6.safetensors", "HaDeS-MOSS-Turbo-Diverse-v0.6.safetensors"
+TURBO_8STEPS = "HaDeS-MOSS-Turbo-8steps-v0.7.safetensors"
 HF_TURBO = "https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo/resolve/main"
 # file -> (models folder, download URL)
 MODEL_FILES = {SFT: ("diffusion_models", f"{HF}/diffusion_models/{SFT}"), BASE: ("diffusion_models", f"{HF}/diffusion_models/{BASE}"),
                TE: ("text_encoders", f"{HF}/text_encoders/{TE}"), VAE: ("vae", f"{HF}/vae/{VAE}"),
-               TURBO: ("loras", f"{HF_TURBO}/{TURBO}"), TURBO_DIVERSE: ("loras", f"{HF_TURBO}/{TURBO_DIVERSE}")}
+               TURBO: ("loras", f"{HF_TURBO}/{TURBO}"), TURBO_DIVERSE: ("loras", f"{HF_TURBO}/{TURBO_DIVERSE}"),
+               TURBO_8STEPS: ("loras", f"{HF_TURBO}/{TURBO_8STEPS}")}
 LORA = "moss_lora.safetensors"
 
 

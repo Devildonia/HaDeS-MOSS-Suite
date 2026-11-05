@@ -30,8 +30,9 @@ def diagnose(metas):
             out.append(("note", f"KSampler shift {m['flow_shift']:g}: 5.0 measured clean from 768 to 2048 px; other shifts changed images less than a new seed."))
         if m.get("turbo") and abs(m.get("turbo_strength", 1.0) - 1.0) > 1e-6:
             out.append(("note", f"Turbo LoRA at strength {m['turbo_strength']:g}: the turbo LoRAs were measured at 1.0 only."))
-        if m.get("turbo") and m.get("steps", 4) != 4:
-            out.append(("note", f"Turbo LoRA at {m['steps']} steps: the turbo LoRAs were trained and measured at 4 steps only."))
+        if m.get("turbo") and m.get("steps", 4) not in (4, 8):
+            out.append(("note", f"Turbo LoRA at {m['steps']} steps: the turbo LoRAs were measured at 4 steps (Turbo, Turbo Diverse) and 8 "
+                                "(Turbo 8-steps) only."))
         if m.get("turbo") and m.get("denoise", 1.0) < 1.0:
             out.append(("note", f"Turbo LoRA at denoise {m['denoise']:.2f}: measured at denoise 1.0 only."))
         if m.get("slg", "off") != "off":

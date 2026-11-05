@@ -9,8 +9,12 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 - **MOSS Turbo LoRA:** a `steps` widget (default 4, the step count the LoRAs were trained on and the only one measured), so a few more or fewer steps can be tried; the MOSS KSampler uses it in place of the fixed 4, and its status line shows it. Workflows saved before keep 4.
-- **Suite Telemetry:** a note when a turbo LoRA runs at a step count other than 4.
-- **tools/moss_dmd_train.py:** `--fake-updates N`, DMD2's two time-scale rule (N fake-score updates per generator update, the extra ones on fresh generator samples). With 5, seed variety held from update 1,000 to 2,000 where it collapsed without (v0.7a, `tools/RESULTS.md` to follow).
+- **Turbo 8-steps v0.7** (`HaDeS-MOSS-Turbo-8steps-v0.7.safetensors`, Hugging Face): a third turbo LoRA, for 8 steps. In blind pairs at 8 steps it beat akhaliq's 4-step LoRA 18 to 5 and matched lodestones' 8-step LoRA at 1024 (10 to 7); lodestones' wins at 2048. Turbo and Turbo Diverse stay the 4-step files.
+- **Suite Telemetry:** a note when a turbo LoRA runs at a step count other than 4 or 8 (the measured ones).
+- **tools/moss_dmd_train.py:** `--fake-updates N`, DMD2's two time-scale rule (N fake-score updates per generator update, the extra ones on fresh generator samples). With 5, seed variety held from update 1,000 to 2,000 where it collapsed without (v0.7a, `tools/RESULTS.md`).
+
+### Documentation
+- **tools/RESULTS.md:** v0.7a (two time-scale updates) checkpoint by checkpoint to update 3,000; the few-step LoRAs at 8 steps in blind comparisons (v0.7a against akhaliq's and lodestones' LoRAs, cut and full) and their colour against SFT at 25 steps.
 
 ## [0.2.1] - 2026-11-05
 
