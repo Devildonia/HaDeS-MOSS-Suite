@@ -41,7 +41,7 @@ class HaDeSMossTurbo:
                     "tooltip": "A few-step MOSS-Image LoRA, e.g. HaDeS MOSS Turbo, Turbo Diverse or Turbo 8-steps (Hugging Face), measured on SFT "
                                "at CFG 1, euler / simple, strength 1.0. At 4 steps Turbo held text best (layout JSON 6 / 6, 16:9 poster 3 / 3) "
                                "and Turbo Diverse kept SFT's spread of faces on an open prompt; Turbo 8-steps at 8 steps beat akhaliq's 4-step "
-                               "LoRA 18 to 5 in blind pairs and matched lodestones' 8-step LoRA up to 1024 (tools/RESULTS.md)."}),
+                               "LoRA 18 to 5 in blind pairs and matched lodestones' Base / Kromoss 8-step LoRA run on SFT up to 1024 (tools/RESULTS.md)."}),
                 "strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
                                        "tooltip": "1.0 is the only strength measured."}),
                 "steps": ("INT", {"default": TURBO_SETTINGS["steps"], "min": 1, "max": 50,

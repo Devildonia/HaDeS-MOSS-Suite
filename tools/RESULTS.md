@@ -8,9 +8,16 @@ launcher's flag, read from the server on 2026-11-04), so every image here was sa
 
 ## Few-step LoRAs
 
-Two community LoRAs for `mossImage_sft_bf16`: `lodestones-8-steps-dmd2-lora` (DMD2, rank 128, fp32) and
+Two community LoRAs, both applied to `mossImage_sft_bf16`: `lodestones-8-steps-dmd2-lora` (DMD2, rank 128, fp32) and
 `moss_image_sft_4_steps_lora_v2_600_avg_rank_72_bf16` (4 steps, resized from rank 128 to 99% Frobenius, ranks 2–121 per layer).
 Both train every linear of all 42 layers with split q/k/v and nothing outside the layers.
+
+**Correction (2026-11-05):** `lodestones-8-steps-dmd2-lora` came from a Civitai reupload described as an SFT LoRA. By SHA256
+(`7683fe1f…`) it is `8-steps-dmd2-lora.safetensors` from `lodestones/Kromoss` (also `lora_dmd2.safetensors` in
+`lodestones/MOSS-Image-Base-8-steps-dmd`): an 8-step DMD2 LoRA distilled from **MOSS-Image Base**, for Base and Kromoss. Every
+"lodestones" / "DMD2" result in this file is that Base LoRA run on SFT, not lodestones' SFT LoRA
+(`lodestones/MOSS-Image-SFT-8-steps-dmd`, `lora.safetensors`), which has not been tested here. akhaliq's 4-step v2.0 file matches
+its own repo (`154c7f14…`).
 
 **Size of the change** (‖ΔW‖ / ‖W‖ against SFT, mean per layer group, both LoRAs alike): 0.03% in layers 0–23, 0.06% in 24–29,
 0.08–0.11% in 30–41; the largest are q / k in 32–41 and `ffn_up_gate` (up to 0.16%). In the 4-step LoRA, `v`, `ffn_up_gate` and
@@ -113,7 +120,8 @@ direction inside that subspace; chance = 64 / dimension). Means over the 18 laye
 | ffn_down | 0.40 / 0.21 | 0.049 (0.021) | 0.010 (0.008) | 0.000 |
 
 - The two LoRAs share a large part of their directions, far above chance, but the 4-step LoRA's own card says it was distilled
-  from lodestones' DMD, so the two are not independent evidence of a property of the model.
+  from lodestones' DMD (his SFT one, not the Base LoRA measured here), so the two are not independent evidence of a property of the
+  model.
 - The directions are not the weight's own: at most 17% of a direction lies in SFT's top 64 (qkv input side, 8x chance: the
   LoRA reads from residual directions qkv already reads strongly), mostly near chance, and ΔW is orthogonal to W (no rescaling).
   A turbo patch computed from the SFT weights alone, by their spectrum, is not supported by this; whether activations would give
@@ -532,15 +540,16 @@ strength 1.0, SFT bf16, `qwen3.5_9b_int8_convrot`, flux2-vae. Scripts: `steps8_c
 the repository); images and keys kept outside the repository.
 
 Three LoRAs per row in a shuffled order, the best one picked or a tie, two judges separately (Claude and the maintainer), against the
-two others cut the same way (rank 2, layers 24–41, 3.6 MB; akhaliq's 4-step v2.0 and lodestones' 8-step DMD2, full files rank 128):
+two others cut the same way (rank 2, layers 24–41, 3.6 MB; akhaliq's 4-step v2.0 and lodestones' Base / Kromoss 8-step DMD2 LoRA, see the correction at the top of this
+file; full files rank 128):
 
 | Judge | v0.7a | akhaliq cut | lodestones cut | Tie |
 |---|---|---|---|---|
 | Claude (512 / 1024 / 2048) | 17 (7 / 8 / 2) | 12 (2 / 9 / 1) | 6 (2 / 2 / 2) | 10 |
 | Maintainer | 19 | 11 | 6 | 9 |
 
-- Found afterwards: akhaliq's LoRA was warm-started from lodestones' (its card), so at 512 and 1024 those two draw nearly the same
-  image and ours is the odd one out (by pixel distance, 17 / 20 prompts at 512, 16 / 20 at 1024, 2 / 5 at 2048). A judge who knew
+- Found afterwards: at 512 and 1024 akhaliq's LoRA and the lodestones Base LoRA draw nearly the same image (akhaliq's card says it
+  was warm-started from lodestones' SFT 8-step DMD, a sibling of the Base one) and ours is the odd one out (by pixel distance, 17 / 20 prompts at 512, 16 / 20 at 1024, 2 / 5 at 2048). A judge who knew
   could pick ours out; neither judge had noticed it while judging, but a three-way sheet is not blind once this is known.
 
 Then the full files at 8 steps, judged in pairs (ours against one of them, left / right at random, 50 pairs, the maintainer; with two
@@ -550,7 +559,7 @@ images there is no odd one out). In a quick test before, the maintainer picked o
 | Against (full file, 8 steps) | 1024: ours / theirs / tie | 2048: ours / theirs / tie | Total |
 |---|---|---|---|
 | akhaliq 4-step v2.0 | 14 / 4 / 2 | 4 / 1 / 0 | **18 / 5 / 2** |
-| lodestones 8-step DMD2 | 10 / 7 / 3 | 0 / 5 / 0 | 10 / 12 / 3 |
+| lodestones Base / Kromoss 8-step DMD2 (on SFT) | 10 / 7 / 3 | 0 / 5 / 0 | 10 / 12 / 3 |
 
 Colour against SFT itself at its template settings (25 steps, CFG 2.5, er_sde / simple, same prompts and seeds): mean Lab chroma
 (and Hasler–Süsstrunk colourfulness, which agrees within 0.09) as a ratio to SFT per prompt, then averaged; in brackets the prompts
@@ -562,7 +571,7 @@ under 85% of SFT's chroma.
 | v0.6 Turbo Diverse, 4 / 8 steps | 0.90 (10) / 1.02 (8) | 0.86 (3) / 0.91 (0) |
 | v0.7a update 3,000, 4 / 8 steps | 0.87 (8) / 1.01 (7) | 0.85 (3) / 0.90 (2) |
 | akhaliq 4-step v2.0, 8 steps, cut / full | 1.28 (2) / 1.27 (2) | 1.06 (1) / 1.11 (0) |
-| lodestones 8-step DMD2, 8 steps, cut / full | 1.12 (4) / 1.11 (4) | 0.99 (2) / 0.99 (2) |
+| lodestones Base / Kromoss 8-step DMD2 on SFT, 8 steps, cut / full | 1.12 (4) / 1.11 (4) | 0.99 (2) / 0.99 (2) |
 
 - At 4 steps our LoRAs give 6–15% less colour than SFT already at 1024, not only above it; at 8 steps they come back to SFT's level
   at 1024. Trained at 512 and 4 steps with a regression term toward SFT's 25-step images, at 8 steps they follow SFT's colour.
@@ -570,8 +579,9 @@ under 85% of SFT's chroma.
 - At 2048 and 8 steps v0.7a stays at 0.90 of SFT's colour against lodestones' 0.99, and lost all five pairs there.
 - Cut against full: the same colour (within 0.05) and the same compositions (mean pixel distance 9–12 of 255 between a cut and its
   full file, 25–35 between different LoRAs); finer detail differs.
-- What holds: at 8 steps v0.7a update 3,000 beats akhaliq's 4-step LoRA (full file, 18 to 5) and is on par with lodestones' native
-  8-step LoRA up to 1024 (10 to 7), from a 3.4 MB file against 1.2 GB; at 2048 lodestones' wins. One seed per prompt, by eye.
+- What holds: at 8 steps v0.7a update 3,000 beats akhaliq's 4-step LoRA (full file, 18 to 5) and is on par with lodestones' Base / Kromoss 8-step DMD2 LoRA run on SFT
+  up to 1024 (10 to 7), from a 3.4 MB file against 1.2 GB; at 2048 that LoRA wins. One seed per prompt, by eye. Not compared:
+  lodestones' SFT 8-step LoRA, the one made for this model.
 - Not measured: 8 steps on the separating text tests above, other seeds, sizes between 1024 and 2048 (the hand tests were 1024 x
   1536), Turbo and Turbo Diverse at 8 steps beyond colour.
 
