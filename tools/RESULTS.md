@@ -419,6 +419,24 @@ regression term, the first 100 training only a fresh fake score, lr 5e-5 (v0.1's
 - DMD's pull to one image per prompt erases the regression's seed-to-image map within a few hundred updates. The two terms would have
   to act together through training (a smaller regression weight kept on, or a weight that falls slowly), not one after the other.
 
+**A smaller regression weight, kept on (v0.6):** v0.4 again with `--reg-weight 0.05` instead of 0.25 (the same 256 teacher pairs,
+reused from v0.4's cache: the first update's regression loss matched, 0.3599), from zero, 2,000 updates. 1.3 s per update, 23
+skipped. Regression loss 0.6–0.75 from update 1,000 on, against 0.39 for v0.4: a looser pull. Same test:
+
+| LoRA | Poster | Sign | Café woman | Fisherman | Watercolor | Mean variety |
+|---|---|---|---|---|---|---|
+| akhaliq 4-step v2.0 | 6 / 6 | 6 / 6 | clean, varied | clean | clean | 13.18 |
+| v0.1, update 1,000 | 6 / 6 | 6 / 6 | clean, one pose | clean, one pose | clean, one pose | 12.65 |
+| v0.6, update 1,000 | 6 / 6 | 6 / 6 | clean, varied (women, cups, food) | clean, varied (scarf, framing) | clean, varied | 13.51 |
+| v0.6, update 2,000 | 6 / 6 | 6 / 6 | clean, a little less varied | clean, varied | clean, varied | 13.41 |
+
+- No ghosting and every string right, and the variety of akhaliq's LoRA or a little more. Seed by seed the images keep features of the
+  25-step teacher's (the scarf on fisherman seed 1002, a round orange object on café seed 1004 where the teacher and akhaliq have a
+  croissant), so the regression term still sets the compositions while DMD keeps them sharp.
+- The sign gains the decorations akhaliq's has (flourishes, hearts) that v0.1 never drew.
+- By eye v0.6 is the first of our LoRAs on par with akhaliq's on both quality and variety, from a rank-2 LoRA on 18 layers trained
+  from zero in about 45 minutes plus the 19 minutes of teacher pairs. Not yet tested beyond these six prompts and six seeds.
+
 ## Two-resolution sampling (prototype)
 
 `--mode progressive`, `mossImage_sft_bf16`, SageAttention, 1024 x 1024 output, er_sde / simple / 25 steps / CFG 2.5, café woman,
