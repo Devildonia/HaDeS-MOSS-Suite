@@ -132,17 +132,20 @@ class HaDeSMossSamplerMetadata:
     def INPUT_TYPES(cls):
         return {"required": {"info": ("STRING", {"forceInput": True, "tooltip": "info output of a MOSS KSampler."})}}
 
-    RETURN_TYPES = ("INT", "INT", "FLOAT", "STRING", "STRING", "FLOAT", "FLOAT")
-    RETURN_NAMES = ("seed", "steps", "cfg", "sampler_name", "scheduler", "denoise", "flow_shift")
+    RETURN_TYPES = ("INT", "INT", "FLOAT", "STRING", "STRING", "FLOAT", "FLOAT", "STRING")
+    RETURN_NAMES = ("seed", "steps", "cfg", "sampler_name", "scheduler", "denoise", "flow_shift", "turbo")
+    OUTPUT_TOOLTIPS = ("", "", "", "", "", "", "", "The turbo LoRA file and strength when the KSampler had one (e.g. "
+                                                                 "\"HaDeS-MOSS-Turbo-v0.6.safetensors:1\"), empty otherwise.")
     FUNCTION = "read"
     CATEGORY = "HaDeS/MOSS Samplers"
-    DESCRIPTION = "The settings a MOSS KSampler actually sampled with, read from its info output, for image-saver metadata."
+    DESCRIPTION = "The settings a MOSS KSampler actually sampled with, read from its info output, for image-saver metadata (turbo LoRA included)."
 
     def read(self, info):
         meta = parse_info_meta(info)
         if meta is None or meta.get("node") != "ksampler":
             raise ValueError("HaDeS MOSS Sampler Metadata needs the info output of a MOSS KSampler.")
-        values = (meta["seed"], meta["steps"], meta["cfg"], meta["sampler"], meta["scheduler"], meta["denoise"], meta["flow_shift"])
+        turbo = f"{meta['turbo']}:{meta.get('turbo_strength', 1.0):g}" if meta.get("turbo") else ""
+        values = (meta["seed"], meta["steps"], meta["cfg"], meta["sampler"], meta["scheduler"], meta["denoise"], meta["flow_shift"], turbo)
         return {"ui": {"settings": [list(values)]}, "result": values}
 
 

@@ -7,6 +7,23 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+Fixes from the 0.2.0 audit.
+
+### Added
+- **MOSS Sampler Metadata:** a `turbo` output, the turbo LoRA file and strength the KSampler used (empty without one), so image-saver metadata can name it. Appended after the existing outputs; saved links keep their slots.
+- **Tests:** Telemetry's turbo notes (strength other than 1.0, denoise below 1.0) and the metadata `turbo` output.
+
+### Changed
+- **MOSS KSampler (canvas):** with the turbo input connected, the rows it overrides (steps, cfg, sampler, scheduler, SLG) are drawn faded; they stay editable.
+- **MOSS Layout Compiler:** the info trailer's `items` now counts every item, with `text_items` for those with text (it counted text items only, while its text said "N items, M with text").
+
+### Fixed
+- **Hugging Face model card:** the Turbo (update 1,600) cells for 2048 x 2048, 768 x 1344, the explicit prompts and the 2048 timing came from other checkpoints; measured on the file now, with a 2048 small-text row (Turbo 1 / 3, akhaliq and Turbo Diverse 2 / 3) and the 16:9 sign. `tools/RESULTS.md` records the same.
+- **pyproject.toml:** punctuation of the description.
+
+### Documentation
+- **README:** the turbo LoRAs' 2048 small-text result and what was only checked to run (other base models, img2img); links to `tools/*.py` point at GitHub, since the Registry package leaves those files out.
+
 ## [0.2.0] - 2026-11-05
 
 Turbo: our own few-step LoRAs for MOSS-Image SFT (4 steps, CFG 1, 3.4 MB each, on Hugging Face) and a turbo input on the MOSS KSampler.

@@ -336,9 +336,23 @@ class TestSaverAndSampler(unittest.TestCase):
         self.assertEqual(seen["patched"], [f"diffusion_model.{name}.weight"])
         meta = common.parse_info_meta(info)
         self.assertEqual((meta["turbo"], meta["slg"], meta["steps"]), ("turbo_test.safetensors", "off", 4))
+        values = sampler.HaDeSMossSamplerMetadata().read(info)["result"]
+        self.assertEqual((values[1], values[2], values[7]), (4, 1.0, "turbo_test.safetensors:1"))
 
 
 class TestTelemetry(unittest.TestCase):
+    def test_turbo_notes(self):
+        f = common.format_info
+        base = dict(width=1024, height=1024, steps=4, cfg=1.0, flow_shift=5.0, sampler="euler", scheduler="simple", seed=0, slg="off")
+        cases = {"measured": (dict(denoise=1.0, turbo="t.safetensors", turbo_strength=1.0), 0),
+                 "strength": (dict(denoise=1.0, turbo="t.safetensors", turbo_strength=0.5), 1),
+                 "denoise": (dict(denoise=0.6, turbo="t.safetensors", turbo_strength=1.0), 1),
+                 "no turbo, denoise": (dict(denoise=0.6), 0)}
+        for name, (extra, notes) in cases.items():
+            with self.subTest(name):
+                data = telemetry.HaDeSMossSuiteTelemetry().audit("T", info_1=f("x", "ksampler", **base, **extra))["result"][1]
+                self.assertEqual(sum("Turbo" in x["message"] for x in json.loads(data)["findings"]), notes)
+
     def test_findings(self):
         f = common.format_info
         infos = [f("x", "layout", width=1024, height=1024, items=1, multiline=[[2, 832, 192]]),

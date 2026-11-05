@@ -2,9 +2,9 @@
 
 ComfyUI nodes for the **MOSS-Image** model family (OpenMOSS / Comfy Org: 42-layer single-stream DiT, `Qwen3.5-9B` text encoder, FLUX.2 VAE), in the style of the [HaDeS Anima Suite](https://github.com/Devildonia/HaDeS-Anima-Suite).
 
-Claims about what layer groups do are measured with [`tools/moss_eval.py`](tools/moss_eval.py), not assumed.
+Claims about what layer groups do are measured with [`tools/moss_eval.py`](https://github.com/Devildonia/HaDeS-MOSS-Suite/blob/main/tools/moss_eval.py), not assumed.
 
-**Turbo (0.2.0):** two few-step LoRAs we trained for MOSS-Image SFT, [HaDeS MOSS Turbo and Turbo Diverse](https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo) (4 steps at CFG 1, 3.4 MB each), and a `turbo` input on `MOSS KSampler` that applies them with their settings. How they were trained and measured: [`tools/RESULTS.md`](tools/RESULTS.md), [`tools/moss_dmd_train.py`](tools/moss_dmd_train.py).
+**Turbo (0.2.0):** two few-step LoRAs we trained for MOSS-Image SFT, [HaDeS MOSS Turbo and Turbo Diverse](https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo) (4 steps at CFG 1, 3.4 MB each), and a `turbo` input on `MOSS KSampler` that applies them with their settings. How they were trained and measured: [`tools/RESULTS.md`](tools/RESULTS.md), [`tools/moss_dmd_train.py`](https://github.com/Devildonia/HaDeS-MOSS-Suite/blob/main/tools/moss_dmd_train.py).
 
 ## Installation
 
@@ -109,11 +109,11 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 - **Purpose:** picks a few-step LoRA for the `turbo` input of `MOSS KSampler`, which loads it the way the stock `LoraLoaderModelOnly` does and samples at the settings it was trained for: 4 steps, CFG 1, euler / simple (seed, denoise and flow shift still come from the KSampler). Checked in ComfyUI: it renders the stock `LoraLoaderModelOnly` + `KSampler` image pixel for pixel (both LoRAs, 8 images, with the KSampler's own widgets left at 25 steps, CFG 2.5, er_sde / beta and SLG on).
 - **Inputs:** `lora_name` (from `models/loras`), `strength` (default `1.0`, the only strength measured).
 - **The LoRAs:** HaDeS MOSS Turbo and Turbo Diverse v0.6, 3.4 MB each, on [Hugging Face](https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo); put them in `models/loras`. Trained in this repository (`tools/moss_dmd_train.py`) from MOSS-Image SFT, which they are for.
-- **Measured** ([`tools/RESULTS.md`](tools/RESULTS.md), 1024 x 1024 against akhaliq's 4-step v2.0 LoRA at the same settings): Turbo spelled every test string right on signs and posters, 6 / 6 on layout JSON and 3 / 3 on a 16:9 poster; Turbo Diverse keeps SFT's spread of faces on an open prompt (about 10 East Asian women in 16 seeds, against about 15 for Turbo and akhaliq's LoRA). Not measured: other base models, other strengths or step counts, denoise below 1.0.
+- **Measured** ([`tools/RESULTS.md`](tools/RESULTS.md), 1024 x 1024 against akhaliq's 4-step v2.0 LoRA at the same settings): Turbo spelled every test string right on signs and posters at 1024 x 1024, 6 / 6 on layout JSON and 3 / 3 on a 16:9 poster, while at 2048 x 2048 the sign's small line was right in 1 / 3 (akhaliq's 2 / 3); Turbo Diverse keeps SFT's spread of faces on an open prompt (about 10 East Asian women in 16 seeds, against about 15 for Turbo and akhaliq's LoRA). Not measured: other base models, other strengths or step counts, denoise below 1.0; they run (an int8 finetune as the base, img2img at denoise 0.6 were checked), their quality is untested, and Telemetry cannot tell which model the KSampler got.
 
 ### `MOSS Sampler Metadata` (`HaDeS/MOSS Samplers`)
 - **Class:** `HaDeSMossSamplerMetadata`
-- **Purpose:** reads the settings a MOSS KSampler actually sampled with from its `info` (seed, steps, cfg, sampler, scheduler, denoise, flow shift), for image-saver metadata.
+- **Purpose:** reads the settings a MOSS KSampler actually sampled with from its `info` (seed, steps, cfg, sampler, scheduler, denoise, flow shift, and `turbo`: the turbo LoRA file and strength, empty without one), for image-saver metadata.
 
 ### `MOSS Suite Telemetry` (`HaDeS/MOSS Pipeline`)
 - **Class:** `HaDeSMossSuiteTelemetry`
@@ -130,7 +130,7 @@ The nodes draw their own moss-green rows on the canvas (the HaDeS Anima Suite wi
 - every widget becomes a styled row by type (combo, slider, number, toggle, text); the layout draft keeps ComfyUI's text editor;
 - tooltips are the node's own, with the measurements behind each value;
 - **Block Merger:** a bar chart of the 42 layers and 3 parts colored by depth group, each group labeled with the share of the SFT → Base change it carries, and buttons **M1**, **50/50**, **24–35 M2** (the groups that carry most of that change) and **M2**;
-- **LoRA Block Weight:** a bar per layer group; **KSampler** and **Latent:** a status line with the settings (TURBO when the turbo input is connected) or the final size.
+- **LoRA Block Weight:** a bar per layer group; **KSampler** and **Latent:** a status line with the settings or the final size. With the turbo input connected the KSampler's status reads TURBO and the rows it overrides (steps, cfg, sampler, scheduler, SLG) are drawn faded, still editable for when it is unplugged.
 
 *Settings → HaDeS MOSS Suite → Use standard ComfyUI widgets* (or *HaDeS MOSS Suite* in a node's right-click menu) switches to the plain widgets. It does not affect HaDeS Anima Suite nodes when both suites are installed.
 

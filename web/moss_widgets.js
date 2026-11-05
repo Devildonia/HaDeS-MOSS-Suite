@@ -896,6 +896,7 @@ export function createStyledComboWidget(node, backingWidget, config = {}) {
         // stored value -> shown text; the backing widget keeps the stored value so workflows stay compatible
         displayNames = null,
         isDisabled = null,
+        isDimmed = null, // drawn faded but still editable (e.g. a value another input overrides)
         tooltip = config.tooltip || backingWidget?.tooltip || backingWidget?.options?.tooltip || "",
     } = config;
 
@@ -925,7 +926,7 @@ export function createStyledComboWidget(node, backingWidget, config = {}) {
             const rowY = y + 2;
 
             ctx.save();
-            if (isDisabled?.()) ctx.globalAlpha = 0.45;
+            if (isDisabled?.() || isDimmed?.()) ctx.globalAlpha = 0.45;
             drawRowSurface(ctx, x, rowY, w, h, this._isHovered);
             ctx.font = HADES_FONT.label;
             const tagW = tagWidth || Math.max(52, Math.round(ctx.measureText(tag).width + 18));
@@ -1034,6 +1035,7 @@ export function createSpectralSliderWidget(node, backingWidget, config = {}) {
         isInt = false,
         zeroLabel = null,
         marker = null,
+        isDimmed = null, // drawn faded but still editable (e.g. a value another input overrides)
         tooltip = config.tooltip || backingWidget?.tooltip || backingWidget?.options?.tooltip || "",
     } = config;
 
@@ -1070,6 +1072,7 @@ export function createSpectralSliderWidget(node, backingWidget, config = {}) {
             const curVal = clampNum(backingWidget?.value ?? defaultVal, min, max, isInt ? 0 : decimals);
 
             ctx.save();
+            if (isDimmed?.()) ctx.globalAlpha = 0.45;
             drawRowSurface(ctx, x, rowY, w, h, this._isHovered);
 
             const isNarrow = w < 280;
@@ -1311,6 +1314,7 @@ export function createStyledTextRowWidget(node, backingWidget, config = {}) {
         onEdit = null,
         displayValue = null,
         isDisabled = null,
+        isDimmed = null, // drawn faded but still editable (e.g. a value another input overrides)
         disabledText = "",
         tooltip = config.tooltip || backingWidget?.tooltip || backingWidget?.options?.tooltip || "",
     } = config;
@@ -1342,7 +1346,7 @@ export function createStyledTextRowWidget(node, backingWidget, config = {}) {
             const disabled = Boolean(isDisabled?.());
 
             ctx.save();
-            if (disabled) ctx.globalAlpha = 0.45;
+            if (disabled || isDimmed?.()) ctx.globalAlpha = 0.45;
             drawRowSurface(ctx, x, rowY, w, h);
 
             const isNarrow = w < 280;

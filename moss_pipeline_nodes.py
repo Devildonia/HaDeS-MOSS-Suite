@@ -193,7 +193,8 @@ class HaDeSMossLayoutCompiler:
                          "3 of 6 seeds, in a 640x384 box on two lines in 6 of 6, tools/RESULTS.md):")
                 text += "".join(f"\n  {t.count(chr(10)) + 1} lines in a {w:g}x{h:g} box: {t[:40]!r}" for t, w, h in multi)
         latent = torch.zeros([batch_size, LATENT_CHANNELS, height // 16, width // 16], device=comfy.model_management.intermediate_device())
-        return (prompt, {"samples": latent}, width, height, format_info(text, "layout", width=width, height=height, items=len(texts),
+        n_items = len(data["items"]) if "items" in data else 0
+        return (prompt, {"samples": latent}, width, height, format_info(text, "layout", width=width, height=height, items=n_items, text_items=len(texts),
                                                                                 multiline=[[t.count("\n") + 1, w, h] for t, w, h in multi]))
 
 

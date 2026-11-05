@@ -478,6 +478,21 @@ The checkpoints in between, on the three tests that separate them (same seeds; e
 - Update 1,600 is the most robust on text here (6 / 6 layout, 3 / 3 landscape poster), at or above akhaliq's LoRA on every row of
   these tests, with the same skew on the café prompt. Update 1,000 is the one that keeps SFT's mix on that prompt.
 
+The published files (Hugging Face `DeVilDoNia/HaDeS-MOSS-Turbo`): Turbo = update 1,600, Turbo Diverse = update 1,000, both in bf16
+(Turbo Diverse renders the archived update-1,000 images pixel for pixel). Turbo measured on its own file, same tests as the wider test:
+
+| Test | akhaliq 4-step v2.0 | Turbo (update 1,600) | Turbo Diverse (update 1,000) |
+|---|---|---|---|
+| Sign and three-line poster at 1024, 6 seeds each | 12 / 12 | 12 / 12 | 12 / 12 |
+| 1344 x 768 sign, 3 seeds | 2 / 3 | 2 / 3 (a malformed "D") | 3 / 3 |
+| Blonde Scandinavian / Black man / older Latina, 6 seeds each | 18 / 18 | 18 / 18 | 18 / 18 |
+| 2048 x 2048 street, fisherman, sign; 768 x 1344 fisherman, sign, fox | clean | clean | clean |
+| 2048 x 2048 sign: small line right, 3 seeds | 2 / 3 | 1 / 3 ("3pon", a stray "7") | 2 / 3 |
+| Seconds per image at 2048 x 2048, median of 9, one run | 7.23 | 6.88 | 7.23 |
+
+- At 2048 x 2048 the large lettering is right on every file and the small line is where they slip; Turbo slips more on these three
+  seeds. The 2048 text robustness of the update-1,600 file is below what its 1024 / 16:9 poster results suggest.
+
 ## Two-resolution sampling (prototype)
 
 `--mode progressive`, `mossImage_sft_bf16`, SageAttention, 1024 x 1024 output, er_sde / simple / 25 steps / CFG 2.5, café woman,

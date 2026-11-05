@@ -73,16 +73,17 @@ function addSeedRows(node, wSeed, wControl) {
 }
 
 // Styled rows for every widget, in the node's own order. `sliders` overrides the visual range of FLOAT widgets.
-function styleWidgets(node, { sliders = {}, colors = {} } = {}) {
+function styleWidgets(node, { sliders = {}, colors = {}, dimmed = null } = {}) {
     for (const w of [...(node.widgets || [])]) {
         if (w._isHadesBacking || w._isHadesCustom || w.name === "control_after_generate") continue;
         const color = colors[w.name] || GROUP_COLORS[w.name];
+        const isDimmed = dimmed ? () => dimmed(w.name) : null;
         const opts = w.options || {};
         if (w.name === "seed" || w.name === "noise_seed") {
             addSeedRows(node, w, node.widgets.find((x) => x.name === "control_after_generate"));
         } else if (w.type === "combo") {
             hideBackingWidget(w);
-            node.addCustomWidget(createStyledComboWidget(node, w, { tag: tagFor(w.name), cleanFileNames: /_name$|^lora_[ab]$/.test(w.name), marker: color }));
+            node.addCustomWidget(createStyledComboWidget(node, w, { tag: tagFor(w.name), cleanFileNames: /_name$|^lora_[ab]$/.test(w.name), marker: color, isDimmed }));
         } else if (w.type === "toggle") {
             hideBackingWidget(w);
             node.addCustomWidget(createStyledToggleWidget(node, w, { tag: tagFor(w.name), label: w.name.replace(/_/g, " "), onText: "ON", offText: "OFF" }));
@@ -92,13 +93,13 @@ function styleWidgets(node, { sliders = {}, colors = {} } = {}) {
             node.addCustomWidget(createSpectralSliderWidget(node, w, {
                 tag: tagFor(w.name), label: (node.type === "HaDeSMossModelBlockMerger" || !(w.name in GROUP_COLORS)) ? (SLIDER_LABELS[w.name] ?? "") : "",
                 color: color || HADES_THEME.accent, marker: color || null,
-                min: opts.min ?? -1e9, max: opts.max ?? 1e9, visMin: range[0], visMax: range[1], step: opts.step2 ?? 0.01, defaultVal: w.value,
+                min: opts.min ?? -1e9, max: opts.max ?? 1e9, visMin: range[0], visMax: range[1], step: opts.step2 ?? 0.01, defaultVal: w.value, isDimmed,
             }));
         } else if (w.type === "number" || ((w.type === "text" || w.type === "string") && !opts.multiline)) {
             hideBackingWidget(w);
             const numeric = w.type === "number";
             node.addCustomWidget(createStyledTextRowWidget(node, w, {
-                tag: tagFor(w.name), numeric, promptTitle: w.name.replace(/_/g, " "), color: HADES_THEME.accent, emptyPlaceholder: "— empty —",
+                tag: tagFor(w.name), numeric, promptTitle: w.name.replace(/_/g, " "), color: HADES_THEME.accent, emptyPlaceholder: "— empty —", isDimmed,
             }));
         }
     }
@@ -166,17 +167,20 @@ const INSTALLERS = {
         styleWidgets(node, { sliders: { ...Object.fromEntries([...GROUPS, "other_layers"].map((g) => [g, [0, 2]])), strength_model: [0, 2] } });
     },
     HaDeSMossKSampler(node) {
+        // a connected turbo input overrides these in the backend: draw them faded (still editable for when it is unplugged)
+        const TURBO_OVERRIDES = new Set(["steps", "cfg", "sampler_name", "scheduler", "slg"]);
+        const turboLinked = () => node.inputs?.find((i) => i.name === "turbo")?.link != null;
         banner(node, {
             title: "MOSS KSAMPLER",
             getStatusText: () => {
                 const shift = ` · shift ${num(node, "flow_shift") > 0 ? num(node, "flow_shift") : "model"}`;
                 // a connected turbo input overrides steps / CFG / sampler / scheduler / SLG in the backend
-                if (node.inputs?.find((i) => i.name === "turbo")?.link != null) return `TURBO · euler / simple · 4 steps · CFG 1.0${shift}`;
+                if (turboLinked()) return `TURBO · euler / simple · 4 steps · CFG 1.0${shift}`;
                 return `${widget(node, "sampler_name")?.value} / ${widget(node, "scheduler")?.value} · ${num(node, "steps")} steps · CFG ${num(node, "cfg").toFixed(1)}`
                     + `${shift}${widget(node, "slg")?.value !== "off" ? " · SLG" : ""}`;
             },
         });
-        styleWidgets(node, { sliders: { cfg: [1, 8], denoise: [0, 1], flow_shift: [0, 12] } });
+        styleWidgets(node, { sliders: { cfg: [1, 8], denoise: [0, 1], flow_shift: [0, 12] }, dimmed: (name) => TURBO_OVERRIDES.has(name) && turboLinked() });
     },
     HaDeSMossLatent(node) {
         banner(node, {
