@@ -446,7 +446,7 @@ skipped. Regression loss 0.6–0.75 from update 1,000 on, against 0.39 for v0.4:
 | Test | akhaliq 4-step v2.0 | v0.6 update 1,000 | v0.6 update 2,000 |
 |---|---|---|---|
 | Layout JSON, 1024, 6 seeds: strings right | 5 / 6 ("NORTHRN") | 5 / 6 ("NOR IHERN") | 5 / 6 (second line garbled) |
-| Layout JSON: title on two lines as its `\n` asks | 0 / 6 | 1 / 6 | 3 / 6 |
+| Layout JSON: title on two lines as its `\n` asks | 0 / 6 | 1 / 6 | 4 / 6 |
 | Café woman, 16 seeds: East Asian | ~15 / 16 | ~9–10 / 16 | ~15 / 16 |
 | Blonde Scandinavian / Black man / older Latina, 6 seeds each | 18 / 18 as asked | 18 / 18 | 18 / 18 |
 | 2048 x 2048 sign, 3 seeds: large / small text right | 3 / 3, 2 / 3 | 3 / 3, 2 / 3 | 3 / 3, 2 / 3 |
@@ -459,8 +459,24 @@ skipped. Regression loss 0.6–0.75 from update 1,000 on, against 0.39 for v0.4:
 - At 2048 x 2048 and on both portrait and landscape canvases v0.6 renders clean images, never trained beyond 512 x 512 squares.
 - Update 1,000 keeps more of the 25-step teacher: on the café prompt about as many East Asian women as SFT at 25 steps (10 / 16 in
   phase 0), where update 2,000 and akhaliq's LoRA give almost only East Asian women. Update 2,000 holds text better (the landscape
-  poster, the layout line break). The extra 1,000 updates trade variety for text robustness; which checkpoint to recommend depends on
-  which matters, and nothing between them was tested.
+  poster, the layout line break). The extra 1,000 updates trade variety for text robustness.
+
+The checkpoints in between, on the three tests that separate them (same seeds; ethnicity approximate):
+
+| v0.6 update | Café, 16 seeds: East Asian | 1344 x 768 poster | Layout JSON: strings right | Layout JSON: two-line title |
+|---|---|---|---|---|
+| 1,000 | ~9–10 / 16 | 0 / 3 | 5 / 6 | 1 / 6 |
+| 1,200 | ~10–11 / 16 | 1 / 3 | 3 / 6 | 2 / 6 |
+| 1,400 | ~13–14 / 16 | 2 / 3 | 5 / 6 | 4 / 6 |
+| 1,600 | ~14–15 / 16 | 3 / 3 | 6 / 6 | 4 / 6 |
+| 1,800 | ~15 / 16 | 2 / 3 ("HOUIRS") | 5 / 6 | 3 / 6 |
+| 2,000 | ~15 / 16 | 3 / 3 | 5 / 6 | 4 / 6 |
+| akhaliq 4-step v2.0 | ~15 / 16 | 2 / 3 | 5 / 6 | 0 / 6 |
+
+- No checkpoint has both: the café women turn East Asian between updates 1,200 and 1,400, while the text settles from 1,400 to 1,600.
+  The two move together through training, so a midpoint does not keep the teacher's spread and the stable text at once.
+- Update 1,600 is the most robust on text here (6 / 6 layout, 3 / 3 landscape poster), at or above akhaliq's LoRA on every row of
+  these tests, with the same skew on the café prompt. Update 1,000 is the one that keeps SFT's mix on that prompt.
 
 ## Two-resolution sampling (prototype)
 
