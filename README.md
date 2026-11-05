@@ -106,7 +106,7 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 - **Class:** `HaDeSMossTurbo`
 - **Purpose:** picks a few-step LoRA for the `turbo` input of `MOSS KSampler`, which loads it the way the stock `LoraLoaderModelOnly` does and samples at the settings it was trained for: 4 steps, CFG 1, euler / simple (seed, denoise and flow shift still come from the KSampler). Checked in ComfyUI: it renders the stock `LoraLoaderModelOnly` + `KSampler` image pixel for pixel (both LoRAs, 8 images, with the KSampler's own widgets left at 25 steps, CFG 2.5, er_sde / beta and SLG on).
 - **Inputs:** `lora_name` (from `models/loras`), `strength` (default `1.0`, the only strength measured).
-- **The LoRAs:** HaDeS MOSS Turbo and Turbo Diverse v0.6, 3.4 MB each, on [Hugging Face](https://huggingface.co/Devildonia/HaDeS-MOSS-Turbo); put them in `models/loras`. Trained in this repository (`tools/moss_dmd_train.py`) from MOSS-Image SFT, which they are for.
+- **The LoRAs:** HaDeS MOSS Turbo and Turbo Diverse v0.6, 3.4 MB each, on [Hugging Face](https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo); put them in `models/loras`. Trained in this repository (`tools/moss_dmd_train.py`) from MOSS-Image SFT, which they are for.
 - **Measured** ([`tools/RESULTS.md`](tools/RESULTS.md), 1024 x 1024 against akhaliq's 4-step v2.0 LoRA at the same settings): Turbo spelled every test string right on signs and posters, 6 / 6 on layout JSON and 3 / 3 on a 16:9 poster; Turbo Diverse keeps SFT's spread of faces on an open prompt (about 10 East Asian women in 16 seeds, against about 15 for Turbo and akhaliq's LoRA). Not measured: other base models, other strengths or step counts, denoise below 1.0.
 
 ### `MOSS Sampler Metadata` (`HaDeS/MOSS Samplers`)
