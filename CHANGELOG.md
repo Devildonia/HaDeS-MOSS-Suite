@@ -7,8 +7,12 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-06
+
+Turbo 8-steps v0.7, a `steps` widget on MOSS Turbo LoRA and an example workflow with a 2x upscale.
+
 ### Added
-- **MOSS Turbo LoRA:** a `steps` widget (default 4, the step count the LoRAs were trained on and the only one measured), so a few more or fewer steps can be tried; the MOSS KSampler uses it in place of the fixed 4, and its status line shows it. Workflows saved before keep 4.
+- **MOSS Turbo LoRA:** a `steps` widget (default 4, the count Turbo and Turbo Diverse were trained on; 8 for Turbo 8-steps; both measured), so a few more or fewer steps can be tried; the MOSS KSampler uses it in place of the fixed 4, and its status line shows it. Workflows saved before keep 4.
 - **Turbo 8-steps v0.7** (`HaDeS-MOSS-Turbo-8steps-v0.7.safetensors`, Hugging Face): a third turbo LoRA, for 8 steps. In blind pairs at 8 steps it beat akhaliq's 4-step LoRA 18 to 5 and matched lodestones' Base / Kromoss 8-step LoRA run on SFT at 1024 (10 to 7); lodestones' wins at 2048. Turbo and Turbo Diverse stay the 4-step files.
 - **Suite Telemetry:** a note when a turbo LoRA runs at a step count other than 4 or 8 (the measured ones).
 - **Example workflow "Turbo 8 steps + Upscale x2":** generation with Turbo 8-steps v0.7, a 2x upscale with RealESRGAN x2 and an optional MOSS pass at 2048 (Turbo 8-steps, denoise 0.25), each in a group switched from the group's right-click menu, with a note. `tools/make_examples.py` now writes groups, notes and fixed positions.
