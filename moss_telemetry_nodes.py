@@ -34,7 +34,8 @@ def diagnose(metas):
             out.append(("note", f"Turbo LoRA at {m['steps']} steps: the turbo LoRAs were measured at 4 steps (Turbo, Turbo Diverse) and 8 "
                                 "(Turbo 8-steps) only."))
         if m.get("turbo") and m.get("denoise", 1.0) < 1.0:
-            out.append(("note", f"Turbo LoRA at denoise {m['denoise']:.2f}: measured at denoise 1.0 only."))
+            out.append(("note", f"Turbo LoRA at denoise {m['denoise']:.2f}: measured at denoise 1.0, and Turbo 8-steps at 0.25 / 0.40 "
+                                "on a 2x-upscaled image only."))
         if m.get("slg", "off") != "off":
             out.append(("note", f"KSampler SLG '{m['slg']}': measured, it did not change text accuracy on SFT or Base."))
 

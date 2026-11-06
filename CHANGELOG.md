@@ -14,7 +14,7 @@ Turbo 8-steps v0.7, a `steps` widget on MOSS Turbo LoRA and an example workflow 
 ### Added
 - **MOSS Turbo LoRA:** a `steps` widget (default 4, the count Turbo and Turbo Diverse were trained on; 8 for Turbo 8-steps; both measured), so a few more or fewer steps can be tried; the MOSS KSampler uses it in place of the fixed 4, and its status line shows it. Workflows saved before keep 4.
 - **Turbo 8-steps v0.7** (`HaDeS-MOSS-Turbo-8steps-v0.7.safetensors`, Hugging Face): a third turbo LoRA, for 8 steps. In blind pairs at 8 steps it beat akhaliq's 4-step LoRA 18 to 5 and matched lodestones' Base / Kromoss 8-step LoRA run on SFT at 1024 (10 to 7); lodestones' wins at 2048. Turbo and Turbo Diverse stay the 4-step files.
-- **Suite Telemetry:** a note when a turbo LoRA runs at a step count other than 4 or 8 (the measured ones).
+- **Suite Telemetry:** a note when a turbo LoRA runs at a step count other than 4 or 8 (the measured ones); the denoise note, the KSampler `turbo` tooltip and the README now cite the Turbo 8-steps pass at denoise 0.25 / 0.40 on a 2x-upscaled image.
 - **Example workflow "Turbo 8 steps + Upscale x2":** generation with Turbo 8-steps v0.7, a 2x upscale with RealESRGAN x2 and an optional MOSS pass at 2048 (Turbo 8-steps, denoise 0.25), each in a group switched from the group's right-click menu, with a note. `tools/make_examples.py` now writes groups, notes and fixed positions.
 - **tools/moss_dmd_train.py:** `--fake-updates N`, DMD2's two time-scale rule (N fake-score updates per generator update, the extra ones on fresh generator samples). With 5, seed variety held from update 1,000 to 2,000 where it collapsed without (v0.7a, `tools/RESULTS.md`).
 

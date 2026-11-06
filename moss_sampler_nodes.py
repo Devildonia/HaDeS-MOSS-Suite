@@ -93,8 +93,8 @@ class HaDeSMossKSampler:
                 "vae": ("VAE", {"tooltip": "Optional: also decode the result. Needed when the image output is connected."}),
                 "turbo": ("MOSS_TURBO", {"tooltip": "Optional: a MOSS Turbo LoRA. When connected, the LoRA is applied to the model and the KSampler "
                                                     "samples at CFG 1, euler / simple with SLG off and the turbo node's steps, ignoring those widgets; "
-                                                    "seed, denoise and flow_shift still apply. Measured at 4 or 8 steps, denoise 1.0 and the "
-                                                    "model's shift 5.0 (tools/RESULTS.md)."}),
+                                                    "seed, denoise and flow_shift still apply. Measured at 4 or 8 steps, denoise 1.0 (Turbo 8-steps also at "
+                                                    "0.25 / 0.40 on a 2x-upscaled image) and the model's shift 5.0 (tools/RESULTS.md)."}),
             },
             "hidden": {"prompt": "PROMPT", "unique_id": "UNIQUE_ID"},
         }
