@@ -78,7 +78,9 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
   - `filename_prefix`: path under `ComfyUI/output` (default `diffusion_models/MOSS_HaDeS_Merged`). Move the file to `models/diffusion_models` to load it.
   - `precision`: `bfloat16` (10.2 GB), `int8 ConvRot (Comfy-Org layout)` (5.4 GB: the four linears of every layer in int8 with Hadamard rotation and int8 attention, everything else in bfloat16, the same keys and dtypes as Comfy-Org's `*_int8_convrot` files) or `float32`.
   - `include_metadata`, `custom_author`, `custom_model_title`: ModelSpec metadata.
+  - `rounding` (`bfloat16` output, weights with merge / LoRA patches): `stochastic` (default) rounds each one up or down with probability by distance, seeded per weight so the file is reproducible; `nearest` is ComfyUI's own saving. Unpatched weights are copied unchanged either way.
 - **Outputs:** `model` (pass-through), `saved_path`, `info`.
+- **Measured** ([`tools/RESULTS.md`](tools/RESULTS.md), "Baking subtle LoRAs into bfloat16"): two LoRAs whose changes are smaller than a bfloat16 step, baked into a merge. Rounded to nearest the file kept about 80–85% of their effect (as the LoRAs loaded live, which round the same way); stochastic rounding kept all of it, and its renders sat as close to the float32 result as two stochastic files with different seeds sit to each other.
 - **Measured:** a live merge renders slightly differently from the same merge saved and reloaded (same subject and composition, small details change), in ComfyUI's own merger too; see [`tools/RESULTS.md`](tools/RESULTS.md).
 
 ### `MOSS Latent` (`HaDeS/MOSS Pipeline`)

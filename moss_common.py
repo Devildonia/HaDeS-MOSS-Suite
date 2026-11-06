@@ -92,15 +92,35 @@ def key_patches(model, key):
     return [(weight, convert or (lambda a, **kwargs: a))] + model.patches.get(key, [])
 
 
-def key_patches_weight(key_patches, device, key):
-    """One key_patches() entry baked like a saved model: patches applied in float32, rounded to the stored dtype.
-    Quantized weights are dequantized first, so the result is the rounded (lossy) weight, not the pre-quantization one."""
+def key_patches_float(key_patches, device, key):
+    """One key_patches() entry with its patches applied in float32, not rounded. Quantized weights are dequantized first."""
     (w, convert), patches = key_patches[0], key_patches[1:]
     w32 = comfy.model_management.cast_to_device(w, device, torch.float32, copy=True)
     if isinstance(w32, QuantizedTensor):
         w32 = w32.dequantize().float()
-    baked = comfy.lora.calculate_weight(patches, convert(w32, inplace=True), key)
-    return baked.to(torch.bfloat16 if isinstance(w, QuantizedTensor) else w.dtype).float()
+    return comfy.lora.calculate_weight(patches, convert(w32, inplace=True), key)
+
+
+def key_patches_weight(key_patches, device, key):
+    """One key_patches() entry baked like a saved model: patches applied in float32, rounded to the stored dtype.
+    Quantized weights are dequantized first, so the result is the rounded (lossy) weight, not the pre-quantization one."""
+    w = key_patches[0][0]
+    return key_patches_float(key_patches, device, key).to(torch.bfloat16 if isinstance(w, QuantizedTensor) else w.dtype).float()
+
+
+def stochastic_round_bf16(x, seed):
+    """float32 -> bfloat16, each element rounded up or down to a neighbouring bfloat16 value with probability proportional to its
+    distance (unbiased: the expected value is x). ComfyUI's stochastic_rounding() rounds bfloat16 to nearest, which drops most
+    of a change smaller than half a bfloat16 step. Seeded, so the same inputs give the same file."""
+    bits = x.float().contiguous().view(torch.int32)
+    gen = torch.Generator(device=bits.device).manual_seed(seed)
+    noise = torch.randint(0, 1 << 16, bits.shape, generator=gen, device=bits.device, dtype=torch.int32)
+    out = ((bits + noise) & -65536).view(torch.float32)
+    # inf / nan, and the few finite values the carry would push to inf, keep round-to-nearest
+    keep = ~torch.isfinite(out) | ~torch.isfinite(x)
+    if keep.any():
+        out = torch.where(keep, x.float().to(torch.bfloat16).float(), out)
+    return out.to(torch.bfloat16)
 
 
 class MossMergeAdapter(comfy.weight_adapter.WeightAdapterBase):

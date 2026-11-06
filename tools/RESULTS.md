@@ -765,6 +765,38 @@ fisherman prompt, seed 1000, mean absolute pixel difference (0-255):
   exact image matters.
 - The int8 ConvRot file has the same keys, dtypes and shapes as Comfy-Org's `moss_image_sft_int8_convrot` (5.41 GB).
 
+### Baking subtle LoRAs into bfloat16
+
+A merge (SFT with 50% Base in layers 24–35, saved in bf16) with two of our slider LoRAs at strength 1.0 (rank 4 on every
+linear of the 42 layers). Their changes are small: the median change per weight is 0.15–0.5 of a bfloat16 step, depending on
+the layer. Reference: the same merge with both LoRAs applied beside the weights in float32 (forward hooks, as in training).
+Every render below goes through one pipeline (same text encoding, er_sde / simple, 25 steps, CFG 2.5, 1024 x 1024, seed
+2000; young man on a bench, Marrakech market, bakery sign), so only the weights differ. Difference = mean absolute pixel
+difference from the reference (0–255); warmth = mean CIELab b*.
+
+| Weights | Difference: man / market / sign (mean) | Warmth: man / market / sign |
+|---|---|---|
+| Reference (float32 LoRAs) | 0 / 0 / 0 | 27.7 / 25.3 / 36.3 |
+| LoRAs loaded live (`LoraLoaderModelOnly`) | 4.9 / 8.9 / 9.4 (7.7) | 24.7 / 22.7 / 31.8 |
+| Baked, rounded to nearest (ComfyUI's saving) | 4.9 / 13.4 / 13.4 (10.6) | 24.7 / 22.2 / 30.6 |
+| Baked, stochastic rounding (Model Saver default) | 1.9 / 3.8 / 3.9 (3.2) | 28.9 / 26.0 / 37.6 |
+| Two more stochastic files, seeds 0 and 1 (standalone script) | 3.9 and 3.1 | |
+| Same two files against each other | 1.1 / 2.3 / 6.5 | |
+| Merge without the LoRAs | 19.7 / 34.5 / 31.0 (28.4) | 13.7 / 10.0 / 14.6 |
+
+- Both LoRAs are applied: the patch list holds both, and the core's `calculate_weight` in float32 gives exactly colour x 1 +
+  detail x 1 on every weight checked (projection of the change onto each LoRA's delta, float64).
+- What is lost is in the rounding. The core rounds bfloat16 to nearest, live (when patching) as when saving: its
+  `stochastic_rounding()` is stochastic for fp8 only. In the nearest-rounded file each LoRA kept 65–95% of its change per
+  weight tensor, with rounding noise of 40–70% of the LoRA's own size; in the images both LoRAs together kept about 80–85% of
+  their warmth.
+- Stochastic rounding is unbiased, so the full change survives on average: warmth at the reference, and pixel differences at
+  the level of two equally valid stochastic files against each other. That level is the floor for any bfloat16 file: 25 steps
+  of sampling turn a sub-step change in the weights into small shifts of fine detail (the sign moves a few pixels).
+- An error-compensated rounding (GPTQ-style: each column's rounding error pushed onto the next columns through the inverse of
+  the input covariance, recorded on four other prompts) did no better (4.4): the floor is not the error of each layer.
+- By eye the four bfloat16 versions show the same images; the difference is how much of the LoRAs' effect is there.
+
 ## Merging an int8 ConvRot finetune
 
 `pornmasterMoss_sftV1` (int8 ConvRot, SFT-derived: identical to SFT outside the layer linears) merged with `mossImage_sft_bf16`

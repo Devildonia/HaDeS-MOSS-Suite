@@ -10,7 +10,7 @@ import comfy.model_patcher
 import comfy.quant_ops
 import comfy.utils
 
-from .moss_common import count_layers, format_info, key_patches, key_patches_weight, model_weights
+from .moss_common import count_layers, format_info, key_patches, key_patches_float, key_patches_weight, model_weights, stochastic_round_bf16
 
 # The layout of Comfy-Org's moss_image_*_int8_convrot files: the four linears of every layer in int8 with ConvRot,
 # int8 attention in every layer, everything else (text_embedder, modulations, embedders, head, norms) in bfloat16.
@@ -19,6 +19,7 @@ _INT8_QUANT_CONF = {"format": "int8_tensorwise", "convrot": True, "convrot_group
 _INT8_ATTENTION_CONF = {"attention": "comfy_kitchen_int8"}
 
 PRECISIONS = ["bfloat16", "int8 ConvRot (Comfy-Org layout)", "float32"]
+ROUNDINGS = ["stochastic", "nearest"]
 
 
 def _json_tensor(obj):
@@ -40,6 +41,12 @@ class HaDeSMossModelSaver:
             "optional": {
                 "custom_author": ("STRING", {"default": "HaDeS"}),
                 "custom_model_title": ("STRING", {"default": ""}),
+                "rounding": (ROUNDINGS, {"default": ROUNDINGS[0], "tooltip":
+                    "bfloat16 output, weights with merge / LoRA patches. stochastic: each one rounded up or down with probability by "
+                    "distance (seeded per weight, so the file is reproducible); keeps changes smaller than a bfloat16 step. nearest: "
+                    "ComfyUI's own saving; such changes are partly lost. Measured with two subtle LoRAs baked into a merge: nearest kept "
+                    "about 80-85% of their effect, stochastic all of it, with renders as close to the float32 result as two equally "
+                    "valid roundings are to each other (tools/RESULTS.md). Unpatched weights are copied unchanged either way."}),
             },
         }
 
@@ -50,7 +57,7 @@ class HaDeSMossModelSaver:
     CATEGORY = "HaDeS/MOSS Mergers"
     DESCRIPTION = "Saves a MOSS-Image MODEL with its merge / LoRA patches baked in, loadable by the stock Load Diffusion Model node."
 
-    def save(self, model, filename_prefix, precision, include_metadata, custom_author="HaDeS", custom_model_title=""):
+    def save(self, model, filename_prefix, precision, include_metadata, custom_author="HaDeS", custom_model_title="", rounding="stochastic"):
         full_output_folder, filename, counter, _, _ = folder_paths.get_save_image_path(filename_prefix, folder_paths.get_output_directory())
         os.makedirs(full_output_folder, exist_ok=True)
         out_path = os.path.join(full_output_folder, f"{filename}_{counter:05}_.safetensors")
@@ -66,14 +73,25 @@ class HaDeSMossModelSaver:
         # Layers stored quantized (an int8 / fp8 input model): kept as their weight and scale pieces for int8 output,
         # dequantized (with their patches) for bfloat16 / float32 output, so those files hold no int8 layer.
         quantized = {k[:-len(".weight")] for k, w in model_weights(model).items() if k.endswith(".weight") and isinstance(w, comfy.quant_ops.QuantizedTensor)}
+        stochastic = rounding == "stochastic" and dtype == torch.bfloat16 and not int8
+        rounding_used = "stochastic" if stochastic else "none (float32)" if dtype == torch.float32 else "nearest"
         sd = {}
         for k, v in lazy_sd.items():
             module = k.rsplit(".", 1)[0]
+            pk = f"diffusion_model.{k}"
             if not int8 and (module in quantized or k.endswith("comfy_attention.config")):
                 if k == f"{module}.weight":
-                    pk = f"diffusion_model.{k}"
-                    sd[k] = key_patches_weight(key_patches(model, pk), quant_device, pk).to(dtype).cpu().contiguous()
+                    if stochastic and pk in model.patches:
+                        w32 = key_patches_float(key_patches(model, pk), quant_device, pk)
+                        sd[k] = stochastic_round_bf16(w32, comfy.utils.string_to_seed(pk)).cpu().contiguous()
+                    else:
+                        sd[k] = key_patches_weight(key_patches(model, pk), quant_device, pk).to(dtype).cpu().contiguous()
                 continue  # weight_scale / comfy_quant pieces and the int8 attention setting belong to the int8 layout
+            if stochastic and pk in model.patches:
+                # the core's saving rounds bfloat16 to nearest (its stochastic_rounding() is stochastic for fp8 only)
+                w32 = key_patches_float(key_patches(model, pk), quant_device, pk)
+                sd[k] = stochastic_round_bf16(w32, comfy.utils.string_to_seed(pk)).cpu().contiguous()
+                continue
             tensor = v.to("cpu").contiguous()
             if isinstance(v, comfy.model_patcher.LazyCastingParamPiece) or not torch.is_floating_point(tensor):
                 sd[k] = tensor
@@ -99,14 +117,16 @@ class HaDeSMossModelSaver:
                 "modelspec.title": custom_model_title or filename,
                 "modelspec.author": custom_author or "HaDeS",
                 "hades/precision": precision,
+                "hades/rounding": rounding_used,
                 "hades/layers": str(n_layers),
                 "hades/timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             }
         comfy.utils.save_torch_file(sd, out_path, metadata=metadata)
 
         size_gb = os.path.getsize(out_path) / 1024 ** 3
-        info = format_info(f"HaDeS MOSS Model Saver | {os.path.basename(out_path)} | {precision} | {size_gb:.2f} GB | {n_layers} layers",
-                           "model_saver", saved_path=out_path, precision=precision, n_layers=n_layers)
+        info = format_info(f"HaDeS MOSS Model Saver | {os.path.basename(out_path)} | {precision}{', stochastic rounding' if stochastic else ''} | "
+                           f"{size_gb:.2f} GB | {n_layers} layers",
+                           "model_saver", saved_path=out_path, precision=precision, n_layers=n_layers, rounding=rounding_used)
         return {"ui": {"saved_path": [out_path], "info": [info]}, "result": (model, out_path, info)}
 
 

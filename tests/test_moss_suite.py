@@ -308,6 +308,44 @@ class TestSaverAndSampler(unittest.TestCase):
             self.assertEqual(f.get_slice("text_embedder.proj.weight").get_dtype(), "BF16")
             self.assertTrue({"layers.0.proj.qkv.weight_scale", "layers.0.proj.qkv.comfy_quant", "layers.5.comfy_attention.config"} <= keys)
 
+    def test_stochastic_round_is_unbiased_and_seeded(self):
+        x = torch.full((200000,), 1.0 + 0.3 * 2 ** -7)  # 30% of the way from 1.0 to the next bfloat16 value
+        r = common.stochastic_round_bf16(x, 1).float()
+        self.assertEqual(set(r.unique().tolist()), {1.0, 1.0 + 2 ** -7})
+        self.assertAlmostEqual(r.mean().item(), x[0].item(), delta=2 ** -7 * 0.01)
+        torch.testing.assert_close(common.stochastic_round_bf16(x, 1), common.stochastic_round_bf16(x, 1), rtol=0, atol=0)
+        y = torch.tensor([-0.75 * 2 ** -7 - 1.0, 3.0e38, float("inf"), float("nan")])
+        out = common.stochastic_round_bf16(y, 2).float()
+        self.assertTrue(out[0].item() in (-1.0, -1.0 - 2 ** -7))
+        self.assertTrue(torch.isfinite(out[1]) and out[2].item() == float("inf") and torch.isnan(out[3]))
+
+    def test_saver_stochastic_keeps_a_sub_step_lora(self):
+        """A LoRA change of a quarter bfloat16 step: rounded to nearest it vanishes, stochastic rounding keeps it on average.
+        Weights without patches are written unchanged."""
+        sd = tiny_state_dict(9)
+        key = "layers.1.proj.ffn_up_gate.weight"
+        signs = torch.randint(0, 2, sd[key].shape, generator=torch.Generator().manual_seed(3)) * 2 - 1
+        sd[key] = (signs * 0.02).to(torch.bfloat16)  # one magnitude, so one bfloat16 step for every weight
+        w = sd[key].float()
+        step = 2.0 ** (torch.floor(torch.log2(w.abs()[0, 0])).item() - 7)
+        up = torch.rand(w.shape[0], 1, generator=torch.Generator().manual_seed(1)) * 2 - 1
+        down = torch.rand(1, w.shape[1], generator=torch.Generator().manual_seed(2)) * 2 - 1
+        scale = 0.25 * step  # |change| at most a quarter step
+        lora = {f"diffusion_model.{key[:-len('.weight')]}.lora_up.weight": up * scale,
+                f"diffusion_model.{key[:-len('.weight')]}.lora_down.weight": down,
+                f"diffusion_model.{key[:-len('.weight')]}.alpha": torch.tensor(1.0)}
+        delta = (up @ down) * scale
+        coef = {}
+        for rounding in ("nearest", "stochastic"):
+            m, _ = comfy.sd.load_lora_for_models(load(sd), None, lora, 1.0, 0)
+            path = saver.HaDeSMossModelSaver().save(m, "tests/round", "bfloat16", False, rounding=rounding)["result"][1]
+            with safetensors.safe_open(path, "pt") as f:
+                got = f.get_tensor(key).float() - w
+                coef[rounding] = (got.flatten() @ delta.flatten() / (delta.flatten() @ delta.flatten())).item()
+                torch.testing.assert_close(f.get_tensor("layers.2.proj.qkv.weight"), sd["layers.2.proj.qkv.weight"], rtol=0, atol=0)
+        self.assertLess(coef["nearest"], 0.5)
+        self.assertAlmostEqual(coef["stochastic"], 1.0, delta=0.1)
+
     def test_image_output_without_vae_is_reported(self):
         prompt = {"9": {"class_type": "HaDeSMossKSampler", "inputs": {}}, "10": {"class_type": "SaveImage", "inputs": {"images": ["9", 1]}}}
         with self.assertRaisesRegex(ValueError, "no VAE"):

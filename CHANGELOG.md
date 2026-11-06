@@ -7,6 +7,10 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **MOSS Model Saver:** a `rounding` input for `bfloat16` output, `stochastic` by default: weights with merge / LoRA patches are rounded up or down with probability by distance (seeded per weight, so the same inputs give the same file); `nearest` is ComfyUI's own saving. Unpatched weights are copied unchanged either way. Measured with two LoRAs whose changes are smaller than a bfloat16 step: rounded to nearest the file kept about 80–85% of their effect, stochastic all of it (`tools/RESULTS.md`, "Baking subtle LoRAs into bfloat16"). The chosen rounding is written in the file's metadata and the info output. Files saved before were rounded to nearest.
+- **`tools/moss_slider_train.py`:** trains image-free slider LoRAs on MOSS-Image: from a pair of prompt suffixes (Concept Sliders on flow matching), or with `--pairs` from image pairs the model renders itself (`--pair-kind blur` for detail, `colour` for colour), optionally on an SFT / Base merge computed in memory.
+
 ## [0.3.0] - 2026-11-06
 
 Turbo 8-steps v0.7, a `steps` widget on MOSS Turbo LoRA and an example workflow with a 2x upscale.
