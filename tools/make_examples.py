@@ -25,12 +25,14 @@ NEGATIVE = "nsfw, worst quality, bad anatomy, watermark, jpeg artifact"
 HF = "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main"
 TURBO, TURBO_DIVERSE = "HaDeS-MOSS-Turbo-v0.6.safetensors", "HaDeS-MOSS-Turbo-Diverse-v0.6.safetensors"
 TURBO_8STEPS = "HaDeS-MOSS-Turbo-8steps-v0.7.safetensors"
+UPSCALER = "RealESRGAN_x2plus.pth"
 HF_TURBO = "https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo/resolve/main"
 # file -> (models folder, download URL)
 MODEL_FILES = {SFT: ("diffusion_models", f"{HF}/diffusion_models/{SFT}"), BASE: ("diffusion_models", f"{HF}/diffusion_models/{BASE}"),
                TE: ("text_encoders", f"{HF}/text_encoders/{TE}"), VAE: ("vae", f"{HF}/vae/{VAE}"),
                TURBO: ("loras", f"{HF_TURBO}/{TURBO}"), TURBO_DIVERSE: ("loras", f"{HF_TURBO}/{TURBO_DIVERSE}"),
-               TURBO_8STEPS: ("loras", f"{HF_TURBO}/{TURBO_8STEPS}")}
+               TURBO_8STEPS: ("loras", f"{HF_TURBO}/{TURBO_8STEPS}"),
+               UPSCALER: ("upscale_models", f"https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/{UPSCALER}")}
 LORA = "moss_lora.safetensors"
 
 
@@ -91,6 +93,47 @@ EXAMPLES = {
         "save": ("SaveImage", {"images": ("ks", 1), "filename_prefix": "HaDeS_MOSS_turbo"}),
         "tel": ("HaDeSMossSuiteTelemetry", {"report_title": "HaDeS MOSS Suite Telemetry", "info_1": ("latent", 3), "info_2": ("ks", 2)}),
         "report": ("PreviewAny", {"source": ("tel", 0)}),
+    },
+    "HaDeS MOSS Suite - Turbo 8 steps + Upscale x2": {
+        # 1. generate: Turbo 8-steps v0.7 at 8 steps (blind pairs and colour in tools/RESULTS.md, "At 8 steps")
+        "unet": ("UNETLoader", {"unet_name": SFT, "weight_dtype": "default"}),
+        **loaders(),
+        "pos": ("CLIPTextEncode", {"clip": ("clip", 0), "text": "An old watchmaker repairing a pocket watch at his workbench, brass gears and "
+                                                                 "tweezers, warm lamp light, close-up photograph."}),
+        "latent": ("HaDeSMossLatent", {"aspect_ratio": "1:1", "megapixels": 1.0, "custom_width": 1024, "custom_height": 1024, "batch_size": 1}),
+        "turbo": ("HaDeSMossTurbo", {"lora_name": TURBO_8STEPS, "strength": 1.0, "steps": 8}),
+        "ks": (lambda k: (k[0], {**k[1], "turbo": ("turbo", 0)}))(ksampler(("unet", 0), ("latent", 0))),
+        "save": ("SaveImage", {"images": ("ks", 1), "filename_prefix": "HaDeS_MOSS_1024"}),
+        # 2. upscale x2 with a model: pixels only, nothing redrawn (about 1.5 s at 2048)
+        "upmodel": ("UpscaleModelLoader", {"model_name": UPSCALER}),
+        "up": ("ImageUpscaleWithModel", {"upscale_model": ("upmodel", 0), "image": ("ks", 1)}),
+        "save_up": ("SaveImage", {"images": ("up", 0), "filename_prefix": "HaDeS_MOSS_x2"}),
+        # 3. optional MOSS pass on the upscaled image (muted): Turbo 8-steps at denoise 0.25 adds hair, pores and stitching the
+        #    upscaler smooths, about 16 s at 2048; SFT at 25 steps and the same denoise took 75 s and was no better by eye
+        "enc": ("VAEEncode", {"pixels": ("up", 0), "vae": ("vae", 0)}, MUTED),
+        "ks2": (lambda k: (k[0], {**k[1], "turbo": ("turbo", 0), "denoise": 0.25}, MUTED))(ksampler(("unet", 0), ("enc", 0))),
+        "save_ref": ("SaveImage", {"images": ("ks2", 1), "filename_prefix": "HaDeS_MOSS_x2_refined"}, MUTED),
+        "tel": ("HaDeSMossSuiteTelemetry", {"report_title": "HaDeS MOSS Suite Telemetry", "info_1": ("latent", 3), "info_2": ("ks", 2)}),
+        "report": ("PreviewAny", {"source": ("tel", 0)}),
+        "note": ("Note", {"text": "HaDeS MOSS Suite - Turbo 8 steps + Upscale x2\n\n"
+                                  "1. Generate (always on): MOSS-Image SFT with HaDeS Turbo 8-steps v0.7, 8 steps, CFG 1, up to 1024 px.\n"
+                                  "   Without the turbo: unplug the turbo input of the MOSS KSampler (25 steps, CFG 2.5).\n\n"
+                                  "2. Upscale x2 (on): RealESRGAN x2 doubles the image in pixels, in about a second. Nothing is redrawn.\n"
+                                  "   To turn it off: right-click the group > Set Group Nodes to Never.\n\n"
+                                  "3. Upscale x2 + MOSS pass (off): re-renders the upscaled image at denoise 0.25 with the same turbo,\n"
+                                  "   adding hair, pores and fine texture the upscaler smooths (about 16 s at 2048). Needs group 2.\n"
+                                  "   To turn it on: right-click the group > Set Group Nodes to Always.\n"
+                                  "   Denoise 0.40 (also measured) adds a little more detail and changes the image a little more.\n\n"
+                                  "Models: RealESRGAN_x2plus.pth in models/upscale_models, the turbo LoRA in models/loras.\n"
+                                  "Measurements: tools/RESULTS.md in the HaDeS MOSS Suite."}),
+        "_layout": {"note": (0, -620), "unet": (0, 0), "clip": (0, 230), "vae": (0, 450), "turbo": (0, 640),
+                    "pos": (450, 0), "neg": (450, 250), "latent": (450, 500),
+                    "ks": (900, 0), "save": (1350, 0), "tel": (1350, 480), "report": (1800, 480),
+                    "upmodel": (2300, 0), "up": (2300, 180), "save_up": (2750, 0),
+                    "enc": (2300, 700), "ks2": (2750, 700), "save_ref": (3200, 700)},
+        "_groups": [("1. Generate (Turbo 8 steps)", ["unet", "clip", "vae", "turbo", "pos", "neg", "latent", "ks", "save", "tel", "report"], "#335533"),
+                    ("2. Upscale x2 (model)", ["upmodel", "up", "save_up"], "#334466"),
+                    ("3. Upscale x2 + MOSS pass (turn on to use)", ["enc", "ks2", "save_ref"], "#553355")],
     },
     "HaDeS MOSS Suite - LoRA Toolkit": {
         "unet": ("UNETLoader", {"unet_name": SFT, "weight_dtype": "default"}),
@@ -153,8 +196,11 @@ def is_widget(kind, options):
     return kind in SCALAR_TYPES and not options.get("forceInput")
 
 
-def to_editor(graph, object_info):
-    """Compact graph -> ComfyUI editor workflow (LiteGraph 0.4)."""
+def to_editor(example, object_info):
+    """Compact graph -> ComfyUI editor workflow (LiteGraph 0.4). Optional keys: _layout {name: (x, y)} fixes positions, _groups
+    [(title, [names], color)] draws groups around nodes; a "Note" node is a frontend note with the given text."""
+    graph = {k: v for k, v in example.items() if not k.startswith("_")}
+    layout = example.get("_layout", {})
     ids = {name: i + 1 for i, name in enumerate(graph)}
     depth = {}
 
@@ -164,9 +210,14 @@ def to_editor(graph, object_info):
             depth[name] = 1 + max((node_depth(s) for s in srcs), default=-1)
         return depth[name]
 
-    nodes, links, rows = [], [], {}
+    nodes, links, rows, heights = [], [], {}, {}
     out_links = {name: {} for name in graph}
     for name, (cls, inputs, *mode) in graph.items():
+        if cls == "Note":
+            heights[name] = 520
+            nodes.append({"id": ids[name], "type": "Note", "pos": list(layout.get(name, (0, 0))), "size": [800, 520], "flags": {}, "order": 0,
+                          "mode": 0, "inputs": [], "outputs": [], "widgets_values": [inputs["text"]], "properties": {}, "_outputs": None})
+            continue
         info = object_info[cls]
         node_inputs, widgets = [], []
         for inp, kind, options, optional in input_specs(info):
@@ -192,24 +243,36 @@ def to_editor(graph, object_info):
         col = node_depth(name)
         y = rows.get(col, 0)
         # HaDeS MOSS nodes add a banner and draw one 25 px row per widget; the layout compiler opens at 520 px
-        rows[col] = y + (560 if cls == "HaDeSMossLayoutCompiler" else 190 + 30 * (len(widgets) + len(node_inputs)))
+        heights[name] = 560 if cls == "HaDeSMossLayoutCompiler" else 190 + 30 * (len(widgets) + len(node_inputs))
+        rows[col] = y + heights[name]
         properties = {"Node name for S&R": cls}
         models = [{"name": w, "url": MODEL_FILES[w][1], "directory": MODEL_FILES[w][0]} for w in widgets if w in MODEL_FILES]
         if models:
             properties["models"] = models
-        nodes.append({"id": ids[name], "type": cls, "pos": [col * 500, y], "size": [380, 100], "flags": {}, "order": 0, "mode": mode[0] if mode else 0,
+        nodes.append({"id": ids[name], "type": cls, "pos": list(layout.get(name, (col * 500, y))), "size": [380, 100], "flags": {}, "order": 0, "mode": mode[0] if mode else 0,
                       "inputs": node_inputs, "widgets_values": widgets, "properties": properties, "_outputs": info})
     for node, name in zip(nodes, graph):
         info = node.pop("_outputs")
+        if info is None:
+            continue
         node["outputs"] = [{"name": n, "type": t, "links": out_links[name].get(i, [])} for i, (n, t) in enumerate(zip(info["output_name"], info["output"]))]
-    for order, name in enumerate(sorted(graph, key=node_depth)):
+    for order, name in enumerate(sorted((n for n in graph if graph[n][0] != "Note"), key=node_depth)):
         nodes[ids[name] - 1]["order"] = order
+    groups = []
+    for title, members, color in example.get("_groups", []):
+        xs = [nodes[ids[m] - 1]["pos"][0] for m in members]
+        ys = [nodes[ids[m] - 1]["pos"][1] for m in members]
+        x0, y0 = min(xs) - 30, min(ys) - 80
+        x1 = max(xs) + 380 + 30
+        y1 = max(nodes[ids[m] - 1]["pos"][1] + heights[m] for m in members) + 30
+        groups.append({"id": len(groups) + 1, "title": title, "bounding": [x0, y0, x1 - x0, y1 - y0], "color": color, "font_size": 24, "flags": {}})
     return {"id": str(uuid.uuid5(uuid.NAMESPACE_URL, json.dumps(sorted(graph)))), "revision": 0, "last_node_id": len(nodes), "last_link_id": len(links),
-            "nodes": nodes, "links": links, "groups": [], "config": {}, "extra": {}, "version": 0.4}
+            "nodes": nodes, "links": links, "groups": groups, "config": {}, "extra": {}, "version": 0.4}
 
 
-def to_api(graph, object_info, mapping):
+def to_api(example, object_info, mapping):
     """The runnable API prompt: muted nodes and the nodes fed only by them left out, local file names substituted."""
+    graph = {k: v for k, v in example.items() if not k.startswith("_") and v[0] != "Note"}
     live = {n for n, (_, _, *mode) in graph.items() if not mode}
     changed = True
     while changed:

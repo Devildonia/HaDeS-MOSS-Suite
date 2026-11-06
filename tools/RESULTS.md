@@ -632,6 +632,23 @@ the SD VAE grid. The MOSS latent is 16 px per cell, so the image comes out at tw
 `LatentUpscale` with 1024 x 1024 and sampled on rendered 2048 x 2048 images (checked on the PNGs), at about 4.6x the time per step
 of 1024 x 1024. `LatentUpscaleBy` scales the latent grid by a factor and gives the expected size.
 
+**A MOSS pass after a 2x upscale.** Turbo 8-steps v0.7 images at 1024 (four of the 8-step comparison prompts: watchmaker, portrait,
+market, anime), upscaled to 2048 with RealESRGAN x2, then re-rendered with stock `VAEEncode` + `KSampler` at 2048. Detail = share of
+spectral energy above a quarter of Nyquist at 2048; drift = mean pixel difference from the upscaled image at 512 (0–255):
+
+| Pass on the upscaled image | Detail | Drift | Seconds |
+|---|---|---|---|
+| none (upscaler only) | 3.58 | 0 | 1.5 |
+| Turbo 8-steps, 8 steps, CFG 1, denoise 0.25 | 3.50 | 6.65 | 16.4 |
+| Turbo 8-steps, 8 steps, CFG 1, denoise 0.40 | 3.82 | 9.84 | 13.6 |
+| SFT, 25 steps, CFG 2.5, er_sde, denoise 0.25 | 3.56 | 5.92 | 75.2 |
+| SFT, 25 steps, CFG 2.5, er_sde, denoise 0.40 | 3.49 | 8.52 | 73.8 |
+
+- The detail number barely moves (the upscaler's own sharpening counts as fine detail too), but by eye, on 100% crops, every pass
+  replaces the upscaler's smoothed, painted look with real texture: separate beard hairs, skin pores, stitching on an anime bag.
+- The turbo pass looks as good as the SFT pass at a fifth of the time; denoise 0.40 adds a little more and changes the image a
+  little more than 0.25. The example workflow uses Turbo 8-steps at 0.25. Four images, one seed each, judged by eye.
+
 ## Attention backends and int8 speed
 
 `--mode attention`, RTX 5090 (32 GB, the whole model in VRAM in every run), café woman, fisherman and watercolor fox x seeds
