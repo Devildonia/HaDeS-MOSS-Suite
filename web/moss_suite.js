@@ -189,6 +189,25 @@ const INSTALLERS = {
         });
         styleWidgets(node, { sliders: { cfg: [1, 8], denoise: [0, 1], flow_shift: [0, 12] }, dimmed: (name) => TURBO_OVERRIDES.has(name) && turboLinked() });
     },
+    HaDeSMossPromptEnhancer(node) {
+        const mode = () => widget(node, "mode")?.value;
+        // rows the current mode does not use: the canvas only matters for layout, sampling settings not for "as written"
+        const UNUSED = { caption: new Set(["width", "height"]), "as written": new Set(["width", "height", "temperature", "seed", "max_tokens"]) };
+        const imageLinked = () => node.inputs?.find((i) => i.name === "image")?.link != null;
+        banner(node, {
+            title: "MOSS PROMPT ENHANCER",
+            getStatusText: () => {
+                const m = mode();
+                if (m === "as written") return "AS WRITTEN · plain prompt box, no generation";
+                const what = m === "layout" ? `LAYOUT · ${num(node, "width")} × ${num(node, "height")}` : "CAPTION";
+                return `${what} · temp ${num(node, "temperature").toFixed(2)}${imageLinked() ? " · + image" : ""} · MOSS text encoder`;
+            },
+        });
+        styleWidgets(node, { sliders: { temperature: [0, 1.5] }, dimmed: (name) => UNUSED[mode()]?.has(name) ?? false });
+        // banner and rows first, the idea / negative text boxes below them (they are the first widgets ComfyUI creates)
+        const boxes = node.widgets.filter((w) => w.name === "idea" || w.name === "negative");
+        node.widgets = [...node.widgets.filter((w) => !boxes.includes(w)), ...boxes];
+    },
     HaDeSMossLatent(node) {
         banner(node, {
             title: "MOSS LATENT",
@@ -251,6 +270,8 @@ app.registerExtension({
             finalizeHadesNode(this, 380);
             // room for the draft editor; a saved size wins when a workflow is loaded
             if (nodeData.name === "HaDeSMossLayoutCompiler") this.setSize([460, Math.max(this.size[1], 520)]);
+            // room for the idea and negative text boxes
+            if (nodeData.name === "HaDeSMossPromptEnhancer") this.setSize([440, Math.max(this.size[1], 620)]);
         };
     },
 });
