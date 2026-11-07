@@ -16,7 +16,9 @@ from .moss_common import format_info
 from .moss_pipeline_nodes import compile_layout, snap16
 
 VISION_BLOCK = "<|vision_start|><|image_pad|><|vision_end|>"
-MODES = ["caption", "layout"]
+MODES = ["caption", "layout", "as written"]
+# The negative prompt of the official ComfyUI MOSS-Image templates, used in every measurement in tools/RESULTS.md
+DEFAULT_NEGATIVE = "nsfw, worst quality, bad anatomy, watermark, jpeg artifact"
 
 _COMMON = """You turn the user's idea into a concrete description for the MOSS-Image text-to-image model.
 
@@ -194,6 +196,11 @@ def fit_image(image, max_pixels=1024 * 1024):
     return comfy.utils.common_upscale(image.movedim(-1, 1), max(28, int(w * k)), max(28, int(h * k)), "area", "disabled").movedim(1, -1)
 
 
+def encode(clip, text):
+    """CLIPTextEncode's conditioning for `text`."""
+    return clip.encode_from_tokens_scheduled(clip.tokenize(text))
+
+
 class HaDeSMossPromptEnhancer:
     @classmethod
     def INPUT_TYPES(cls):
@@ -202,9 +209,10 @@ class HaDeSMossPromptEnhancer:
                 "clip": ("CLIP", {"tooltip": "MOSS-Image's text encoder (CLIPLoader, type moss_image): the same Qwen3.5-9B that encodes the prompt "
                                              "writes it here, so no other model is loaded."}),
                 "idea": ("STRING", {"multiline": True, "default": "", "tooltip": "What you want, in your own words. May be empty when an image is connected."}),
-                "mode": (MODES, {"default": "caption", "tooltip": "caption: a detailed paragraph for CLIPTextEncode. layout: a pixel Layout draft "
-                                                                   "(boxes for objects and text), compiled here; its draft output also feeds the "
-                                                                   "Layout Compiler for the matching latent."}),
+                "mode": (MODES, {"default": "caption", "tooltip": "caption: the model writes a detailed paragraph. layout: it writes a pixel "
+                                                                   "Layout draft (boxes for objects and text), compiled here; the draft output also "
+                                                                   "feeds the Layout Compiler for the matching latent. as written: no generation, the "
+                                                                   "idea is encoded as typed (a plain prompt box)."}),
                 "width": ("INT", {"default": 1024, "min": 256, "max": 4096, "step": 16, "tooltip": "Layout mode: the canvas the boxes are drawn on. "
                                                                                                     "Use the same size for the image."}),
                 "height": ("INT", {"default": 1024, "min": 256, "max": 4096, "step": 16}),
@@ -218,25 +226,42 @@ class HaDeSMossPromptEnhancer:
             "optional": {
                 "image": ("IMAGE", {"tooltip": "Optional reference the model sees: the whole brief when the idea is empty, otherwise the starting "
                                                "point (the idea wins). Resized to about 1 MP."}),
-                "negative": ("STRING", {"multiline": True, "default": "", "tooltip": "Things to keep out; told to the model, not encoded."}),
+                "negative": ("STRING", {"multiline": True, "default": "", "tooltip": "The negative prompt, encoded to the negative output; empty uses the "
+                                                                                     "official MOSS-Image template's. What you write here is also told "
+                                                                                     "to the model as things to keep out."}),
             },
         }
 
-    RETURN_TYPES = ("STRING", "STRING", "INT", "INT", "STRING")
-    RETURN_NAMES = ("prompt", "draft", "width", "height", "info")
+    RETURN_TYPES = ("CONDITIONING", "CONDITIONING", "STRING", "STRING", "INT", "INT", "STRING")
+    RETURN_NAMES = ("positive", "negative", "prompt", "draft", "width", "height", "info")
+    OUTPUT_TOOLTIPS = ("The prompt encoded with this CLIP, for the sampler's positive input.",
+                       "The negative prompt encoded with this CLIP, for the sampler's negative input.",
+                       "The prompt as text.", "The editable JSON draft (a caption, or the layout for the Layout Compiler).",
+                       "Canvas width.", "Canvas height.", "Summary, with any changes made to a layout answer.")
     FUNCTION = "enhance"
     CATEGORY = "HaDeS/MOSS Pipeline"
-    DESCRIPTION = ("Writes a detailed MOSS-Image prompt from a short idea and / or an image, with MOSS-Image's own text encoder and instructions "
-                   "adapted from OpenMOSS' official prompt enhancer.")
+    DESCRIPTION = ("A positive / negative prompt box that can also write the prompt: from a short idea and / or an image, with MOSS-Image's own "
+                   "text encoder and instructions adapted from OpenMOSS' official prompt enhancer. Outputs the encoded conditionings for the "
+                   "sampler and the text.")
 
     def enhance(self, clip, idea, mode, width, height, temperature, seed, max_tokens, image=None, negative=""):
+        width, height = snap16(width), snap16(height)
+        negative = negative or ""
+        neg_text = negative.strip() or DEFAULT_NEGATIVE
+        if mode == "as written":
+            if not idea.strip():
+                raise ValueError("MOSS Prompt Enhancer: as written needs an idea to encode")
+            prompt = idea
+            info = format_info("HaDeS MOSS Prompt Enhancer | as written (no generation)" + (" | image ignored" if image is not None else ""),
+                               "prompt_enhancer", mode=mode, width=width, height=height, image=False, decode_fallback=False, notes=[])
+            return {"ui": {"text": [prompt]}, "result": (encode(clip, prompt), encode(clip, neg_text), prompt,
+                                                         json.dumps({"caption": prompt}, ensure_ascii=False), width, height, info)}
         if not idea.strip() and image is None:
             raise ValueError("MOSS Prompt Enhancer: write an idea, connect an image, or both")
         if not hasattr(clip, "generate"):
             raise ValueError("MOSS Prompt Enhancer: this CLIP cannot generate text; use MOSS-Image's text encoder (type moss_image)")
-        width, height = snap16(width), snap16(height)
         images = [fit_image(image)] if image is not None else []
-        text = chat(instructions(mode, bool(images)), user_message(idea, mode, width, height, negative or ""), len(images))
+        text = chat(instructions(mode, bool(images)), user_message(idea, mode, width, height, negative), len(images))
         tokens = clip.tokenize(text, images=images) if images else clip.tokenize(text)
         with decode_fallback() as state:
             ids = clip.generate(tokens, do_sample=temperature > 0, max_length=max_tokens, temperature=max(temperature, 0.01),
@@ -260,7 +285,7 @@ class HaDeSMossPromptEnhancer:
                            + (" | image" if images else "") + f" | {len(prompt)} chars"
                            + (" | torch decode fallback" if fallback else "") + "".join(f"\nnote: {n}" for n in notes),
                            "prompt_enhancer", mode=mode, width=width, height=height, image=bool(images), decode_fallback=fallback, notes=notes)
-        return {"ui": {"text": [prompt]}, "result": (prompt, draft, width, height, info)}
+        return {"ui": {"text": [prompt]}, "result": (encode(clip, prompt), encode(clip, neg_text), prompt, draft, width, height, info)}
 
 
 NODE_CLASS_MAPPINGS = {"HaDeSMossPromptEnhancer": HaDeSMossPromptEnhancer}

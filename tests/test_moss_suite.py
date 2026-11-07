@@ -428,7 +428,8 @@ class FakeClip:
         self.answer, self.seen = answer, None
 
     def tokenize(self, text, images=None):
-        self.seen = (text, images)
+        if text.startswith("<|im_start|>"):  # the chat sent to generate(); later calls encode the conditionings
+            self.seen = (text, images)
         return {"text": text}
 
     def generate(self, tokens, **kwargs):
@@ -437,6 +438,9 @@ class FakeClip:
 
     def decode(self, ids):
         return self.answer
+
+    def encode_from_tokens_scheduled(self, tokens):
+        return [["cond", tokens["text"]]]
 
 
 class TestPromptEnhancer(unittest.TestCase):
@@ -452,7 +456,7 @@ class TestPromptEnhancer(unittest.TestCase):
                   '{"label": "thing", "caption": "A sun.", "bbox_2d": [300, 300, 200, 400]}]}\n```')
         node = enhancer.HaDeSMossPromptEnhancer()
         clip = FakeClip(answer)
-        prompt, draft, w, h, info = node.enhance(clip, "a poster", "layout", 1024, 768, 0.0, 1, 512)["result"]
+        pos, neg, prompt, draft, w, h, info = node.enhance(clip, "a poster", "layout", 1024, 768, 0.0, 1, 512)["result"]
         d = json.loads(draft)
         self.assertEqual((w, h, d["width"], d["height"]), (1024, 768, 1024, 768))
         self.assertEqual([it["bbox"] for it in d["items"]], [[100, 0, 1024, 201], [200, 300, 300, 400]])
@@ -462,11 +466,14 @@ class TestPromptEnhancer(unittest.TestCase):
         self.assertIn("left out", info)
         self.assertIn("Canvas: width 1024, height 768.", clip.seen[0])
         self.assertFalse(clip.kwargs["do_sample"])  # temperature 0 is greedy
+        self.assertEqual(pos, [["cond", prompt]])
+        self.assertEqual(neg, [["cond", enhancer.DEFAULT_NEGATIVE]])
 
     def test_caption_mode_and_image_tokens(self):
         clip = FakeClip('{"caption": "An old fisherman mending nets at dawn."}')
         image = torch.rand(2, 1500, 1000, 3)
-        prompt, draft, *_ = enhancer.HaDeSMossPromptEnhancer().enhance(clip, "", "caption", 1024, 1024, 0.7, 5, 256, image=image)["result"]
+        pos, neg, prompt, draft, *_ = enhancer.HaDeSMossPromptEnhancer().enhance(clip, "", "caption", 1024, 1024, 0.7, 5, 256, image=image,
+                                                                                 negative="blurry")["result"]
         self.assertEqual(prompt, "An old fisherman mending nets at dawn.")
         self.assertEqual(json.loads(draft), {"caption": prompt})
         text, images = clip.seen
@@ -474,6 +481,15 @@ class TestPromptEnhancer(unittest.TestCase):
         self.assertEqual(len(images), 1)
         self.assertLessEqual(images[0].shape[1] * images[0].shape[2], 1024 * 1024)
         self.assertEqual(images[0].shape[0], 1)
+        self.assertEqual(neg, [["cond", "blurry"]])
+        self.assertIn("Keep out of the image:\nblurry", text)
+
+    def test_as_written_is_a_plain_prompt_box(self):
+        clip = FakeClip("must not be used")
+        pos, neg, prompt, draft, w, h, info = enhancer.HaDeSMossPromptEnhancer().enhance(clip, "a red fox", "as written", 1010, 1024, 0.7, 0, 256)["result"]
+        self.assertEqual((pos, neg, prompt), ([["cond", "a red fox"]], [["cond", enhancer.DEFAULT_NEGATIVE]], "a red fox"))
+        self.assertEqual((w, h), (1008, 1024))
+        self.assertFalse(hasattr(clip, "kwargs"))  # nothing generated
 
     def test_needs_idea_or_image(self):
         with self.assertRaisesRegex(ValueError, "idea"):
