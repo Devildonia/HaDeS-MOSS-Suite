@@ -82,12 +82,12 @@ EXAMPLES = {
                       "soft window light from the left, shallow depth of field, 85mm lens, muted colors."),
         "latent": latent(),
         "ks": ksampler(("merge", 0), ("latent", 0), seed=("latent", 4)),
-        "save": ("SaveImage", {"images": ("ks", 1), "filename_prefix": "HaDeS_MOSS_merge"}),
+        "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_merge_%seed%", "hashes": True, "embed_workflow": True}),
         "saver": ("HaDeSMossModelSaver", {"model": ("merge", 0), "filename_prefix": "diffusion_models/MOSS_HaDeS_Merged", "precision": "bfloat16",
                                           "include_metadata": True, "custom_author": "HaDeS", "custom_model_title": "", "rounding": "stochastic"}, MUTED),
         "multi": ("HaDeSMossMultiModelMerger", {"model_1": ("load", 0), "model_2": ("base", 0), "method": "SLERP", "density": 0.5, "scale": 1.0, "seed": 0,
                                                 "weight_1": 1.0, "weight_2": 1.0}, MUTED),
-        **telemetry(("load", 3), ("merge", 1), ("latent", 3), ("ks", 2)),
+        **telemetry(("load", 3), ("enh", 6), ("merge", 1), ("latent", 3), ("ks", 2)),
     },
     "HaDeS MOSS Suite - Prompt Enhancer": {
         **loader(),
@@ -97,7 +97,7 @@ EXAMPLES = {
         "img": ("LoadImage", {"image": "example.png", "upload": "image"}, MUTED),
         "latent": latent(),
         "ks": ksampler(("load", 0), ("latent", 0), seed=("latent", 4)),
-        "save": ("SaveImage", {"images": ("ks", 1), "filename_prefix": "HaDeS_MOSS_enhancer"}),
+        "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_enhancer_%seed%", "hashes": True, "embed_workflow": True}),
         "text": ("PreviewAny", {"source": ("enh", 2)}),
         **telemetry(("load", 3), ("enh", 6), ("latent", 3), ("ks", 2)),
         "note": ("Note", {"text": "HaDeS MOSS Suite - Prompt Enhancer\n\n"
@@ -120,8 +120,8 @@ EXAMPLES = {
         "layout": ("HaDeSMossLayoutCompiler", {"draft": None, "batch_size": 1}),  # None = the node's own default draft
         "enh": prompt(("layout", 0)),
         "ks": ksampler(("load", 0), ("layout", 1)),
-        "save": ("SaveImage", {"images": ("ks", 1), "filename_prefix": "HaDeS_MOSS_layout"}),
-        **telemetry(("load", 3), ("layout", 4), ("ks", 2)),
+        "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_layout_%seed%", "hashes": True, "embed_workflow": True}),
+        **telemetry(("load", 3), ("enh", 6), ("layout", 4), ("ks", 2)),
     },
     "HaDeS MOSS Suite - Layout Editor": {
         **loader(),
@@ -136,8 +136,8 @@ EXAMPLES = {
         "layout": ("HaDeSMossLayoutCompiler", {"draft": ("editor", 0), "batch_size": 1}),
         "enh": prompt(("layout", 0)),
         "ks": ksampler(("load", 0), ("layout", 1)),
-        "save": ("SaveImage", {"images": ("ks", 1), "filename_prefix": "HaDeS_MOSS_layout_editor"}),
-        **telemetry(("load", 3), ("editor", 3), ("layout", 4), ("ks", 2)),
+        "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_layout_editor_%seed%", "hashes": True, "embed_workflow": True}),
+        **telemetry(("load", 3), ("enh", 6), ("editor", 3), ("layout", 4), ("ks", 2)),
         "note": ("Note", {"text": "HaDeS MOSS Suite - Layout Editor\n\n"
                                   "Layout Editor: the boxes of the layout draft on a canvas of its size.\n"
                                   "  - pick OBJECT / CHARACTER / TEXT in the toolbar, then drag on an empty part of the canvas to draw a box\n"
@@ -166,8 +166,8 @@ EXAMPLES = {
                       "in large white letters and \"open 7am - 3pm\" in smaller letters below, morning light."),
         "latent": latent(),
         "ks": with_turbo(ksampler(("load", 0), ("latent", 0), seed=("latent", 4))),
-        "save": ("SaveImage", {"images": ("ks", 1), "filename_prefix": "HaDeS_MOSS_turbo"}),
-        **telemetry(("load", 3), ("latent", 3), ("ks", 2)),
+        "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_turbo_%seed%", "hashes": True, "embed_workflow": True}),
+        **telemetry(("load", 3), ("enh", 6), ("latent", 3), ("ks", 2)),
     },
     "HaDeS MOSS Suite - Turbo 8 steps + Upscale x2": {
         # 1. generate: Turbo 8-steps v0.7 at 8 steps (blind pairs and colour in tools/RESULTS.md, "At 8 steps")
@@ -176,7 +176,7 @@ EXAMPLES = {
         "latent": latent(),
         "turbo": ("HaDeSMossTurbo", {"lora_name": TURBO_8STEPS, "strength": 1.0, "steps": 8}),
         "ks": with_turbo(ksampler(("load", 0), ("latent", 0), seed=("latent", 4))),
-        "save": ("SaveImage", {"images": ("ks", 1), "filename_prefix": "HaDeS_MOSS_1024"}),
+        "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_1024_%seed%", "hashes": True, "embed_workflow": True}),
         # 2. upscale x2 with a model: pixels only, nothing redrawn (about 1.5 s at 2048)
         "upmodel": ("UpscaleModelLoader", {"model_name": UPSCALER}),
         "up": ("ImageUpscaleWithModel", {"upscale_model": ("upmodel", 0), "image": ("ks", 1)}),
@@ -186,7 +186,7 @@ EXAMPLES = {
         "enc": ("VAEEncode", {"pixels": ("up", 0), "vae": ("load", 2)}, MUTED),
         "ks2": (lambda k: (k[0], k[1], MUTED))(with_turbo(ksampler(("load", 0), ("enc", 0), seed=("latent", 4)), denoise=0.25)),
         "save_ref": ("SaveImage", {"images": ("ks2", 1), "filename_prefix": "HaDeS_MOSS_x2_refined"}, MUTED),
-        **telemetry(("load", 3), ("latent", 3), ("ks", 2)),
+        **telemetry(("load", 3), ("enh", 6), ("latent", 3), ("ks", 2)),
         "note": ("Note", {"text": "HaDeS MOSS Suite - Turbo 8 steps + Upscale x2\n\n"
                                   "1. Generate (always on): MOSS-Image SFT with HaDeS Turbo 8-steps v0.7, 8 steps, CFG 1, up to 1024 px.\n"
                                   "   Without the turbo: unplug the turbo input of the MOSS KSampler (25 steps, CFG 2.5).\n"
@@ -217,14 +217,14 @@ EXAMPLES = {
         "enh": prompt("Watercolor illustration of a fox reading a book under a mushroom in a rainy forest, soft pastel palette, visible paper texture."),
         "latent": latent(),
         "ks": ksampler(("loras", 0), ("latent", 0), seed=("latent", 4)),
-        "save": ("SaveImage", {"images": ("ks", 1), "filename_prefix": "HaDeS_MOSS_lora"}),
+        "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_lora_%seed%", "hashes": True, "embed_workflow": True}),
         "lmerge": ("HaDeSMossLoraMerger", {"model": ("load", 0), "lora_a": LORA, "weight_a": 1.0, "lora_b": LORA, "weight_b": 1.0, "rank": 64,
                                            "export_filename": "HaDeS_MOSS_Merged_LoRA", "dynamic_energy": 0.0, "overwrite_existing": False}, MUTED),
         "resize": ("HaDeSMossLoraResize", {"model": ("load", 0), "lora_name": LORA, "target_rank": 32, "export_filename": "HaDeS_MOSS_Resized_LoRA",
                                            "dynamic_energy": 0.0, "overwrite_existing": False}, MUTED),
         "extract": ("HaDeSMossLoraExtractor", {"model_tuned": ("tuned", 0), "model_base": ("load", 0), "rank": 32,
                                                "export_filename": "HaDeS_MOSS_Extracted_LoRA", "overwrite_existing": False}, MUTED),
-        **telemetry(("load", 3), ("loras", 1), ("latent", 3), ("ks", 2)),
+        **telemetry(("load", 3), ("enh", 6), ("loras", 1), ("latent", 3), ("ks", 2)),
     },
 }
 

@@ -2,7 +2,7 @@
  "id": "359459ae-f9ce-5462-b264-f9932b522b31",
  "revision": 0,
  "last_node_id": 12,
- "last_link_id": 18,
+ "last_link_id": 20,
  "nodes": [
   {
    "id": 1,
@@ -52,9 +52,9 @@
      "type": "MODEL",
      "links": [
       1,
-      10,
       11,
-      13
+      12,
+      14
      ]
     },
     {
@@ -75,7 +75,7 @@
      "name": "info",
      "type": "STRING",
      "links": [
-      14
+      15
      ]
     }
    ]
@@ -107,7 +107,7 @@
      "name": "MODEL",
      "type": "MODEL",
      "links": [
-      12
+      13
      ]
     }
    ]
@@ -152,7 +152,7 @@
      "name": "info",
      "type": "STRING",
      "links": [
-      15
+      17
      ]
     }
    ]
@@ -236,7 +236,9 @@
     {
      "name": "info",
      "type": "STRING",
-     "links": []
+     "links": [
+      16
+     ]
     }
    ]
   },
@@ -296,7 +298,7 @@
      "name": "info",
      "type": "STRING",
      "links": [
-      16
+      18
      ]
     },
     {
@@ -395,16 +397,16 @@
      "name": "info",
      "type": "STRING",
      "links": [
-      17
+      19
      ]
     }
    ]
   },
   {
    "id": 7,
-   "type": "SaveImage",
+   "type": "HaDeSMossImageSaver",
    "pos": [
-    1500,
+    2000,
     0
    ],
    "size": [
@@ -412,25 +414,44 @@
     100
    ],
    "flags": {},
-   "order": 9,
+   "order": 10,
    "mode": 0,
    "inputs": [
     {
      "name": "images",
      "type": "IMAGE",
      "link": 9
+    },
+    {
+     "name": "metadata",
+     "type": "STRING",
+     "link": 10
+    },
+    {
+     "name": "positive",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "negative",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
     }
    ],
    "widgets_values": [
-    "HaDeS_MOSS_lora"
+    "MOSS/HaDeS_MOSS_lora_%seed%",
+    true,
+    true
    ],
    "properties": {
-    "Node name for S&R": "SaveImage"
+    "Node name for S&R": "HaDeSMossImageSaver"
    },
    "outputs": [
     {
-     "name": "images",
-     "type": "IMAGE",
+     "name": "parameters",
+     "type": "STRING",
      "links": []
     }
    ]
@@ -453,7 +474,7 @@
     {
      "name": "model",
      "type": "MODEL",
-     "link": 10
+     "link": 11
     }
    ],
    "widgets_values": [
@@ -500,7 +521,7 @@
     {
      "name": "model",
      "type": "MODEL",
-     "link": 11
+     "link": 12
     }
    ],
    "widgets_values": [
@@ -544,12 +565,12 @@
     {
      "name": "model_tuned",
      "type": "MODEL",
-     "link": 12
+     "link": 13
     },
     {
      "name": "model_base",
      "type": "MODEL",
-     "link": 13
+     "link": 14
     }
    ],
    "widgets_values": [
@@ -578,44 +599,44 @@
    "type": "HaDeSMossSuiteTelemetry",
    "pos": [
     1500,
-    250
+    0
    ],
    "size": [
     380,
     100
    ],
    "flags": {},
-   "order": 10,
+   "order": 9,
    "mode": 0,
    "inputs": [
     {
      "name": "info_1",
      "type": "STRING",
-     "link": 14,
+     "link": 15,
      "shape": 7
     },
     {
      "name": "info_2",
      "type": "STRING",
-     "link": 15,
+     "link": 16,
      "shape": 7
     },
     {
      "name": "info_3",
      "type": "STRING",
-     "link": 16,
+     "link": 17,
      "shape": 7
     },
     {
      "name": "info_4",
      "type": "STRING",
-     "link": 17,
+     "link": 18,
      "shape": 7
     },
     {
      "name": "info_5",
      "type": "STRING",
-     "link": null,
+     "link": 19,
      "shape": 7
     },
     {
@@ -648,13 +669,15 @@
      "name": "report",
      "type": "STRING",
      "links": [
-      18
+      20
      ]
     },
     {
      "name": "json",
      "type": "STRING",
-     "links": []
+     "links": [
+      10
+     ]
     },
     {
      "name": "summary",
@@ -668,7 +691,7 @@
    "type": "PreviewAny",
    "pos": [
     2000,
-    0
+    400
    ],
    "size": [
     380,
@@ -681,7 +704,7 @@
     {
      "name": "source",
      "type": "*",
-     "link": 18
+     "link": 20
     }
    ],
    "widgets_values": [],
@@ -772,6 +795,14 @@
   ],
   [
    10,
+   11,
+   1,
+   7,
+   1,
+   "STRING"
+  ],
+  [
+   11,
    1,
    0,
    8,
@@ -779,7 +810,7 @@
    "MODEL"
   ],
   [
-   11,
+   12,
    1,
    0,
    9,
@@ -787,55 +818,63 @@
    "MODEL"
   ],
   [
-   12,
+   13,
    2,
    0,
    10,
    0,
-   "MODEL"
-  ],
-  [
-   13,
-   1,
-   0,
-   10,
-   1,
    "MODEL"
   ],
   [
    14,
    1,
+   0,
+   10,
+   1,
+   "MODEL"
+  ],
+  [
+   15,
+   1,
    3,
    11,
    0,
    "STRING"
   ],
   [
-   15,
-   3,
-   1,
-   11,
-   1,
-   "STRING"
-  ],
-  [
    16,
-   5,
-   3,
+   4,
+   6,
    11,
-   2,
+   1,
    "STRING"
   ],
   [
    17,
-   6,
+   3,
+   1,
+   11,
    2,
+   "STRING"
+  ],
+  [
+   18,
+   5,
+   3,
    11,
    3,
    "STRING"
   ],
   [
-   18,
+   19,
+   6,
+   2,
+   11,
+   4,
+   "STRING"
+  ],
+  [
+   20,
    11,
    0,
    12,

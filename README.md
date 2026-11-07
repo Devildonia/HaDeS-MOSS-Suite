@@ -158,7 +158,14 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
   - **error:** with a layout in the pipeline (Layout Editor, Layout Compiler or the Prompt Enhancer in `layout` mode), a latent or KSampler on another canvas (a layout prompt places its boxes on its own canvas); without a layout, different latent and KSampler sizes (img2img, an upscale pass) are not compared;
   - **warning:** quantized models in a merge, TIES / DARE with a quantized model, LoRAs extracted / resized / merged below 97.9% energy (the lowest measured that stayed within the noise floor), a few-step LoRA in Multi-LoRA sampled at other steps or CFG than its file's metadata gives, or stacked with the KSampler's turbo input;
   - **note:** an int8 model from the MOSS Loader (with its measured speed and VRAM) or one loaded with a `weight_dtype` conversion, KSampler size outside 768²–2048², shift other than 5.0, SLG on, turbo LoRA at a strength other than 1.0, at a step count other than 4 or 8 or at denoise below 1.0, fp16-fixed residual scale normalized, multi-line layout text with its box proportions.
-- **Outputs:** `report` (Markdown), `json`, `summary` (one line).
+- **Outputs:** `report` (Markdown), `json` (every node's settings, for the MOSS Image Saver), `summary` (one line).
+
+### `MOSS Image Saver` (`HaDeS/MOSS Pipeline`)
+- **Class:** `HaDeSMossImageSaver`
+- **Purpose:** saves PNG images with the generation settings written as A1111 `parameters`, the text Civitai and most image browsers read: prompt, `Negative prompt:` and one line with steps, sampler, schedule type, CFG, seed, size, model and model hash, LoRA hashes, denoise (below 1.0), shift, VAE and text encoder. Also ComfyUI's own `prompt` / `workflow` chunks, so the image loads back into ComfyUI, and the Suite's settings as JSON (`hades_moss`).
+- **Inputs:** `images`, `metadata` (Suite Telemetry's `json` output, which gathers the Loader, Latent, KSampler, Multi-LoRA and Prompt Enhancer infos; one info output connected directly also works), `filename_prefix` (`%seed%`, `%model%`, `%steps%`, `%cfg%`, `%sampler%`, `%width%`, `%height%` from the metadata, `%date:...%` as in the core Save Image), `hashes`, `embed_workflow`; optional `positive` / `negative` text when the prompt does not come from a Prompt Enhancer.
+- **Hashes:** SHA256 of the model (from the MOSS Loader) and of every LoRA (Multi-LoRA rows, LoRA Block Weight, the KSampler's turbo input), first 10 characters (AutoV2), in `Model hash`, `Lora hashes` and `Hashes`. The first save with a 10 GB model reads the whole file once; later saves in the same session reuse the hash while the file is unchanged. Nothing is looked up online. How Civitai reads these fields was not checked from here.
+- **Outputs:** `parameters` (the text written into the images). The node shows the saved images like the core Save Image, and a note when the prompt or the sampling settings are missing from the metadata.
 
 ## Interface
 
@@ -175,7 +182,7 @@ The nodes draw their own moss-green rows on the canvas (the HaDeS Anima Suite wi
 
 In [`examples/`](examples) (drag a file into ComfyUI). They use the official Comfy-Org file names and carry their download links, so ComfyUI offers to download missing models.
 
-Every example loads the three files with the **MOSS Loader**, writes and encodes the prompts with the **Prompt Enhancer** (`as written`, the plain text encoder, unless said otherwise), shares the **MOSS Latent**'s seed with its samplers and ends in a **Suite Telemetry** report that reads the loader too.
+Every example loads the three files with the **MOSS Loader**, writes and encodes the prompts with the **Prompt Enhancer** (`as written`, the plain text encoder, unless said otherwise), shares the **MOSS Latent**'s seed with its samplers, ends in a **Suite Telemetry** report that reads the loader and the enhancer too, and saves through the **MOSS Image Saver** with A1111 metadata.
 
 - **Merge, Save and Telemetry:** SFT with layers 24–35 from Base through the Block Merger, MOSS Latent and MOSS KSampler, telemetry report. Model Saver and a SLERP Multi-Model Merger come muted, ready to switch on.
 - **Prompt Enhancer:** a short idea written into a detailed prompt (`caption` mode) and encoded, with a text preview of what was written; the latent's seed drives both the writing and the sampler, so one seed reproduces the whole image. A Load Image comes muted, to have the prompt written from a picture. A note explains the modes.

@@ -7,6 +7,10 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **MOSS Image Saver:** PNG images with the generation settings as A1111 `parameters` (prompt, negative prompt, steps, sampler, CFG, seed, size, model and LoRAs with SHA256 hashes, cached per session) read from Suite Telemetry's `json`, plus ComfyUI's workflow; filename tokens `%seed%`, `%model%` and others. The MOSS Loader's info now carries the model and text encoder file names, and the Prompt Enhancer's its prompt and negative text, for it; Telemetry's report leaves those out.
+- **Example workflows:** saved through the MOSS Image Saver, with the Prompt Enhancer's info in Telemetry.
+
 ## [0.4.0] - 2026-11-07
 
 New nodes MOSS Loader, Multi-LoRA, Layout Editor and Prompt Enhancer, a shared seed on MOSS Latent, stochastic rounding in the Model Saver, example workflows rebuilt on the Suite's own nodes, and the fixes of the pre-release audit (`docs/AUDIT_0.4.0.md`).

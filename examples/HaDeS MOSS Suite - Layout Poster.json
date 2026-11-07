@@ -2,7 +2,7 @@
  "id": "1ecf92f1-8a24-54a9-a40d-c6982500d0c8",
  "revision": 0,
  "last_node_id": 7,
- "last_link_id": 12,
+ "last_link_id": 14,
  "nodes": [
   {
    "id": 1,
@@ -72,7 +72,7 @@
      "name": "info",
      "type": "STRING",
      "links": [
-      9
+      10
      ]
     }
    ]
@@ -128,7 +128,7 @@
      "name": "info",
      "type": "STRING",
      "links": [
-      10
+      12
      ]
     }
    ]
@@ -220,7 +220,9 @@
     {
      "name": "info",
      "type": "STRING",
-     "links": []
+     "links": [
+      11
+     ]
     }
    ]
   },
@@ -303,14 +305,68 @@
      "name": "info",
      "type": "STRING",
      "links": [
-      11
+      13
      ]
     }
    ]
   },
   {
    "id": 5,
-   "type": "SaveImage",
+   "type": "HaDeSMossImageSaver",
+   "pos": [
+    2000,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 5,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "images",
+     "type": "IMAGE",
+     "link": 8
+    },
+    {
+     "name": "metadata",
+     "type": "STRING",
+     "link": 9
+    },
+    {
+     "name": "positive",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "negative",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "MOSS/HaDeS_MOSS_layout_%seed%",
+    true,
+    true
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossImageSaver"
+   },
+   "outputs": [
+    {
+     "name": "parameters",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "type": "HaDeSMossSuiteTelemetry",
    "pos": [
     1500,
     0
@@ -324,62 +380,27 @@
    "mode": 0,
    "inputs": [
     {
-     "name": "images",
-     "type": "IMAGE",
-     "link": 8
-    }
-   ],
-   "widgets_values": [
-    "HaDeS_MOSS_layout"
-   ],
-   "properties": {
-    "Node name for S&R": "SaveImage"
-   },
-   "outputs": [
-    {
-     "name": "images",
-     "type": "IMAGE",
-     "links": []
-    }
-   ]
-  },
-  {
-   "id": 6,
-   "type": "HaDeSMossSuiteTelemetry",
-   "pos": [
-    1500,
-    250
-   ],
-   "size": [
-    380,
-    100
-   ],
-   "flags": {},
-   "order": 5,
-   "mode": 0,
-   "inputs": [
-    {
      "name": "info_1",
-     "type": "STRING",
-     "link": 9,
-     "shape": 7
-    },
-    {
-     "name": "info_2",
      "type": "STRING",
      "link": 10,
      "shape": 7
     },
     {
-     "name": "info_3",
+     "name": "info_2",
      "type": "STRING",
      "link": 11,
      "shape": 7
     },
     {
+     "name": "info_3",
+     "type": "STRING",
+     "link": 12,
+     "shape": 7
+    },
+    {
      "name": "info_4",
      "type": "STRING",
-     "link": null,
+     "link": 13,
      "shape": 7
     },
     {
@@ -418,13 +439,15 @@
      "name": "report",
      "type": "STRING",
      "links": [
-      12
+      14
      ]
     },
     {
      "name": "json",
      "type": "STRING",
-     "links": []
+     "links": [
+      9
+     ]
     },
     {
      "name": "summary",
@@ -438,7 +461,7 @@
    "type": "PreviewAny",
    "pos": [
     2000,
-    0
+    400
    ],
    "size": [
     380,
@@ -451,7 +474,7 @@
     {
      "name": "source",
      "type": "*",
-     "link": 12
+     "link": 14
     }
    ],
    "widgets_values": [],
@@ -534,6 +557,14 @@
   ],
   [
    9,
+   6,
+   1,
+   5,
+   1,
+   "STRING"
+  ],
+  [
+   10,
    1,
    3,
    6,
@@ -541,23 +572,31 @@
    "STRING"
   ],
   [
-   10,
-   2,
-   4,
+   11,
+   3,
+   6,
    6,
    1,
    "STRING"
   ],
   [
-   11,
-   4,
+   12,
    2,
+   4,
    6,
    2,
    "STRING"
   ],
   [
-   12,
+   13,
+   4,
+   2,
+   6,
+   3,
+   "STRING"
+  ],
+  [
+   14,
    6,
    0,
    7,

@@ -122,7 +122,9 @@ class HaDeSMossSuiteTelemetry:
             lines += ["## Findings", ""] + [f"- **{lvl.upper()}** {msg}" for lvl, msg in findings]
         else:
             lines.append("No findings: the connected nodes are consistent with what was measured.")
-        lines += ["", "## Settings", ""] + [f"- {NODE_NAMES[m['node']]}: " + ", ".join(f"{k}={v}" for k, v in m.items() if k != "node") for m in metas]
+        # the prompt texts (Prompt Enhancer) and file paths (Loader) ride in the json output for the MOSS Image Saver; the report stays short
+        hidden = {"node", "prompt", "negative", "model_file", "text_encoder_file"}
+        lines += ["", "## Settings", ""] + [f"- {NODE_NAMES[m['node']]}: " + ", ".join(f"{k}={v}" for k, v in m.items() if k not in hidden) for m in metas]
         summary = (f"{len(metas)} nodes | {counts['error']} errors, {counts['warning']} warnings, {counts['note']} notes"
                    + (f" | {findings[0][1][:80]}" if findings else ""))
         data = json.dumps({"nodes": metas, "findings": [{"level": l, "message": m} for l, m in findings]}, ensure_ascii=False, indent=1)

@@ -452,6 +452,39 @@ class TestSaverAndSampler(unittest.TestCase):
         self.assertEqual((seen["steps"], common.parse_info_meta(info)["steps"]), (6, 6))
 
 
+class TestImageSaver(unittest.TestCase):
+    def test_png_carries_a1111_parameters_and_hashes(self):
+        from PIL import Image
+        isaver = importlib.import_module(f"{PACK}.moss_image_saver_nodes")
+        f = common.format_info
+        safetensors.torch.save_file({"x": torch.ones(3)}, os.path.join(TMP, "style.safetensors"))
+        lora_hash = isaver.file_sha256(os.path.join(TMP, "style.safetensors"))[:10]
+        infos = [f("x", "prompt_enhancer", mode="caption", width=1024, height=1024, image=False, decode_fallback=False, notes=[],
+                   prompt="A red fox in snow.", negative="blurry"),
+                 f("x", "latent", width=1024, height=1024, batch=1, seed=7),
+                 f("x", "multi_lora", enabled=True, loras=[{"name": "style.safetensors", "strength": 0.8, "weights": 12}], turbo=[]),
+                 f("x", "ksampler", width=1024, height=1024, steps=25, cfg=2.5, flow_shift=5.0, sampler="er_sde", scheduler="simple",
+                   seed=7, denoise=1.0, slg="off")]
+        tel = telemetry.HaDeSMossSuiteTelemetry().audit("T", **{f"info_{i + 1}": s for i, s in enumerate(infos)})["result"][1]
+        out = isaver.HaDeSMossImageSaver().save(torch.rand(2, 64, 64, 3), tel, "tests/img_%seed%", True, True,
+                                                prompt={"1": {}}, extra_pnginfo={"workflow": {"nodes": []}})
+        params = out["result"][0]
+        self.assertTrue(params.startswith("A red fox in snow.\nNegative prompt: blurry\nSteps: 25, Sampler: er_sde, Schedule type: simple, "
+                                          "CFG scale: 2.5, Seed: 7, Size: 1024x1024"), params)
+        self.assertIn(f'Lora hashes: "style: {lora_hash}"', params)
+        self.assertIn(f'"lora:style": "{lora_hash}"', params)
+        self.assertEqual(len(out["ui"]["images"]), 2)
+        first = out["ui"]["images"][0]
+        self.assertTrue(first["filename"].startswith("img_7_"))
+        png = Image.open(os.path.join(folder_paths.get_output_directory(), first["subfolder"], first["filename"]))
+        self.assertEqual(png.text["parameters"], params)
+        self.assertEqual(json.loads(png.text["workflow"]), {"nodes": []})
+        # one info connected directly instead of Telemetry
+        self.assertIn("Seed: 7", isaver.HaDeSMossImageSaver().save(torch.rand(1, 64, 64, 3), infos[3], "tests/img", False, False)["result"][0])
+        with self.assertRaisesRegex(ValueError, "connect Suite Telemetry"):
+            isaver.HaDeSMossImageSaver().save(torch.rand(1, 64, 64, 3), "not metadata", "tests/img", False, False)
+
+
 class TestCanvasCheck(unittest.TestCase):
     def test_sizes_compared_only_with_a_layout(self):
         f = common.format_info

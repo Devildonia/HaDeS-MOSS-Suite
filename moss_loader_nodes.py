@@ -86,7 +86,8 @@ class HaDeSMossLoader:
                  f"  model: {unet_name}" + (f" (loaded as {weight_dtype})" if weight_dtype != "default" else ""),
                  f"  text encoder: {clip_name}" + (" (cpu)" if clip_device == "cpu" else ""),
                  f"  vae: {vae_name}"]
-        meta = {"model": os.path.basename(unet_name), "precision": precision, "weight_dtype": weight_dtype, "attention": attention,
+        # model_file / text_encoder_file: the names as listed under models/, which the MOSS Image Saver hashes
+        meta = {"model": os.path.basename(unet_name), "model_file": unet_name, "text_encoder_file": clip_name, "precision": precision, "weight_dtype": weight_dtype, "attention": attention,
                 "layers": len(dm.layers), "text_encoder": os.path.basename(clip_name), "vae": vae_name}
         return (model, clip, vae, format_info("\n".join(lines), "loader", **meta))
 

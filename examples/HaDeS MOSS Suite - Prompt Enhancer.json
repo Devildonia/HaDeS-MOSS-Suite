@@ -2,7 +2,7 @@
  "id": "9116055d-8e26-5253-8241-89608e534509",
  "revision": 0,
  "last_node_id": 10,
- "last_link_id": 16,
+ "last_link_id": 17,
  "nodes": [
   {
    "id": 1,
@@ -72,7 +72,7 @@
      "name": "info",
      "type": "STRING",
      "links": [
-      12
+      13
      ]
     }
    ]
@@ -145,7 +145,7 @@
      "name": "prompt",
      "type": "STRING",
      "links": [
-      11
+      12
      ]
     },
     {
@@ -167,7 +167,7 @@
      "name": "info",
      "type": "STRING",
      "links": [
-      13
+      14
      ]
     }
    ]
@@ -264,7 +264,7 @@
      "name": "info",
      "type": "STRING",
      "links": [
-      14
+      15
      ]
     },
     {
@@ -364,14 +364,14 @@
      "name": "info",
      "type": "STRING",
      "links": [
-      15
+      16
      ]
     }
    ]
   },
   {
    "id": 6,
-   "type": "SaveImage",
+   "type": "HaDeSMossImageSaver",
    "pos": [
     1850,
     0
@@ -381,25 +381,44 @@
     100
    ],
    "flags": {},
-   "order": 6,
+   "order": 7,
    "mode": 0,
    "inputs": [
     {
      "name": "images",
      "type": "IMAGE",
      "link": 10
+    },
+    {
+     "name": "metadata",
+     "type": "STRING",
+     "link": 11
+    },
+    {
+     "name": "positive",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "negative",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
     }
    ],
    "widgets_values": [
-    "HaDeS_MOSS_enhancer"
+    "MOSS/HaDeS_MOSS_enhancer_%seed%",
+    true,
+    true
    ],
    "properties": {
-    "Node name for S&R": "SaveImage"
+    "Node name for S&R": "HaDeSMossImageSaver"
    },
    "outputs": [
     {
-     "name": "images",
-     "type": "IMAGE",
+     "name": "parameters",
+     "type": "STRING",
      "links": []
     }
    ]
@@ -422,7 +441,7 @@
     {
      "name": "source",
      "type": "*",
-     "link": 11
+     "link": 12
     }
    ],
    "widgets_values": [],
@@ -449,31 +468,31 @@
     100
    ],
    "flags": {},
-   "order": 7,
+   "order": 6,
    "mode": 0,
    "inputs": [
     {
      "name": "info_1",
      "type": "STRING",
-     "link": 12,
+     "link": 13,
      "shape": 7
     },
     {
      "name": "info_2",
      "type": "STRING",
-     "link": 13,
+     "link": 14,
      "shape": 7
     },
     {
      "name": "info_3",
      "type": "STRING",
-     "link": 14,
+     "link": 15,
      "shape": 7
     },
     {
      "name": "info_4",
      "type": "STRING",
-     "link": 15,
+     "link": 16,
      "shape": 7
     },
     {
@@ -512,13 +531,15 @@
      "name": "report",
      "type": "STRING",
      "links": [
-      16
+      17
      ]
     },
     {
      "name": "json",
      "type": "STRING",
-     "links": []
+     "links": [
+      11
+     ]
     },
     {
      "name": "summary",
@@ -545,7 +566,7 @@
     {
      "name": "source",
      "type": "*",
-     "link": 16
+     "link": 17
     }
    ],
    "widgets_values": [],
@@ -665,6 +686,14 @@
   ],
   [
    11,
+   8,
+   1,
+   6,
+   1,
+   "STRING"
+  ],
+  [
+   12,
    2,
    2,
    7,
@@ -672,7 +701,7 @@
    "STRING"
   ],
   [
-   12,
+   13,
    1,
    3,
    8,
@@ -680,7 +709,7 @@
    "STRING"
   ],
   [
-   13,
+   14,
    2,
    6,
    8,
@@ -688,7 +717,7 @@
    "STRING"
   ],
   [
-   14,
+   15,
    4,
    3,
    8,
@@ -696,7 +725,7 @@
    "STRING"
   ],
   [
-   15,
+   16,
    5,
    2,
    8,
@@ -704,7 +733,7 @@
    "STRING"
   ],
   [
-   16,
+   17,
    8,
    0,
    9,

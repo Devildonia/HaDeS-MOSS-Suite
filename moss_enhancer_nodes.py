@@ -256,7 +256,8 @@ class HaDeSMossPromptEnhancer:
                 raise ValueError("MOSS Prompt Enhancer: as written needs an idea to encode")
             prompt = idea
             info = format_info("HaDeS MOSS Prompt Enhancer | as written (no generation)" + (" | image ignored" if image is not None else ""),
-                               "prompt_enhancer", mode=mode, width=width, height=height, image=False, decode_fallback=False, notes=[])
+                               "prompt_enhancer", mode=mode, width=width, height=height, image=False, decode_fallback=False, notes=[],
+                               prompt=prompt, negative=neg_text)
             return {"ui": {"text": [prompt]}, "result": (encode(clip, prompt), encode(clip, neg_text), prompt,
                                                          json.dumps({"caption": prompt}, ensure_ascii=False), width, height, info)}
         if not idea.strip() and image is None:
@@ -290,7 +291,8 @@ class HaDeSMossPromptEnhancer:
         info = format_info(f"HaDeS MOSS Prompt Enhancer | {mode}" + (f" | {width}x{height}" if mode == "layout" else "")
                            + (" | image" if images else "") + f" | {len(prompt)} chars"
                            + (" | torch decode fallback" if fallback else "") + "".join(f"\nnote: {n}" for n in notes),
-                           "prompt_enhancer", mode=mode, width=width, height=height, image=bool(images), decode_fallback=fallback, notes=notes)
+                           "prompt_enhancer", mode=mode, width=width, height=height, image=bool(images), decode_fallback=fallback, notes=notes,
+                           prompt=prompt, negative=neg_text)
         return {"ui": {"text": [prompt]}, "result": (encode(clip, prompt), encode(clip, neg_text), prompt, draft, width, height, info)}
 
 
