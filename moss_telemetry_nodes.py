@@ -7,6 +7,7 @@ NODE_NAMES = {
     "model_block_merger": "Model Block Merger", "multi_model_merger": "Multi-Model Merger", "model_saver": "Model Saver",
     "lora_extractor": "LoRA Extractor", "lora_block_weight": "LoRA Block Weight", "lora_merger": "LoRA Merger", "lora_resize": "LoRA Resize",
     "latent": "Latent", "layout": "Layout Compiler", "ksampler": "KSampler", "prompt_enhancer": "Prompt Enhancer",
+    "multi_lora": "Multi-LoRA",
 }
 
 
@@ -55,6 +56,17 @@ def diagnose(metas):
                 out.append(("warning", f"{NODE_NAMES[kind]}: {m['energy_kept']:.1%} energy kept. Measured: 97.9-100% stayed within the "
                                        "noise floor of the source, 90.4-91.1% drifted visibly. Raise the rank to stay close."))
 
+    # few-step LoRAs in a Multi-LoRA against the KSampler: the settings come from each file's own metadata
+    for m in by_node.get("multi_lora", []):
+        for t in m.get("turbo", []):
+            for k in by_node.get("ksampler", []):
+                if k.get("turbo"):
+                    out.append(("warning", f"Multi-LoRA holds the few-step LoRA {t['name']} and the KSampler's turbo input adds {k['turbo']}: "
+                                           "two few-step LoRAs, never measured together."))
+                elif k["steps"] != t["steps"] or k["cfg"] != 1.0:
+                    out.append(("warning", f"Multi-LoRA: {t['name']} was trained for {t['steps']} steps at CFG 1 (file metadata); "
+                                           f"the KSampler runs {k['steps']} steps at CFG {k['cfg']:g}."))
+
     for m in by_node.get("layout", []):
         for lines, w, h in m.get("multiline", []):
             out.append(("note", f"Layout text on {lines} lines in a {w:g}x{h:g} box ({w / h:.1f}:1). Measured with two lines: a 4.3:1 box "
@@ -75,7 +87,7 @@ class HaDeSMossSuiteTelemetry:
     FUNCTION = "audit"
     OUTPUT_NODE = True
     CATEGORY = "HaDeS/MOSS Pipeline"
-    DESCRIPTION = "Reads the info outputs of HaDeS MOSS nodes and checks the pipeline against what was measured (canvas sizes, shift, SLG, quantized merges, LoRA energy, layout line breaks)."
+    DESCRIPTION = "Reads the info outputs of HaDeS MOSS nodes and checks the pipeline against what was measured (canvas sizes, shift, SLG, quantized merges, LoRA energy, few-step LoRA settings, layout line breaks)."
 
     def audit(self, report_title, **infos):
         metas, foreign = [], 0

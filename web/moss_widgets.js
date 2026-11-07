@@ -39,7 +39,7 @@ export const HADES_FONT = {
 };
 
 // Shared row furniture: flat row surface + quiet uppercase label column (+ optional data-color marker).
-function drawRowSurface(ctx, x, y, w, h, highlight = false) {
+export function drawRowSurface(ctx, x, y, w, h, highlight = false) {
     drawRoundedRect(ctx, x, y, w, h, 4);
     ctx.fillStyle = HADES_THEME.bgPanel;
     ctx.fill();
@@ -48,7 +48,7 @@ function drawRowSurface(ctx, x, y, w, h, highlight = false) {
     ctx.stroke();
 }
 
-function drawRowLabel(ctx, x, y, h, labelW, text, marker = null) {
+export function drawRowLabel(ctx, x, y, h, labelW, text, marker = null) {
     if (marker) {
         drawRoundedRect(ctx, x + 4, y + 6, 3, h - 12, 1.5);
         ctx.fillStyle = marker;

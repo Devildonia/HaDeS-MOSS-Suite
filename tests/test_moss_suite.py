@@ -264,6 +264,34 @@ class TestLoras(unittest.TestCase):
         self.assertNotIn("diffusion_model.layers.2.proj.o.weight", m.patches)
         self.assertIn("diffusion_model.layers.3.proj.o.weight", m.patches)
 
+    def test_multi_lora_matches_block_weight(self):
+        groups = {**dict.fromkeys(mergers.GROUPS, 1.0), mergers.GROUPS[2]: 0.0, mergers.GROUPS[4]: 0.5}
+        single = loras.HaDeSMossLoraBlockWeight().apply(self.model, "fused.safetensors", 0.7, 1.0, **groups)[0]
+        rows = [{"name": "fused.safetensors", "on": True, "strength": 0.7, "groups": groups},
+                {"name": "split.safetensors", "on": False, "strength": 1.0}, {"name": ""}]
+        m, info = loras.HaDeSMossMultiLora().apply(self.model, True, json.dumps(rows))
+        self.assertEqual(set(m.patches), set(single.patches))
+        for k in single.patches:
+            self.assertEqual([p[0] for p in m.patches[k]], [p[0] for p in single.patches[k]])
+        meta = common.parse_info_meta(info)
+        self.assertEqual([r["name"] for r in meta["loras"]], ["fused.safetensors"])
+        self.assertEqual(meta["loras"][0]["groups"], {mergers.GROUPS[2]: 0.0, mergers.GROUPS[4]: 0.5})
+        self.assertIs(loras.HaDeSMossMultiLora().apply(self.model, False, json.dumps(rows))[0], self.model)
+        with self.assertRaises(ValueError):
+            loras.HaDeSMossMultiLora().apply(self.model, True, "[{")
+
+    def test_multi_lora_names_few_step_files(self):
+        meta = {"settings": "4 steps, CFG 1, euler / simple, strength 1.0, shift 5"}
+        safetensors.torch.save_file(self.fused, os.path.join(TMP, "turbo.safetensors"), metadata=meta)
+        self.assertEqual(loras.few_step_settings(meta)[0], 4)
+        self.assertIsNone(loras.few_step_settings({"settings": "30 steps, CFG 4"}))
+        rows = [{"name": "turbo.safetensors", "strength": 1.0}, {"name": "fused.safetensors", "strength": 0.5}]
+        info = loras.HaDeSMossMultiLora().apply(self.model, True, json.dumps(rows))[1]
+        self.assertEqual(common.parse_info_meta(info)["turbo"], [{"name": "turbo.safetensors", "steps": 4, "strength": 1.0}])
+        sampler_info = common.format_info("x", "ksampler", width=1024, height=1024, steps=30, cfg=4.0, flow_shift=5.0, slg="off")
+        findings = json.loads(telemetry.HaDeSMossSuiteTelemetry().audit("T", info_1=info, info_2=sampler_info)["result"][1])["findings"]
+        self.assertTrue(any("trained for 4 steps" in f["message"] for f in findings))
+
     def test_merger_and_resize_files_load_in_core(self):
         merged_path = loras.HaDeSMossLoraMerger().merge(self.model, "split.safetensors", 1.0, "fused.safetensors", 1.0, 64, "merged", overwrite_existing=True)["result"][0]
         key = "diffusion_model.layers.1.proj.qkv.weight"

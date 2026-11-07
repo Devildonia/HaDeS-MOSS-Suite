@@ -57,6 +57,15 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 - **Outputs:** `MODEL`, `info` (how many LoRA weights fall in each group, e.g. 20 instead of 24 in `layers_18_23` for LoRAs trained without layer 22).
 - **Measured:** layers 30–35 carry a large share of all four community LoRAs tested, but beyond that each acts in different layers (24–35, 30–41 or 00–05 and 30–35), so the node has no style / identity presets; `tools/moss_eval.py --mode lora` measures a given LoRA. See [`tools/RESULTS.md`](tools/RESULTS.md).
 
+### `MOSS Multi-LoRA` (`HaDeS/MOSS Mergers`)
+- **Class:** `HaDeSMossMultiLora`
+- **Purpose:** stacks any number of LoRAs in one node. Each row has its own on / off, strength and, folded under the row, a weight per group of 6 layers and `other_layers` that multiplies its strength, as in LoRA Block Weight (same code). A row at 1.0 with every group at 1.0 is the stock LoRA loader.
+- **Inputs:** `model`, `enabled` (off passes the model through and keeps the list), `loras` (the list as JSON, edited by the rows: `[{name, on, strength, groups}]`).
+- **Outputs:** `MODEL`, `info` (the LoRAs applied with their strengths and changed groups).
+- **Few-step LoRAs:** a LoRA whose own file metadata gives its settings at CFG 1 (the HaDeS MOSS Turbo files: `4 steps, CFG 1, euler / simple, strength 1.0, shift 5`, `8 steps` for Turbo 8-steps) gets a STEPS tag on its row and is named in `info`; nothing is guessed from file names, so other few-step LoRAs carry no tag. Two of them stacked give a warning: each was trained alone. Suite Telemetry compares those settings with the KSampler's.
+- **Interface:** **+ ADD LORA** and a click on a row's name open a LoRA picker with a search box (words in any order, arrow keys and Enter); strength and group weights drag, take a typed value on click and go back to 1.0 on right-click; right-click on the group button resets the row's groups.
+- **No presets:** which layers a LoRA acts in differs from LoRA to LoRA (see LoRA Block Weight), so the node ships no group presets.
+
 ### `MOSS LoRA Merger` (`HaDeS/MOSS Mergers`)
 - **Class:** `HaDeSMossLoraMerger`
 - **Purpose:** merges two LoRAs into one file, `weight_a × A + weight_b × B`, compressed per layer with an exact SVD of the stacked factors (QR first, never the full matrix). Any community MOSS format in (kohya, PEFT split or fused q/k/v), the model's layout out.
@@ -130,7 +139,7 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 - **Class:** `HaDeSMossSuiteTelemetry`
 - **Purpose:** reads the `info` outputs of up to 8 HaDeS MOSS nodes (their `HADES_META` trailer) and checks the pipeline against what was measured:
   - **error:** layout, latent and KSampler on different canvas sizes (a layout prompt places its boxes on its own canvas);
-  - **warning:** quantized models in a merge, TIES / DARE with a quantized model, LoRAs extracted / resized / merged below 90% energy;
+  - **warning:** quantized models in a merge, TIES / DARE with a quantized model, LoRAs extracted / resized / merged below 90% energy, a few-step LoRA in Multi-LoRA sampled at other steps or CFG than its file's metadata gives, or stacked with the KSampler's turbo input;
   - **note:** KSampler size outside 768²–2048², shift other than 5.0, SLG on, turbo LoRA at a strength other than 1.0, at a step count other than 4 or 8 or at denoise below 1.0, fp16-fixed residual scale normalized, multi-line layout text with its box proportions.
 - **Outputs:** `report` (Markdown), `json`, `summary` (one line).
 
@@ -141,7 +150,7 @@ The nodes draw their own moss-green rows on the canvas (the HaDeS Anima Suite wi
 - every widget becomes a styled row by type (combo, slider, number, toggle, text); the layout draft keeps ComfyUI's text editor;
 - tooltips are the node's own, with the measurements behind each value;
 - **Block Merger:** a bar chart of the 42 layers and 3 parts colored by depth group, each group labeled with the share of the SFT → Base change it carries, and buttons **M1**, **50/50**, **24–35 M2** (the groups that carry most of that change) and **M2**;
-- **LoRA Block Weight:** a bar per layer group; **KSampler** and **Latent:** a status line with the settings or the final size. With the turbo input connected the KSampler's status reads TURBO and the rows it overrides (steps, cfg, sampler, scheduler, SLG) are drawn faded, still editable for when it is unplugged.
+- **LoRA Block Weight:** a bar per layer group; **Multi-LoRA:** one row per LoRA with a searchable picker and a status line (rows on, few-step LoRAs); **KSampler** and **Latent:** a status line with the settings or the final size. With the turbo input connected the KSampler's status reads TURBO and the rows it overrides (steps, cfg, sampler, scheduler, SLG) are drawn faded, still editable for when it is unplugged.
 
 *Settings → HaDeS MOSS Suite → Use standard ComfyUI widgets* (or *HaDeS MOSS Suite* in a node's right-click menu) switches to the plain widgets. It does not affect HaDeS Anima Suite nodes when both suites are installed.
 

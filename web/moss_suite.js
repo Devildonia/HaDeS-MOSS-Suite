@@ -12,6 +12,7 @@ import {
     setGlobalClassicUI,
     setWidgetValue,
 } from "./moss_widgets.js";
+import { createMultiLoraWidget, multiLoraStatus } from "./moss_multilora.js";
 
 // =============================================================================
 // HADES MOSS SUITE UI
@@ -165,6 +166,14 @@ const INSTALLERS = {
             },
         });
         styleWidgets(node, { sliders: { ...Object.fromEntries([...GROUPS, "other_layers"].map((g) => [g, [0, 2]])), strength_model: [0, 2] } });
+    },
+    HaDeSMossMultiLora(node) {
+        const list = widget(node, "loras");
+        const isEnabled = () => widget(node, "enabled")?.value !== false;
+        hideBackingWidget(list);
+        banner(node, { title: "MULTI-LORA", getStatusText: () => multiLoraStatus(node, list, isEnabled) });
+        styleWidgets(node);
+        node.addCustomWidget(createMultiLoraWidget(node, list, { groupKeys: GROUPS, groupColors: GROUP_COLORS, isEnabled }));
     },
     HaDeSMossKSampler(node) {
         // a connected turbo input overrides these in the backend: draw them faded (still editable for when it is unplugged)

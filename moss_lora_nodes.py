@@ -1,3 +1,4 @@
+import json
 import os
 import re
 
@@ -146,26 +147,124 @@ class HaDeSMossLoraBlockWeight:
     DESCRIPTION = "Applies one LoRA with a separate strength per group of 6 layers. At 1.0 everywhere it is the stock LoRA loader."
 
     def apply(self, model, lora_name, strength_model, other_layers, **groups):
-        n_layers = len(model.model.diffusion_model.layers)
         weights = [groups[g] for g in GROUPS]
         m = model.clone()
-        by_strength = {}
-        counts = dict.fromkeys(GROUPS + ["other_layers"], 0)
-        for k, patch in load_lora_patches(lora_name, model).items():
-            target = k[0] if isinstance(k, tuple) else k
-            slot = key_slot(target.removeprefix("diffusion_model."))
-            group = GROUPS[layer_group(slot, n_layers)] if isinstance(slot, int) else "other_layers"
-            counts[group] += 1
-            s = round(strength_model * (groups[group] if group in groups else other_layers), 4)
-            if s != 0.0:
-                by_strength.setdefault(s, {})[k] = patch
-        for s, patches in by_strength.items():
-            m.add_patches(patches, strength_patch=s)
+        counts = add_lora_by_group(m, model, lora_name, strength_model, groups, other_layers)
         text = (f"HaDeS MOSS LoRA Block Weight | {lora_name} | model {strength_model:+.2f} | "
                 f"{' / '.join(f'{w:.2f}' for w in weights)} | other {other_layers:.2f}\n"
                 f"LoRA weights per group: {', '.join(f'{g} {c}' for g, c in counts.items())}")
         return (m, format_info(text, "lora_block_weight", lora=lora_name, strength_model=strength_model, weights=weights,
                                other_layers=other_layers, counts=counts))
+
+
+def add_lora_by_group(m, model, lora_name, strength, groups, other_layers=1.0):
+    """Adds `lora_name` to the clone `m` at `strength` times the weight of each group of 6 layers (missing groups 1.0) and
+    other_layers outside them. Returns the number of LoRA weights per group."""
+    n_layers = len(model.model.diffusion_model.layers)
+    by_strength = {}
+    counts = dict.fromkeys(GROUPS + ["other_layers"], 0)
+    for k, patch in load_lora_patches(lora_name, model).items():
+        target = k[0] if isinstance(k, tuple) else k
+        slot = key_slot(target.removeprefix("diffusion_model."))
+        group = GROUPS[layer_group(slot, n_layers)] if isinstance(slot, int) else "other_layers"
+        counts[group] += 1
+        s = round(strength * (other_layers if group == "other_layers" else groups.get(group, 1.0)), 4)
+        if s != 0.0:
+            by_strength.setdefault(s, {})[k] = patch
+    for s, patches in by_strength.items():
+        m.add_patches(patches, strength_patch=s)
+    return counts
+
+
+def lora_metadata(lora_name):
+    """The safetensors header metadata of a LoRA file ({} when it has none or is not a safetensors file)."""
+    try:
+        with safetensors.safe_open(folder_paths.get_full_path_or_raise("loras", lora_name), "pt") as f:
+            return f.metadata() or {}
+    except Exception:
+        return {}
+
+
+_STEPS_RE = re.compile(r"^\s*(\d+)\s+steps?\b", re.IGNORECASE)
+_CFG1_RE = re.compile(r"\bCFG 1(\.0)?\b")
+
+
+def few_step_settings(meta):
+    """(steps, settings text) when the file's own metadata says it is a few-step LoRA sampled at CFG 1, as the HaDeS MOSS Turbo
+    files do ("4 steps, CFG 1, euler / simple, strength 1.0, shift 5"); None otherwise. Nothing is guessed from the file name."""
+    settings = str(meta.get("settings", ""))
+    match = _STEPS_RE.match(settings)
+    if match and _CFG1_RE.search(settings):
+        return int(match.group(1)), settings.strip()
+    return None
+
+
+def parse_lora_rows(text):
+    """The Multi-LoRA list: JSON [{name, on, strength, groups: {layers_00_05: w, ..., other_layers: w}}]; on, strength and groups optional."""
+    try:
+        rows = json.loads(text or "[]")
+    except json.JSONDecodeError as e:
+        raise ValueError(f"HaDeS MOSS Multi-LoRA: the LoRA list is not valid JSON ({e}).") from e
+    if not isinstance(rows, list):
+        raise ValueError("HaDeS MOSS Multi-LoRA: the LoRA list must be a JSON list of rows.")
+    out = []
+    for i, row in enumerate(rows, 1):
+        if not isinstance(row, dict) or not isinstance(row.get("name", ""), str):
+            raise ValueError(f"HaDeS MOSS Multi-LoRA: row {i} needs a 'name' (fields: name, on, strength, groups).")
+        if not row.get("name"):
+            continue  # a row added in the UI with no LoRA picked yet
+        groups = row.get("groups") or {}
+        if not isinstance(groups, dict):
+            raise ValueError(f"HaDeS MOSS Multi-LoRA: row {i} 'groups' must be an object of group: weight.")
+        out.append({"name": row["name"], "on": bool(row.get("on", True)), "strength": float(row.get("strength", 1.0)),
+                    "groups": {g: float(groups[g]) for g in GROUPS + ["other_layers"] if g in groups}})
+    return out
+
+
+class HaDeSMossMultiLora:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": ("MODEL",),
+                "enabled": ("BOOLEAN", {"default": True, "tooltip": "Off passes the model through untouched and keeps the list."}),
+                "loras": ("STRING", {"default": "[]", "tooltip": "The list the node's rows edit, as JSON: "
+                                                                    "[{name, on, strength, groups: {layers_00_05: 1.0, ..., other_layers: 1.0}}]."}),
+            },
+        }
+
+    RETURN_TYPES = ("MODEL", "STRING")
+    RETURN_NAMES = ("MODEL", "info")
+    FUNCTION = "apply"
+    CATEGORY = "HaDeS/MOSS Mergers"
+    DESCRIPTION = ("Stacks any number of LoRAs, each with its own on / off, strength and optional strength per group of 6 layers. "
+                   "A row at strength 1.0 with every group at 1.0 is the stock LoRA loader. Few-step LoRAs are named in info with the "
+                   "settings their file's metadata gives.")
+
+    def apply(self, model, enabled, loras):
+        rows = parse_lora_rows(loras)
+        if not enabled:
+            return (model, format_info("HaDeS MOSS Multi-LoRA | off (model passed through)", "multi_lora", enabled=False, loras=[], turbo=[]))
+        active = [r for r in rows if r["on"] and r["strength"] != 0.0]
+        m = model.clone()
+        lines, turbo, applied = [f"HaDeS MOSS Multi-LoRA | {len(active)} of {len(rows)} on"], [], []
+        for r in active:
+            groups = r["groups"]
+            add_lora_by_group(m, model, r["name"], r["strength"], groups, groups.get("other_layers", 1.0))
+            custom = {g: w for g, w in groups.items() if w != 1.0}
+            lines.append(f"  {r['strength']:+.2f}  {r['name']}"
+                         + (f"  (groups: {', '.join(f'{g} {w:.2f}' for g, w in custom.items())})" if custom else ""))
+            applied.append({"name": r["name"], "strength": r["strength"], **({"groups": custom} if custom else {})})
+            few = few_step_settings(lora_metadata(r["name"]))
+            if few is not None:
+                turbo.append({"name": r["name"], "steps": few[0], "strength": r["strength"]})
+                lines.append(f"      few-step LoRA, file metadata: {few[1]}")
+        if len(turbo) > 1:
+            lines.append(f"WARNING: {len(turbo)} few-step LoRAs stacked; each was trained alone and they were not measured together.")
+        for t in turbo:
+            if t["strength"] != 1.0:
+                lines.append(f"Note: {t['name']} at {t['strength']:+.2f}; its metadata gives the strength it was trained at.")
+        return (m, format_info("\n".join(lines), "multi_lora", enabled=True, loras=applied, turbo=turbo))
 
 
 # ==============================================================================
@@ -340,12 +439,14 @@ class HaDeSMossLoraMerger:
 NODE_CLASS_MAPPINGS = {
     "HaDeSMossLoraExtractor": HaDeSMossLoraExtractor,
     "HaDeSMossLoraBlockWeight": HaDeSMossLoraBlockWeight,
+    "HaDeSMossMultiLora": HaDeSMossMultiLora,
     "HaDeSMossLoraMerger": HaDeSMossLoraMerger,
     "HaDeSMossLoraResize": HaDeSMossLoraResize,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "HaDeSMossLoraExtractor": "MOSS LoRA Extractor",
     "HaDeSMossLoraBlockWeight": "MOSS LoRA Block Weight",
+    "HaDeSMossMultiLora": "MOSS Multi-LoRA",
     "HaDeSMossLoraMerger": "MOSS LoRA Merger",
     "HaDeSMossLoraResize": "MOSS LoRA Resize",
 }
