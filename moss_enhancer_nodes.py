@@ -103,8 +103,8 @@ def first_json(text):
 
 def parse_caption(text):
     obj = first_json(text)
-    if obj and isinstance(obj.get("caption"), str) and obj["caption"].strip():
-        return obj["caption"].strip()
+    if obj and isinstance(obj.get("caption"), str):
+        return obj["caption"].strip()  # may be empty: the caller rejects it
     # no JSON: the answer itself, without a leading "Caption:" label or quotes
     plain = re.sub(r"^\W*(caption|prompt)\W*:\s*", "", text.strip(), flags=re.IGNORECASE)
     return plain.strip().strip('"').strip()
@@ -220,7 +220,9 @@ class HaDeSMossPromptEnhancer:
                 "temperature": ("FLOAT", {"default": 0.7, "min": 0.0, "max": 1.5, "step": 0.05,
                                           "tooltip": "0 always writes the same answer for the same input. Higher values invent more of what the "
                                                      "idea leaves open."}),
-                "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff, "control_after_generate": "fixed",
+                                 "tooltip": "Starts on fixed: the same idea writes the same prompt until you change the seed (or connect the MOSS "
+                                            "Latent's seed to share one value with the sampler)."}),
                 "max_tokens": ("INT", {"default": 1024, "min": 64, "max": 4096,
                                        "tooltip": "Length limit of the answer. A layout with many items needs more; a cut answer cannot be parsed."}),
             },
@@ -273,6 +275,9 @@ class HaDeSMossPromptEnhancer:
         notes = []
         if mode == "caption":
             prompt = parse_caption(answer)
+            if not prompt:
+                raise ValueError("MOSS Prompt Enhancer: the answer has no caption (raise max_tokens if it was cut, or try another seed). "
+                                 "Answer starts: " + answer[:400])
             draft = json.dumps({"caption": prompt}, ensure_ascii=False)
         else:
             obj = first_json(answer)

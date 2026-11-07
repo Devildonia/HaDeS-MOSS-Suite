@@ -121,9 +121,14 @@ class HaDeSMossLoraExtractor:
 
 def load_lora_patches(lora_name, model):
     """A LoRA file as ComfyUI patches keyed by model weight key, or (key, offset) for split q/k/v on a fused file.
-    The core maps every community MOSS format (kohya, PEFT split or fused), tools/RESULTS.md."""
+    The core maps every community MOSS format (kohya, PEFT split or fused), tools/RESULTS.md. A LoRA none of whose keys
+    maps to this model (one made for another model) is an error: the core would load it as nothing, without a word."""
     sd = comfy.lora_convert.convert_lora(comfy.utils.load_torch_file(folder_paths.get_full_path_or_raise("loras", lora_name), safe_load=True))
-    return comfy.lora.load_lora(sd, comfy.lora.model_lora_keys_unet(model.model, {}))
+    patches = comfy.lora.load_lora(sd, comfy.lora.model_lora_keys_unet(model.model, {}))
+    if not patches:
+        raise ValueError(f"HaDeS MOSS LoRA: '{lora_name}' changes no weight of this MOSS-Image model (none of its keys match); "
+                         "it is probably a LoRA for another model.")
+    return patches
 
 
 class HaDeSMossLoraBlockWeight:
@@ -186,7 +191,7 @@ def lora_metadata(lora_name):
 
 
 _STEPS_RE = re.compile(r"^\s*(\d+)\s+steps?\b", re.IGNORECASE)
-_CFG1_RE = re.compile(r"\bCFG 1(\.0)?\b")
+_CFG1_RE = re.compile(r"\bCFG 1(\.0+)?(?![.\d])")  # "CFG 1" or "CFG 1.0", not "CFG 1.5"
 
 
 def few_step_settings(meta):
@@ -250,11 +255,11 @@ class HaDeSMossMultiLora:
         lines, turbo, applied = [f"HaDeS MOSS Multi-LoRA | {len(active)} of {len(rows)} on"], [], []
         for r in active:
             groups = r["groups"]
-            add_lora_by_group(m, model, r["name"], r["strength"], groups, groups.get("other_layers", 1.0))
+            counts = add_lora_by_group(m, model, r["name"], r["strength"], groups, groups.get("other_layers", 1.0))
             custom = {g: w for g, w in groups.items() if w != 1.0}
-            lines.append(f"  {r['strength']:+.2f}  {r['name']}"
+            lines.append(f"  {r['strength']:+.2f}  {r['name']}  ({sum(counts.values())} weights)"
                          + (f"  (groups: {', '.join(f'{g} {w:.2f}' for g, w in custom.items())})" if custom else ""))
-            applied.append({"name": r["name"], "strength": r["strength"], **({"groups": custom} if custom else {})})
+            applied.append({"name": r["name"], "strength": r["strength"], "weights": sum(counts.values()), **({"groups": custom} if custom else {})})
             few = few_step_settings(lora_metadata(r["name"]))
             if few is not None:
                 turbo.append({"name": r["name"], "steps": few[0], "strength": r["strength"]})

@@ -18,10 +18,16 @@ def diagnose(metas):
     for m in metas:
         by_node.setdefault(m["node"], []).append(m)
 
-    sizes = {NODE_NAMES[k]: (m["width"], m["height"]) for k in ("layout_editor", "layout", "latent", "ksampler") for m in by_node.get(k, [])[:1]}
-    if len(set(sizes.values())) > 1:
-        out.append(("error", "Canvas mismatch: " + ", ".join(f"{n} {w}x{h}" for n, (w, h) in sizes.items())
-                    + ". A layout prompt places its boxes on its own canvas; generate at that size (use the Layout Compiler's latent)."))
+    # a layout prompt places its boxes on its own canvas: with a layout in the pipeline, every canvas must match it. Without one,
+    # a latent and a KSampler of different sizes are normal (img2img, an upscale pass) and are not compared.
+    layouts = [(NODE_NAMES[k], m) for k in ("layout_editor", "layout") for m in by_node.get(k, [])[:1]]
+    layouts += [("Prompt Enhancer (layout)", m) for m in by_node.get("prompt_enhancer", []) if m.get("mode") == "layout"][:1]
+    if layouts:
+        canvases = layouts + [(NODE_NAMES[k], m) for k in ("latent", "ksampler") for m in by_node.get(k, [])[:1]]
+        sizes = {n: (m["width"], m["height"]) for n, m in canvases}
+        if len(set(sizes.values())) > 1:
+            out.append(("error", "Canvas mismatch: " + ", ".join(f"{n} {w}x{h}" for n, (w, h) in sizes.items())
+                        + ". A layout prompt places its boxes on its own canvas; generate at that size (use the Layout Compiler's latent)."))
 
     for m in by_node.get("ksampler", []):
         w, h = m["width"], m["height"]

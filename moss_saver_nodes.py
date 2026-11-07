@@ -75,22 +75,27 @@ class HaDeSMossModelSaver:
         quantized = {k[:-len(".weight")] for k, w in model_weights(model).items() if k.endswith(".weight") and isinstance(w, comfy.quant_ops.QuantizedTensor)}
         stochastic = rounding == "stochastic" and dtype == torch.bfloat16 and not int8
         rounding_used = "stochastic" if stochastic else "none (float32)" if dtype == torch.float32 else "nearest"
+        # float32 output: patched weights computed in float32 here; the core's lazy saving applies patches in the model's own
+        # dtype (bfloat16), which would round them before they reach the float32 file
+        exact = dtype == torch.float32
+
+        def baked(pk):
+            w32 = key_patches_float(key_patches(model, pk), quant_device, pk)
+            return (w32 if exact else stochastic_round_bf16(w32, comfy.utils.string_to_seed(pk))).cpu().contiguous()
         sd = {}
         for k, v in lazy_sd.items():
             module = k.rsplit(".", 1)[0]
             pk = f"diffusion_model.{k}"
             if not int8 and (module in quantized or k.endswith("comfy_attention.config")):
                 if k == f"{module}.weight":
-                    if stochastic and pk in model.patches:
-                        w32 = key_patches_float(key_patches(model, pk), quant_device, pk)
-                        sd[k] = stochastic_round_bf16(w32, comfy.utils.string_to_seed(pk)).cpu().contiguous()
+                    if (stochastic or exact) and pk in model.patches:
+                        sd[k] = baked(pk)
                     else:
                         sd[k] = key_patches_weight(key_patches(model, pk), quant_device, pk).to(dtype).cpu().contiguous()
                 continue  # weight_scale / comfy_quant pieces and the int8 attention setting belong to the int8 layout
-            if stochastic and pk in model.patches:
+            if (stochastic or exact) and pk in model.patches:
                 # the core's saving rounds bfloat16 to nearest (its stochastic_rounding() is stochastic for fp8 only)
-                w32 = key_patches_float(key_patches(model, pk), quant_device, pk)
-                sd[k] = stochastic_round_bf16(w32, comfy.utils.string_to_seed(pk)).cpu().contiguous()
+                sd[k] = baked(pk)
                 continue
             tensor = v.to("cpu").contiguous()
             if isinstance(v, comfy.model_patcher.LazyCastingParamPiece) or not torch.is_floating_point(tensor):

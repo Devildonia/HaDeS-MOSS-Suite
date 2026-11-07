@@ -54,8 +54,9 @@ def tiny_state_dict(seed):
             for k, v in model.state_dict().items()}
 
 
-def load(sd):
-    return comfy.sd.load_diffusion_model_state_dict({k: v.clone() for k, v in sd.items()})
+def load(sd, dtype=None):
+    """dtype=torch.bfloat16 keeps the weights in bfloat16 in memory, as on a GPU (on the CPU ComfyUI holds them in float32)."""
+    return comfy.sd.load_diffusion_model_state_dict({k: v.clone() for k, v in sd.items()}, model_options={"dtype": dtype} if dtype else {})
 
 
 def load_int8(sd):
@@ -285,11 +286,24 @@ class TestLoras(unittest.TestCase):
         with self.assertRaises(ValueError):
             loras.HaDeSMossMultiLora().apply(self.model, True, "[{")
 
+    def test_lora_for_another_model_is_an_error(self):
+        """A LoRA none of whose keys match MOSS-Image (here SD-style keys) used to load as nothing, reported as applied."""
+        foreign = {"lora_unet_input_blocks_1_1_proj_in.lora_down.weight": torch.randn(4, 320), "lora_unet_input_blocks_1_1_proj_in.lora_up.weight": torch.randn(320, 4)}
+        safetensors.torch.save_file(foreign, os.path.join(TMP, "foreign.safetensors"))
+        with self.assertRaisesRegex(ValueError, "changes no weight"):
+            loras.HaDeSMossMultiLora().apply(self.model, True, json.dumps([{"name": "foreign.safetensors"}]))
+        with self.assertRaisesRegex(ValueError, "changes no weight"):
+            loras.HaDeSMossLoraBlockWeight().apply(self.model, "foreign.safetensors", 1.0, 1.0, **dict.fromkeys(mergers.GROUPS, 1.0))
+        info = loras.HaDeSMossMultiLora().apply(self.model, True, json.dumps([{"name": "fused.safetensors"}]))[1]
+        self.assertEqual(common.parse_info_meta(info)["loras"][0]["weights"], 2 * LAYERS)
+
     def test_multi_lora_names_few_step_files(self):
         meta = {"settings": "4 steps, CFG 1, euler / simple, strength 1.0, shift 5"}
         safetensors.torch.save_file(self.fused, os.path.join(TMP, "turbo.safetensors"), metadata=meta)
         self.assertEqual(loras.few_step_settings(meta)[0], 4)
         self.assertIsNone(loras.few_step_settings({"settings": "30 steps, CFG 4"}))
+        self.assertIsNone(loras.few_step_settings({"settings": "6 steps, CFG 1.5, euler"}))
+        self.assertEqual(loras.few_step_settings({"settings": "8 steps, CFG 1.0, euler"})[0], 8)
         rows = [{"name": "turbo.safetensors", "strength": 1.0}, {"name": "fused.safetensors", "strength": 0.5}]
         info = loras.HaDeSMossMultiLora().apply(self.model, True, json.dumps(rows))[1]
         self.assertEqual(common.parse_info_meta(info)["turbo"], [{"name": "turbo.safetensors", "steps": 4, "strength": 1.0}])
@@ -369,8 +383,8 @@ class TestSaverAndSampler(unittest.TestCase):
         self.assertTrue(torch.isfinite(out[1]) and out[2].item() == float("inf") and torch.isnan(out[3]))
 
     def test_saver_stochastic_keeps_a_sub_step_lora(self):
-        """A LoRA change of a quarter bfloat16 step: rounded to nearest it vanishes, stochastic rounding keeps it on average.
-        Weights without patches are written unchanged."""
+        """A LoRA change of a quarter bfloat16 step: rounded to nearest it vanishes, stochastic rounding keeps it on average,
+        float32 output keeps it exactly. Weights without patches are written unchanged."""
         sd = tiny_state_dict(9)
         key = "layers.1.proj.ffn_up_gate.weight"
         signs = torch.randint(0, 2, sd[key].shape, generator=torch.Generator().manual_seed(3)) * 2 - 1
@@ -385,13 +399,16 @@ class TestSaverAndSampler(unittest.TestCase):
                 f"diffusion_model.{key[:-len('.weight')]}.alpha": torch.tensor(1.0)}
         delta = (up @ down) * scale
         coef = {}
-        for rounding in ("nearest", "stochastic"):
-            m, _ = comfy.sd.load_lora_for_models(load(sd), None, lora, 1.0, 0)
-            path = saver.HaDeSMossModelSaver().save(m, "tests/round", "bfloat16", False, rounding=rounding)["result"][1]
+        for rounding, precision in (("nearest", "bfloat16"), ("stochastic", "bfloat16"), ("float32", "float32")):
+            m, _ = comfy.sd.load_lora_for_models(load(sd, torch.bfloat16), None, lora, 1.0, 0)
+            path = saver.HaDeSMossModelSaver().save(m, "tests/round", precision, False, rounding="nearest" if rounding == "float32" else rounding)["result"][1]
             with safetensors.safe_open(path, "pt") as f:
                 got = f.get_tensor(key).float() - w
                 coef[rounding] = (got.flatten() @ delta.flatten() / (delta.flatten() @ delta.flatten())).item()
-                torch.testing.assert_close(f.get_tensor("layers.2.proj.qkv.weight"), sd["layers.2.proj.qkv.weight"], rtol=0, atol=0)
+                if precision == "bfloat16":
+                    torch.testing.assert_close(f.get_tensor("layers.2.proj.qkv.weight"), sd["layers.2.proj.qkv.weight"], rtol=0, atol=0)
+                else:  # float32: the patched weight exactly, not rounded to bfloat16 first
+                    torch.testing.assert_close(got, delta, rtol=1e-4, atol=1e-7)
         self.assertLess(coef["nearest"], 0.5)
         self.assertAlmostEqual(coef["stochastic"], 1.0, delta=0.1)
 
@@ -433,6 +450,22 @@ class TestSaverAndSampler(unittest.TestCase):
         finally:
             sampler.nodes.common_ksampler = original
         self.assertEqual((seen["steps"], common.parse_info_meta(info)["steps"]), (6, 6))
+
+
+class TestCanvasCheck(unittest.TestCase):
+    def test_sizes_compared_only_with_a_layout(self):
+        f = common.format_info
+        ks = dict(steps=25, cfg=2.5, flow_shift=5.0, sampler="er_sde", scheduler="simple", seed=1, denoise=1.0, slg="off")
+        audit = lambda *infos: json.loads(telemetry.HaDeSMossSuiteTelemetry().audit("T", **{f"info_{i + 1}": s for i, s in enumerate(infos)})["result"][1])["findings"]
+        # an upscale pass: latent 1024, KSampler 2048, no layout -> no error
+        self.assertEqual([x for x in audit(f("x", "latent", width=1024, height=1024, batch=1), f("x", "ksampler", width=2048, height=2048, **ks))
+                          if x["level"] == "error"], [])
+        # the Prompt Enhancer's layout canvas against the KSampler's -> error
+        enh = f("x", "prompt_enhancer", mode="layout", width=1024, height=1536, image=False, decode_fallback=False, notes=[])
+        self.assertTrue(any(x["level"] == "error" for x in audit(enh, f("x", "ksampler", width=1024, height=1024, **ks))))
+        # caption mode carries no canvas
+        cap = f("x", "prompt_enhancer", mode="caption", width=1024, height=1536, image=False, decode_fallback=False, notes=[])
+        self.assertEqual([x for x in audit(cap, f("x", "ksampler", width=1024, height=1024, **ks)) if x["level"] == "error"], [])
 
 
 class TestLoader(unittest.TestCase):
@@ -509,6 +542,12 @@ class TestPromptEnhancer(unittest.TestCase):
         self.assertEqual(enhancer.parse_caption('```json\n{"caption": "A red fox in snow."}\n```'), "A red fox in snow.")
         self.assertEqual(enhancer.parse_caption('Caption: "A red fox in snow."'), "A red fox in snow.")
         self.assertEqual(enhancer.parse_caption('<think>\nhmm {"x": 1}\n</think>\n\n{"caption": "A fox."}'), "A fox.")
+
+    def test_empty_caption_is_an_error(self):
+        # an empty caption used to be encoded as the raw JSON answer
+        for answer in ('{"caption": ""}', "   "):
+            with self.assertRaisesRegex(ValueError, "no caption"):
+                enhancer.HaDeSMossPromptEnhancer().enhance(FakeClip(answer), "a fox", "caption", 1024, 1024, 0.7, 0, 256)
 
     def test_layout_draft_is_fitted_and_compiles(self):
         answer = ('Here is the draft:\n```json\n{"width": 512, "height": 512, "summary": {"caption": "A poster.", "canvas": "single", "id": 3},'

@@ -114,6 +114,7 @@
     1024,
     0.7,
     1,
+    "fixed",
     1024,
     ""
    ],
@@ -821,7 +822,7 @@
    "inputs": [],
    "outputs": [],
    "widgets_values": [
-    "HaDeS MOSS Suite - Turbo 8 steps + Upscale x2\n\n1. Generate (always on): MOSS-Image SFT with HaDeS Turbo 8-steps v0.7, 8 steps, CFG 1, up to 1024 px.\n   Without the turbo: unplug the turbo input of the MOSS KSampler (25 steps, CFG 2.5).\n   The MOSS Latent's seed feeds both samplers: set its after run to fixed to keep an image.\n\n2. Upscale x2 (on): RealESRGAN x2 doubles the image in pixels, in about a second. Nothing is redrawn.\n   To turn it off: right-click the group > Set Group Nodes to Never.\n\n3. Upscale x2 + MOSS pass (off): re-renders the upscaled image at denoise 0.25 with the same turbo,\n   adding hair, pores and fine texture the upscaler smooths (about 16 s at 2048). Needs group 2.\n   To turn it on: right-click the group > Set Group Nodes to Always.\n   Denoise 0.40 (also measured) adds a little more detail and changes the image a little more.\n\nModels: RealESRGAN_x2plus.pth in models/upscale_models, the turbo LoRA in models/loras.\nMeasurements: tools/RESULTS.md in the HaDeS MOSS Suite."
+    "HaDeS MOSS Suite - Turbo 8 steps + Upscale x2\n\n1. Generate (always on): MOSS-Image SFT with HaDeS Turbo 8-steps v0.7, 8 steps, CFG 1, up to 1024 px.\n   Without the turbo: unplug the turbo input of the MOSS KSampler (25 steps, CFG 2.5).\n   The MOSS Latent's seed feeds both samplers (fixed: set its after run to randomize for new images).\n\n2. Upscale x2 (on): RealESRGAN x2 doubles the image in pixels, in about a second. Nothing is redrawn.\n   To turn it off: right-click the group > Set Group Nodes to Never.\n\n3. Upscale x2 + MOSS pass (off): re-renders the upscaled image at denoise 0.25 with the same turbo,\n   adding hair, pores and fine texture the upscaler smooths (about 16 s at 2048). Needs group 2.\n   To turn it on: right-click the group > Set Group Nodes to Always.\n   Denoise 0.40 (also measured) adds a little more detail and changes the image a little more.\n\nModels: RealESRGAN_x2plus.pth in models/upscale_models, the turbo LoRA in models/loras.\nMeasurements: tools/RESULTS.md in the HaDeS MOSS Suite."
    ],
    "properties": {}
   }

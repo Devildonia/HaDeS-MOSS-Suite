@@ -6,6 +6,8 @@ Claims about what layer groups do are measured with [`tools/moss_eval.py`](https
 
 **Turbo (0.2.0, Turbo 8-steps in 0.3.0):** few-step LoRAs we trained for MOSS-Image SFT, [HaDeS MOSS Turbo and Turbo Diverse](https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo) (4 steps at CFG 1, 3.4 MB each), joined by Turbo 8-steps v0.7 (8 steps), and a `turbo` input on `MOSS KSampler` that applies them with their settings. How they were trained and measured: [`tools/RESULTS.md`](tools/RESULTS.md), [`tools/moss_dmd_train.py`](https://github.com/Devildonia/HaDeS-MOSS-Suite/blob/main/tools/moss_dmd_train.py).
 
+**New in 0.4.0:** `MOSS Loader` (model, text encoder and VAE in one node), `MOSS Multi-LoRA` (any number of LoRAs, searchable picker, strength per layer group), `MOSS Prompt Enhancer` (writes a caption or a layout with MOSS-Image's own text encoder), `MOSS Layout Editor` (boxes edited on a canvas), a shared seed on `MOSS Latent` and stochastic rounding in `MOSS Model Saver`.
+
 ## Installation
 
 ```bash
@@ -102,7 +104,7 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 ### `MOSS Latent` (`HaDeS/MOSS Pipeline`)
 - **Class:** `HaDeSMossLatent`
 - **Purpose:** empty MOSS-Image latent (128 channels, 16 px grid) from an aspect ratio (`1:1`, `4:3`, `3:2`, `16:9`, `21:9` and their portrait forms) and a size in megapixels (`1.0` = 1024×1024), or a custom width / height snapped to 16 px. Outputs `width` / `height` for layout prompts.
-- **Inputs:** `aspect_ratio`, `megapixels` (`0.25..4.0`, default `1.0`), `custom_width`, `custom_height`, `batch_size`, `seed` (with control after generate, which starts on ComfyUI's default, `randomize`, as on the KSampler; `fixed` keeps it); optional `vae` (rejects a VAE that is not the 128-channel FLUX.2 one).
+- **Inputs:** `aspect_ratio`, `megapixels` (`0.25..4.0`, default `1.0`), `custom_width`, `custom_height`, `batch_size`, `seed` (with control after generate, starting on `fixed` so the image changes only when you change it); optional `vae` (rejects a VAE that is not the 128-channel FLUX.2 one).
 - **Outputs:** `latent`, `width`, `height`, `info`, `seed`.
 - **Shared seed:** connect `seed` to the `seed` of the MOSS KSampler (and of a second sampler, e.g. a refine pass) and of the Prompt Enhancer, so one value set here reproduces the whole image, prompt included. The seed does not change the latent, which is empty; it is shown in the node's status line and written to `info`.
 - **Measured:** square images from 768 to 2048 render clean at the model's default shift 5.0, with no repeated subjects; larger canvases show more of the scene. Raising the shift is not needed at any of these sizes. Non-square ratios are not measured. See [`tools/RESULTS.md`](tools/RESULTS.md).
@@ -153,8 +155,8 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 ### `MOSS Suite Telemetry` (`HaDeS/MOSS Pipeline`)
 - **Class:** `HaDeSMossSuiteTelemetry`
 - **Purpose:** reads the `info` outputs of up to 8 HaDeS MOSS nodes (their `HADES_META` trailer) and checks the pipeline against what was measured:
-  - **error:** layout, latent and KSampler on different canvas sizes (a layout prompt places its boxes on its own canvas);
-  - **warning:** quantized models in a merge, TIES / DARE with a quantized model, LoRAs extracted / resized / merged below 90% energy, a few-step LoRA in Multi-LoRA sampled at other steps or CFG than its file's metadata gives, or stacked with the KSampler's turbo input;
+  - **error:** with a layout in the pipeline (Layout Editor, Layout Compiler or the Prompt Enhancer in `layout` mode), a latent or KSampler on another canvas (a layout prompt places its boxes on its own canvas); without a layout, different latent and KSampler sizes (img2img, an upscale pass) are not compared;
+  - **warning:** quantized models in a merge, TIES / DARE with a quantized model, LoRAs extracted / resized / merged below 97.9% energy (the lowest measured that stayed within the noise floor), a few-step LoRA in Multi-LoRA sampled at other steps or CFG than its file's metadata gives, or stacked with the KSampler's turbo input;
   - **note:** an int8 model from the MOSS Loader (with its measured speed and VRAM) or one loaded with a `weight_dtype` conversion, KSampler size outside 768²–2048², shift other than 5.0, SLG on, turbo LoRA at a strength other than 1.0, at a step count other than 4 or 8 or at denoise below 1.0, fp16-fixed residual scale normalized, multi-line layout text with its box proportions.
 - **Outputs:** `report` (Markdown), `json`, `summary` (one line).
 

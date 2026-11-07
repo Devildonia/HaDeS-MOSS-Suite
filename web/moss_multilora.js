@@ -27,7 +27,9 @@ const GROUP_WEIGHT = { min: -2, max: 3, step: 0.05 };
 // ---- few-step LoRAs, read from the file's own metadata ("4 steps, CFG 1, ..."), as the backend does ----
 const fewStepCache = new Map(); // name -> steps | null | "pending"
 const STEPS_RE = /^\s*(\d+)\s+steps?\b/i;
-const CFG1_RE = /\bCFG 1(\.0)?\b/;
+const CFG1_RE = /\bCFG 1(\.0+)?(?![.\d])/;
+// LoRA names come from the workflow's JSON, which may be someone else's: never insert them into the tooltip as HTML
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 function fewStepSteps(name, node) {
     if (!name) return null;
@@ -389,7 +391,7 @@ export function createMultiLoraWidget(node, backing, { groupKeys, groupColors, i
                 }
                 if (hit?.kind === "name" && rows[hit.i]?.name) {
                     const steps = fewStepSteps(rows[hit.i].name, n);
-                    showHadesTooltip(`<strong>${rows[hit.i].name}</strong>${steps ? `<br>Few-step LoRA: its metadata says ${steps} steps at CFG 1.` : ""}<br>Click to pick another.`,
+                    showHadesTooltip(`<strong>${escapeHtml(rows[hit.i].name)}</strong>${steps ? `<br>Few-step LoRA: its metadata says ${steps} steps at CFG 1.` : ""}<br>Click to pick another.`,
                         event.clientX, event.clientY, HADES_THEME.accent);
                 } else if (hit?.kind === "groups") {
                     showHadesTooltip("<strong>Strength per layer group</strong><br>Opens the weights for each group of 6 layers and for the parts outside them; each multiplies the row's strength.",

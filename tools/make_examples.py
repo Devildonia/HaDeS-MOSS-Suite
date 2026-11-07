@@ -108,7 +108,7 @@ EXAMPLES = {
                                   "  - as written: encodes the idea as typed, like a plain text encoder\n"
                                   "  - negative: empty uses the official MOSS-Image negative; what you write is also kept out of the image\n\n"
                                   "The MOSS Latent's seed drives both the writing and the sampler: one seed reproduces the whole image.\n"
-                                  "Set the latent's after run to fixed to keep it.\n\n"
+                                  "It starts on fixed; set the latent's after run to randomize for a new image on every run.\n\n"
                                   "Optional (muted): Load Image. Unmute it (right-click > Mode > Always) to have the prompt written from\n"
                                   "the picture: with an empty idea the picture is the whole brief, otherwise the starting point.\n"
                                   "Tried on one seed per case, not measured (tools/RESULTS.md)."}),
@@ -190,7 +190,7 @@ EXAMPLES = {
         "note": ("Note", {"text": "HaDeS MOSS Suite - Turbo 8 steps + Upscale x2\n\n"
                                   "1. Generate (always on): MOSS-Image SFT with HaDeS Turbo 8-steps v0.7, 8 steps, CFG 1, up to 1024 px.\n"
                                   "   Without the turbo: unplug the turbo input of the MOSS KSampler (25 steps, CFG 2.5).\n"
-                                  "   The MOSS Latent's seed feeds both samplers: set its after run to fixed to keep an image.\n\n"
+                                  "   The MOSS Latent's seed feeds both samplers (fixed: set its after run to randomize for new images).\n\n"
                                   "2. Upscale x2 (on): RealESRGAN x2 doubles the image in pixels, in about a second. Nothing is redrawn.\n"
                                   "   To turn it off: right-click the group > Set Group Nodes to Never.\n\n"
                                   "3. Upscale x2 + MOSS pass (off): re-renders the upscaled image at denoise 0.25 with the same turbo,\n"

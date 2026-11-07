@@ -1,7 +1,7 @@
 [project]
 name = "hades-moss-suite"
-description = "ComfyUI nodes for the MOSS-Image model family: block and multi-model (TIES, DARE, Model Stock, SLERP) mergers for the 42-layer single-stream DiT, a model saver (bf16, float32, int8 ConvRot), LoRA tools (extractor, merger, resize, per-layer-group strength), a latent node, a layout compiler, a KSampler with metadata and a turbo input for our own 4- and 8-step LoRAs, and a telemetry node."
-version = "0.3.0"
+description = "ComfyUI nodes for the MOSS-Image model family: a one-node loader, block and multi-model (TIES, DARE, Model Stock, SLERP) mergers for the 42-layer single-stream DiT, a model saver (bf16 with stochastic rounding, float32, int8 ConvRot), a multi-LoRA loader with per-layer-group strength and LoRA tools (extractor, merger, resize), a prompt enhancer that writes captions or layouts with the model's own text encoder, a visual layout editor and compiler, a latent node with a shared seed, a KSampler with metadata and a turbo input for our own 4- and 8-step LoRAs, and a telemetry node."
+version = "0.4.0"
 authors = [
     { name = "Devildonia" }
 ]
@@ -31,6 +31,7 @@ Repository = "https://github.com/Devildonia/HaDeS-MOSS-Suite"
 [tool.comfy]
 PublisherId = "hades"
 DisplayName = "HaDeS MOSS Suite"
+Icon = "https://raw.githubusercontent.com/Devildonia/HaDeS-MOSS-Suite/main/web/icon.png"
 includes = [
     "web",
     "examples",

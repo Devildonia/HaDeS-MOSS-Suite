@@ -29,9 +29,9 @@ class HaDeSMossLatent:
                 "custom_width": ("INT", {"default": 1024, "min": 256, "max": 4096, "step": 16, "tooltip": "Used with aspect_ratio custom; snapped to 16 px."}),
                 "custom_height": ("INT", {"default": 1024, "min": 256, "max": 4096, "step": 16, "tooltip": "Used with aspect_ratio custom; snapped to 16 px."}),
                 "batch_size": ("INT", {"default": 1, "min": 1, "max": 64}),
-                "seed": ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFFFFFFFFFF, "control_after_generate": True,
+                "seed": ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFFFFFFFFFF, "control_after_generate": "fixed",
                                  "tooltip": "A seed to share: connect the seed output to the MOSS KSampler and the Prompt Enhancer so one value "
-                                            "reproduces the whole image. Set after run to fixed to keep it; it does not change the latent itself, which is empty."}),
+                                            "reproduces the whole image. Starts on fixed (the image changes only when you change it); it does not change the latent itself, which is empty."}),
             },
             "optional": {
                 "vae": ("VAE", {"tooltip": "Optional: checks that it is a 128-channel FLUX.2 VAE, the one MOSS-Image uses."}),

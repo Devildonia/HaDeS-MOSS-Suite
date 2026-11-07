@@ -119,6 +119,7 @@
     1024,
     0.7,
     0,
+    "fixed",
     1024,
     ""
    ],
@@ -576,7 +577,7 @@
    "inputs": [],
    "outputs": [],
    "widgets_values": [
-    "HaDeS MOSS Suite - Prompt Enhancer\n\nMOSS Prompt Enhancer: a positive / negative prompt box that can also write the prompt,\nwith MOSS-Image's own text encoder (no other model is loaded).\n  - caption: writes a detailed paragraph from the short idea (shown in the text preview)\n  - layout: writes a layout draft with boxes (see the Layout Editor example)\n  - as written: encodes the idea as typed, like a plain text encoder\n  - negative: empty uses the official MOSS-Image negative; what you write is also kept out of the image\n\nThe MOSS Latent's seed drives both the writing and the sampler: one seed reproduces the whole image.\nSet the latent's after run to fixed to keep it.\n\nOptional (muted): Load Image. Unmute it (right-click > Mode > Always) to have the prompt written from\nthe picture: with an empty idea the picture is the whole brief, otherwise the starting point.\nTried on one seed per case, not measured (tools/RESULTS.md)."
+    "HaDeS MOSS Suite - Prompt Enhancer\n\nMOSS Prompt Enhancer: a positive / negative prompt box that can also write the prompt,\nwith MOSS-Image's own text encoder (no other model is loaded).\n  - caption: writes a detailed paragraph from the short idea (shown in the text preview)\n  - layout: writes a layout draft with boxes (see the Layout Editor example)\n  - as written: encodes the idea as typed, like a plain text encoder\n  - negative: empty uses the official MOSS-Image negative; what you write is also kept out of the image\n\nThe MOSS Latent's seed drives both the writing and the sampler: one seed reproduces the whole image.\nIt starts on fixed; set the latent's after run to randomize for a new image on every run.\n\nOptional (muted): Load Image. Unmute it (right-click > Mode > Always) to have the prompt written from\nthe picture: with an empty idea the picture is the whole brief, otherwise the starting point.\nTried on one seed per case, not measured (tools/RESULTS.md)."
    ],
    "properties": {}
   }
