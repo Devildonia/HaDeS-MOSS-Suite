@@ -7,7 +7,7 @@ NODE_NAMES = {
     "model_block_merger": "Model Block Merger", "multi_model_merger": "Multi-Model Merger", "model_saver": "Model Saver",
     "lora_extractor": "LoRA Extractor", "lora_block_weight": "LoRA Block Weight", "lora_merger": "LoRA Merger", "lora_resize": "LoRA Resize",
     "latent": "Latent", "layout": "Layout Compiler", "ksampler": "KSampler", "prompt_enhancer": "Prompt Enhancer",
-    "multi_lora": "Multi-LoRA",
+    "multi_lora": "Multi-LoRA", "layout_editor": "Layout Editor",
 }
 
 
@@ -18,7 +18,7 @@ def diagnose(metas):
     for m in metas:
         by_node.setdefault(m["node"], []).append(m)
 
-    sizes = {NODE_NAMES[k]: (m["width"], m["height"]) for k in ("layout", "latent", "ksampler") for m in by_node.get(k, [])[:1]}
+    sizes = {NODE_NAMES[k]: (m["width"], m["height"]) for k in ("layout_editor", "layout", "latent", "ksampler") for m in by_node.get(k, [])[:1]}
     if len(set(sizes.values())) > 1:
         out.append(("error", "Canvas mismatch: " + ", ".join(f"{n} {w}x{h}" for n, (w, h) in sizes.items())
                     + ". A layout prompt places its boxes on its own canvas; generate at that size (use the Layout Compiler's latent)."))

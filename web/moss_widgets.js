@@ -377,6 +377,7 @@ export function setNodeClassicUI(node, enableClassic, skipResize = false, isUser
     // 2. Toggle backing widgets (standard ComfyUI inputs)
     for (const w of node.widgets || []) {
         if (w._isHadesBacking) {
+            if (w.element) w.element.style.display = isClassic ? "" : "none"; // a hidden multi-line DOM widget
             if (isClassic) {
                 w.hidden = false;
                 if (w._origComputeSize) w.computeSize = w._origComputeSize;

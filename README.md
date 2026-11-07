@@ -108,6 +108,13 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 - **Line breaks:** write them as `\n` in `text`. Measured, the box shape decides whether they are kept: a two-line title in an 832×192 box came out on one line in 3 of 6 seeds, in a 640×384 box on two lines in 6 of 6; a literal newline instead of `\n` changed nothing ([`tools/RESULTS.md`](tools/RESULTS.md)).
 - Unlike the core `MOSS-Image Layout Prompt` (boxes from `Create Bounding Boxes`), this node takes hand-written or LLM-written drafts, including `meta`, `canvas`, `palette` and `tags`.
 
+### `MOSS Layout Editor` (`HaDeS/MOSS Pipeline`)
+- **Class:** `HaDeSMossLayoutEditor`
+- **Purpose:** edits a layout draft on a canvas of the draft's size: boxes colored by label (object, character, text), moved and resized with the mouse on the 16 px latent grid, drawn by dragging on an empty part of the canvas with the label picked in the toolbar, deleted or brought to the front. Under the canvas, the selected box's label, caption, text (new lines are line breaks in the image) and exact pixels; with no box selected, the caption of the whole image. Clicking the canvas size changes it and scales the boxes. Boxes missing a caption, or text items missing their text, are outlined in red, and the run stops with the Layout Compiler's error until they are filled in.
+- **Inputs:** `draft` (the JSON the canvas edits, shown as text with the standard widgets); optional `draft_in` (e.g. the Prompt Enhancer's `draft`: after a run the toolbar shows **IMPORT**, which replaces the canvas with it; it never overwrites your edits by itself) and `image` (a background for placing the boxes: pick it in a `Load Image` node wired here, shown at once even when that node is muted, otherwise after a run; **MATCH IMAGE** sets the canvas to its aspect ratio at about the same area; not sent to the model).
+- **Outputs:** `draft` (to the Layout Compiler's `draft`), `width`, `height`, `info`.
+- **Image → layout:** the Prompt Enhancer in `layout` mode with an `image` writes the draft; import it here to correct the boxes.
+
 ### `MOSS Prompt Enhancer` (`HaDeS/MOSS Pipeline`)
 - **Class:** `HaDeSMossPromptEnhancer`
 - **Purpose:** a positive / negative prompt box for the sampler that can also write the prompt: a detailed MOSS-Image prompt from a short idea and / or an image, with MOSS-Image's own text encoder: the Qwen3.5-9B file loaded as the `moss_image` CLIP holds the language head and the vision tower, so the same CLIP that encodes the prompt writes it and no other model is loaded. The instructions are adapted from OpenMOSS' official [`moss-image-prompt-enhancer`](https://github.com/OpenMOSS/MOSS-Image/tree/main/skills/moss-image-prompt-enhancer) skill (Apache-2.0).
@@ -150,7 +157,7 @@ The nodes draw their own moss-green rows on the canvas (the HaDeS Anima Suite wi
 - every widget becomes a styled row by type (combo, slider, number, toggle, text); the layout draft keeps ComfyUI's text editor;
 - tooltips are the node's own, with the measurements behind each value;
 - **Block Merger:** a bar chart of the 42 layers and 3 parts colored by depth group, each group labeled with the share of the SFT → Base change it carries, and buttons **M1**, **50/50**, **24–35 M2** (the groups that carry most of that change) and **M2**;
-- **LoRA Block Weight:** a bar per layer group; **Multi-LoRA:** one row per LoRA with a searchable picker and a status line (rows on, few-step LoRAs); **KSampler** and **Latent:** a status line with the settings or the final size. With the turbo input connected the KSampler's status reads TURBO and the rows it overrides (steps, cfg, sampler, scheduler, SLG) are drawn faded, still editable for when it is unplugged.
+- **LoRA Block Weight:** a bar per layer group; **Multi-LoRA:** one row per LoRA with a searchable picker and a status line (rows on, few-step LoRAs); **Layout Editor:** the draft's boxes on a canvas, edited with the mouse; **KSampler** and **Latent:** a status line with the settings or the final size. With the turbo input connected the KSampler's status reads TURBO and the rows it overrides (steps, cfg, sampler, scheduler, SLG) are drawn faded, still editable for when it is unplugged.
 
 *Settings → HaDeS MOSS Suite → Use standard ComfyUI widgets* (or *HaDeS MOSS Suite* in a node's right-click menu) switches to the plain widgets. It does not affect HaDeS Anima Suite nodes when both suites are installed.
 
@@ -160,6 +167,7 @@ In [`examples/`](examples) (drag a file into ComfyUI). They use the official Com
 
 - **Merge, Save and Telemetry:** SFT with layers 24–35 from Base through the Block Merger, MOSS Latent and MOSS KSampler, telemetry report. Model Saver and a SLERP Multi-Model Merger come muted, ready to switch on.
 - **Layout Poster:** an OpenMOSS layout draft through the Layout Compiler, whose prompt and latent feed the sampler, with telemetry.
+- **Layout Editor:** the Layout Editor's draft through the Layout Compiler into the sampler, with a note on how to edit the boxes; a Load Image is the background (pick your picture there); the Prompt Enhancer (writes a draft to IMPORT) comes muted.
 - **Turbo:** MOSS Turbo LoRA into the MOSS KSampler's `turbo` input, 4 steps at CFG 1 on SFT; ComfyUI offers to download the LoRA from Hugging Face.
 - **Turbo 8 steps + Upscale x2:** Turbo 8-steps v0.7 at 8 steps, then two groups to switch on or off from the group's right-click menu: a 2x upscale with RealESRGAN x2 (on; pixels only, about a second) and, on top of it, a MOSS pass at 2048 with the same turbo at denoise 0.25 (off; adds hair, pores and fine texture the upscaler smooths, about 16 s). A note in the workflow explains both.
 - **LoRA Toolkit:** a LoRA through LoRA Block Weight into the sampler; LoRA Merger, LoRA Resize and LoRA Extractor (with a finetune loader) come muted, since they write files. Pick your own LoRA in `lora_name`.

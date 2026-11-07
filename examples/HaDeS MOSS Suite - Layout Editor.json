@@ -1,0 +1,856 @@
+{
+ "id": "4674cd70-fe98-5d6e-8ada-4f7f9e697486",
+ "revision": 0,
+ "last_node_id": 14,
+ "last_link_id": 17,
+ "nodes": [
+  {
+   "id": 1,
+   "type": "UNETLoader",
+   "pos": [
+    0,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "moss_image_sft_bf16.safetensors",
+    "default"
+   ],
+   "properties": {
+    "Node name for S&R": "UNETLoader",
+    "models": [
+     {
+      "name": "moss_image_sft_bf16.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_sft_bf16.safetensors",
+      "directory": "diffusion_models"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      8
+     ]
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "type": "CLIPLoader",
+   "pos": [
+    0,
+    230
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 1,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "qwen3.5_9b_w4a8_gptq.safetensors",
+    "moss_image",
+    "default"
+   ],
+   "properties": {
+    "Node name for S&R": "CLIPLoader",
+    "models": [
+     {
+      "name": "qwen3.5_9b_w4a8_gptq.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_w4a8_gptq.safetensors",
+      "directory": "text_encoders"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "CLIP",
+     "type": "CLIP",
+     "links": [
+      1,
+      2,
+      7
+     ]
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "type": "VAELoader",
+   "pos": [
+    0,
+    450
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 2,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "flux2-vae.safetensors"
+   ],
+   "properties": {
+    "Node name for S&R": "VAELoader",
+    "models": [
+     {
+      "name": "flux2-vae.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae.safetensors",
+      "directory": "vae"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "VAE",
+     "type": "VAE",
+     "links": [
+      12
+     ]
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "type": "CLIPTextEncode",
+   "pos": [
+    450,
+    900
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 4,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "clip",
+     "type": "CLIP",
+     "link": 1
+    }
+   ],
+   "widgets_values": [
+    "nsfw, worst quality, bad anatomy, watermark, jpeg artifact"
+   ],
+   "properties": {
+    "Node name for S&R": "CLIPTextEncode"
+   },
+   "outputs": [
+    {
+     "name": "CONDITIONING",
+     "type": "CONDITIONING",
+     "links": [
+      10
+     ]
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "type": "HaDeSMossPromptEnhancer",
+   "pos": [
+    450,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 5,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "clip",
+     "type": "CLIP",
+     "link": 2
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "A travel poster for a mountain lake at sunrise, with the title \"LAKE ALMA\" at the top and a small line \"summer 2027\" at the bottom.",
+    "layout",
+    1024,
+    1536,
+    0.7,
+    1,
+    1024,
+    ""
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossPromptEnhancer"
+   },
+   "outputs": [
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "links": []
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "links": []
+    },
+    {
+     "name": "prompt",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "draft",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "width",
+     "type": "INT",
+     "links": [
+      3
+     ]
+    },
+    {
+     "name": "height",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "type": "LoadImage",
+   "pos": [
+    0,
+    650
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 3,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "example.png"
+   ],
+   "properties": {
+    "Node name for S&R": "LoadImage"
+   },
+   "outputs": [
+    {
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      4
+     ]
+    },
+    {
+     "name": "MASK",
+     "type": "MASK",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "type": "HaDeSMossLayoutEditor",
+   "pos": [
+    950,
+    0
+   ],
+   "size": [
+    520,
+    100
+   ],
+   "flags": {},
+   "order": 6,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "draft_in",
+     "type": "STRING",
+     "link": 3,
+     "shape": 7
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "link": 4,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "{\n  \"width\": 1024,\n  \"height\": 1024,\n  \"bbox_coord_space\": \"abs\",\n  \"bbox_format\": \"xyxy\",\n  \"summary\": {\n    \"canvas\": \"single\",\n    \"caption\": \"Minimalist concert poster on off-white paper, a red sun behind a black mountain silhouette, bold sans-serif type.\"\n  },\n  \"items\": [\n    {\n      \"label\": \"object\",\n      \"caption\": \"Large red sun behind a black mountain silhouette.\",\n      \"bbox\": [\n        160,\n        64,\n        864,\n        544\n      ]\n    },\n    {\n      \"label\": \"text\",\n      \"caption\": \"Huge bold black condensed title on two lines.\",\n      \"text\": \"NORTHERN\\nLIGHTS\",\n      \"bbox\": [\n        192,\n        576,\n        832,\n        960\n      ]\n    }\n  ]\n}"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossLayoutEditor"
+   },
+   "outputs": [
+    {
+     "name": "draft",
+     "type": "STRING",
+     "links": [
+      5
+     ]
+    },
+    {
+     "name": "width",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "height",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      14
+     ]
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "type": "HaDeSMossLayoutCompiler",
+   "pos": [
+    1550,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 7,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "draft",
+     "type": "STRING",
+     "link": 5,
+     "widget": {
+      "name": "draft"
+     }
+    }
+   ],
+   "widgets_values": [
+    "{\n  \"width\": 1024,\n  \"height\": 1024,\n  \"bbox_coord_space\": \"abs\",\n  \"bbox_format\": \"xyxy\",\n  \"summary\": {\n    \"canvas\": \"single\",\n    \"caption\": \"Minimalist concert poster on off-white paper, a red sun behind a black mountain silhouette, bold sans-serif type.\"\n  },\n  \"items\": [\n    {\n      \"label\": \"object\",\n      \"caption\": \"Large red sun behind a black mountain silhouette.\",\n      \"bbox\": [\n        160,\n        64,\n        864,\n        544\n      ]\n    },\n    {\n      \"label\": \"text\",\n      \"caption\": \"Huge bold black condensed title on two lines.\",\n      \"text\": \"NORTHERN\\nLIGHTS\",\n      \"bbox\": [\n        192,\n        576,\n        832,\n        960\n      ]\n    }\n  ]\n}",
+    1
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossLayoutCompiler"
+   },
+   "outputs": [
+    {
+     "name": "prompt",
+     "type": "STRING",
+     "links": [
+      6
+     ]
+    },
+    {
+     "name": "latent",
+     "type": "LATENT",
+     "links": [
+      11
+     ]
+    },
+    {
+     "name": "width",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "height",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "type": "CLIPTextEncode",
+   "pos": [
+    1550,
+    600
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 8,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "text",
+     "type": "STRING",
+     "link": 6,
+     "widget": {
+      "name": "text"
+     }
+    },
+    {
+     "name": "clip",
+     "type": "CLIP",
+     "link": 7
+    }
+   ],
+   "widgets_values": [
+    ""
+   ],
+   "properties": {
+    "Node name for S&R": "CLIPTextEncode"
+   },
+   "outputs": [
+    {
+     "name": "CONDITIONING",
+     "type": "CONDITIONING",
+     "links": [
+      9
+     ]
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "type": "HaDeSMossKSampler",
+   "pos": [
+    2000,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 9,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 8
+    },
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "link": 9
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "link": 10
+    },
+    {
+     "name": "latent_image",
+     "type": "LATENT",
+     "link": 11
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": 12,
+     "shape": 7
+    },
+    {
+     "name": "turbo",
+     "type": "MOSS_TURBO",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    1000,
+    "fixed",
+    25,
+    2.5,
+    "er_sde",
+    "simple",
+    1.0,
+    0.0,
+    "off"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossKSampler"
+   },
+   "outputs": [
+    {
+     "name": "latent",
+     "type": "LATENT",
+     "links": []
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "links": [
+      13
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      16
+     ]
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "type": "SaveImage",
+   "pos": [
+    2450,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 10,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "images",
+     "type": "IMAGE",
+     "link": 13
+    }
+   ],
+   "widgets_values": [
+    "HaDeS_MOSS_layout_editor"
+   ],
+   "properties": {
+    "Node name for S&R": "SaveImage"
+   },
+   "outputs": [
+    {
+     "name": "images",
+     "type": "IMAGE",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "type": "HaDeSMossSuiteTelemetry",
+   "pos": [
+    2450,
+    480
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 11,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "info_1",
+     "type": "STRING",
+     "link": 14,
+     "shape": 7
+    },
+    {
+     "name": "info_2",
+     "type": "STRING",
+     "link": 15,
+     "shape": 7
+    },
+    {
+     "name": "info_3",
+     "type": "STRING",
+     "link": 16,
+     "shape": 7
+    },
+    {
+     "name": "info_4",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "info_5",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "info_6",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "info_7",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "info_8",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "HaDeS MOSS Suite Telemetry"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossSuiteTelemetry"
+   },
+   "outputs": [
+    {
+     "name": "report",
+     "type": "STRING",
+     "links": [
+      17
+     ]
+    },
+    {
+     "name": "json",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "summary",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "type": "PreviewAny",
+   "pos": [
+    2900,
+    480
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 12,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "source",
+     "type": "*",
+     "link": 17
+    }
+   ],
+   "widgets_values": [],
+   "properties": {
+    "Node name for S&R": "PreviewAny"
+   },
+   "outputs": [
+    {
+     "name": "STRING",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "type": "Note",
+   "pos": [
+    0,
+    -620
+   ],
+   "size": [
+    800,
+    520
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "widgets_values": [
+    "HaDeS MOSS Suite - Layout Editor\n\nLayout Editor: the boxes of the layout draft on a canvas of its size.\n  - pick OBJECT / CHARACTER / TEXT in the toolbar, then drag on an empty part of the canvas to draw a box\n  - drag a box to move it, drag its corners to resize it (16 px grid)\n  - with a box selected, the rows below edit its label, caption, text and pixels;\n    with none selected, the caption of the whole image\n  - click the size (1024 x 1024) to change the canvas; the boxes scale with it\n  - boxes outlined in red still need a caption (text boxes also their text)\nIts draft goes to the Layout Compiler, which writes the prompt and the latent of the same size.\n\nBackground: the Load Image wired to the editor's image input shows behind the boxes at once.\nPick your picture in the Load Image node (the editor has no upload button of its own);\nBG ON / OFF hides it, MATCH IMAGE sets the canvas to its proportions. Only a guide: the model never sees it.\n\nOptional (muted, right-click > Mode > Always to use):\n  - MOSS Prompt Enhancer in layout mode writes a draft from the idea, and from the picture through its\n    image input. Run once, then press IMPORT in the editor's toolbar to load it, and correct the boxes.\n    Your edits are never replaced by themselves."
+   ],
+   "properties": {}
+  }
+ ],
+ "links": [
+  [
+   1,
+   2,
+   0,
+   4,
+   0,
+   "CLIP"
+  ],
+  [
+   2,
+   2,
+   0,
+   5,
+   0,
+   "CLIP"
+  ],
+  [
+   3,
+   5,
+   4,
+   7,
+   0,
+   "INT"
+  ],
+  [
+   4,
+   6,
+   0,
+   7,
+   1,
+   "IMAGE"
+  ],
+  [
+   5,
+   7,
+   0,
+   8,
+   0,
+   "STRING"
+  ],
+  [
+   6,
+   8,
+   0,
+   9,
+   0,
+   "STRING"
+  ],
+  [
+   7,
+   2,
+   0,
+   9,
+   1,
+   "CLIP"
+  ],
+  [
+   8,
+   1,
+   0,
+   10,
+   0,
+   "MODEL"
+  ],
+  [
+   9,
+   9,
+   0,
+   10,
+   1,
+   "CONDITIONING"
+  ],
+  [
+   10,
+   4,
+   0,
+   10,
+   2,
+   "CONDITIONING"
+  ],
+  [
+   11,
+   8,
+   1,
+   10,
+   3,
+   "LATENT"
+  ],
+  [
+   12,
+   3,
+   0,
+   10,
+   4,
+   "VAE"
+  ],
+  [
+   13,
+   10,
+   1,
+   11,
+   0,
+   "IMAGE"
+  ],
+  [
+   14,
+   7,
+   3,
+   12,
+   0,
+   "STRING"
+  ],
+  [
+   15,
+   8,
+   4,
+   12,
+   1,
+   "STRING"
+  ],
+  [
+   16,
+   10,
+   2,
+   12,
+   2,
+   "STRING"
+  ],
+  [
+   17,
+   12,
+   0,
+   13,
+   0,
+   "STRING"
+  ]
+ ],
+ "groups": [],
+ "config": {},
+ "extra": {},
+ "version": 0.4
+}

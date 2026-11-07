@@ -81,6 +81,44 @@ EXAMPLES = {
         "tel": ("HaDeSMossSuiteTelemetry", {"report_title": "HaDeS MOSS Suite Telemetry", "info_1": ("layout", 4), "info_2": ("ks", 2)}),
         "report": ("PreviewAny", {"source": ("tel", 0)}),
     },
+    "HaDeS MOSS Suite - Layout Editor": {
+        "unet": ("UNETLoader", {"unet_name": SFT, "weight_dtype": "default"}),
+        **loaders(),
+        # 1. optional: the Prompt Enhancer writes a layout draft from an idea (and / or an image); the editor offers it with IMPORT
+        "enh": ("HaDeSMossPromptEnhancer", {"clip": ("clip", 0), "idea": "A travel poster for a mountain lake at sunrise, with the title "
+                                                                         "\"LAKE ALMA\" at the top and a small line \"summer 2027\" at the bottom.",
+                                            "mode": "layout", "width": 1024, "height": 1536, "temperature": 0.7, "seed": 1, "max_tokens": 1024,
+                                            "negative": ""}, MUTED),
+        "img": ("LoadImage", {"image": "example.png", "upload": "image"}),
+        # 2. the editor: boxes on the canvas; its draft goes to the compiler, which outputs the prompt and the latent of the same size
+        "editor": ("HaDeSMossLayoutEditor", {"draft": None, "draft_in": ("enh", 4), "image": ("img", 0)}),
+        "layout": ("HaDeSMossLayoutCompiler", {"draft": ("editor", 0), "batch_size": 1}),
+        "pos": ("CLIPTextEncode", {"clip": ("clip", 0), "text": ("layout", 0)}),
+        "ks": ksampler(("unet", 0), ("layout", 1)),
+        "save": ("SaveImage", {"images": ("ks", 1), "filename_prefix": "HaDeS_MOSS_layout_editor"}),
+        "tel": ("HaDeSMossSuiteTelemetry", {"report_title": "HaDeS MOSS Suite Telemetry", "info_1": ("editor", 3), "info_2": ("layout", 4),
+                                            "info_3": ("ks", 2)}),
+        "report": ("PreviewAny", {"source": ("tel", 0)}),
+        "note": ("Note", {"text": "HaDeS MOSS Suite - Layout Editor\n\n"
+                                  "Layout Editor: the boxes of the layout draft on a canvas of its size.\n"
+                                  "  - pick OBJECT / CHARACTER / TEXT in the toolbar, then drag on an empty part of the canvas to draw a box\n"
+                                  "  - drag a box to move it, drag its corners to resize it (16 px grid)\n"
+                                  "  - with a box selected, the rows below edit its label, caption, text and pixels;\n"
+                                  "    with none selected, the caption of the whole image\n"
+                                  "  - click the size (1024 x 1024) to change the canvas; the boxes scale with it\n"
+                                  "  - boxes outlined in red still need a caption (text boxes also their text)\n"
+                                  "Its draft goes to the Layout Compiler, which writes the prompt and the latent of the same size.\n\n"
+                                  "Background: the Load Image wired to the editor's image input shows behind the boxes at once.\n"
+                                  "Pick your picture in the Load Image node (the editor has no upload button of its own);\n"
+                                  "BG ON / OFF hides it, MATCH IMAGE sets the canvas to its proportions. Only a guide: the model never sees it.\n\n"
+                                  "Optional (muted, right-click > Mode > Always to use):\n"
+                                  "  - MOSS Prompt Enhancer in layout mode writes a draft from the idea, and from the picture through its\n"
+                                  "    image input. Run once, then press IMPORT in the editor's toolbar to load it, and correct the boxes.\n"
+                                  "    Your edits are never replaced by themselves."}),
+        "_layout": {"note": (0, -620), "unet": (0, 0), "clip": (0, 230), "vae": (0, 450), "img": (0, 650),
+                    "enh": (450, 0), "editor": (950, 0), "layout": (1550, 0), "pos": (1550, 600), "neg": (450, 900),
+                    "ks": (2000, 0), "save": (2450, 0), "tel": (2450, 480), "report": (2900, 480)},
+    },
     "HaDeS MOSS Suite - Turbo": {
         "unet": ("UNETLoader", {"unet_name": SFT, "weight_dtype": "default"}),
         **loaders(),
@@ -242,14 +280,14 @@ def to_editor(example, object_info):
                 node_inputs.append(entry)
         col = node_depth(name)
         y = rows.get(col, 0)
-        # HaDeS MOSS nodes add a banner and draw one 25 px row per widget; the layout compiler opens at 520 px
-        heights[name] = 560 if cls == "HaDeSMossLayoutCompiler" else 190 + 30 * (len(widgets) + len(node_inputs))
+        # HaDeS MOSS nodes add a banner and draw one 25 px row per widget; the layout compiler opens at 520 px, the editor's canvas ~700 px
+        heights[name] = {"HaDeSMossLayoutCompiler": 560, "HaDeSMossLayoutEditor": 700}.get(cls, 190 + 30 * (len(widgets) + len(node_inputs)))
         rows[col] = y + heights[name]
         properties = {"Node name for S&R": cls}
         models = [{"name": w, "url": MODEL_FILES[w][1], "directory": MODEL_FILES[w][0]} for w in widgets if w in MODEL_FILES]
         if models:
             properties["models"] = models
-        nodes.append({"id": ids[name], "type": cls, "pos": list(layout.get(name, (col * 500, y))), "size": [380, 100], "flags": {}, "order": 0, "mode": mode[0] if mode else 0,
+        nodes.append({"id": ids[name], "type": cls, "pos": list(layout.get(name, (col * 500, y))), "size": [520 if cls == "HaDeSMossLayoutEditor" else 380, 100], "flags": {}, "order": 0, "mode": mode[0] if mode else 0,
                       "inputs": node_inputs, "widgets_values": widgets, "properties": properties, "_outputs": info})
     for node, name in zip(nodes, graph):
         info = node.pop("_outputs")

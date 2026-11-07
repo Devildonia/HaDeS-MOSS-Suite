@@ -13,6 +13,8 @@ import {
     setWidgetValue,
 } from "./moss_widgets.js";
 import { createMultiLoraWidget, multiLoraStatus } from "./moss_multilora.js";
+import { createLayoutEditorWidget, layoutEditorStatus } from "./moss_layout_editor.js";
+import { api } from "../../scripts/api.js";
 
 // =============================================================================
 // HADES MOSS SUITE UI
@@ -175,6 +177,22 @@ const INSTALLERS = {
         styleWidgets(node);
         node.addCustomWidget(createMultiLoraWidget(node, list, { groupKeys: GROUPS, groupColors: GROUP_COLORS, isEnabled }));
     },
+    HaDeSMossLayoutEditor(node) {
+        const draft = widget(node, "draft");
+        hideBackingWidget(draft);
+        if (draft?.element) draft.element.style.display = "none"; // the multi-line editor is a DOM element; the classic toggle shows the JSON
+        banner(node, { title: "LAYOUT EDITOR", getStatusText: () => layoutEditorStatus(draft) });
+        node.addCustomWidget(createLayoutEditorWidget(node, draft));
+        // after a run: the draft_in text (for IMPORT) and the background image the backend saw
+        const origOnExecuted = node.onExecuted;
+        node.onExecuted = function (message) {
+            origOnExecuted?.apply(this, arguments);
+            this._hadesDraftIn = message?.draft_in?.[0] ?? null;
+            const img = message?.images?.[0];
+            this._hadesLayoutBgUrl = img ? api.apiURL(`/view?filename=${encodeURIComponent(img.filename)}&type=${img.type}&subfolder=${encodeURIComponent(img.subfolder || "")}`) : null;
+            this.setDirtyCanvas(true, true);
+        };
+    },
     HaDeSMossKSampler(node) {
         // a connected turbo input overrides these in the backend: draw them faded (still editable for when it is unplugged)
         const TURBO_OVERRIDES = new Set(["steps", "cfg", "sampler_name", "scheduler", "slg"]);
@@ -278,6 +296,8 @@ app.registerExtension({
             if (nodeData.name === "HaDeSMossLayoutCompiler") this.setSize([460, Math.max(this.size[1], 520)]);
             // room for the idea and negative text boxes
             if (nodeData.name === "HaDeSMossPromptEnhancer") this.setSize([440, Math.max(this.size[1], 620)]);
+            // room for the box canvas
+            if (nodeData.name === "HaDeSMossLayoutEditor") { this.size[0] = 520; this.setSize([520, this.computeSize()[1]]); }
         };
     },
 });

@@ -292,6 +292,21 @@ class TestLoras(unittest.TestCase):
         findings = json.loads(telemetry.HaDeSMossSuiteTelemetry().audit("T", info_1=info, info_2=sampler_info)["result"][1])["findings"]
         self.assertTrue(any("trained for 4 steps" in f["message"] for f in findings))
 
+    def test_layout_editor_outputs_a_compilable_draft(self):
+        node = pipeline.HaDeSMossLayoutEditor()
+        out = node.edit(pipeline.EXAMPLE_DRAFT, draft_in='{"caption": "x"}')
+        draft, width, height, info = out["result"]
+        self.assertEqual((width, height), (1024, 1024))
+        self.assertEqual(out["ui"]["draft_in"], ['{"caption": "x"}'])
+        self.assertEqual(pipeline.compile_layout(json.loads(draft))[0], pipeline.compile_layout(json.loads(pipeline.EXAMPLE_DRAFT))[0])
+        self.assertEqual(common.parse_info_meta(info)["items"], 2)
+        empty_caption = json.loads(pipeline.EXAMPLE_DRAFT)
+        empty_caption["items"].append({"label": "object", "caption": "", "bbox": [0, 0, 64, 64]})
+        with self.assertRaisesRegex(ValueError, r"items\[2\]\.caption"):
+            node.edit(json.dumps(empty_caption))
+        with self.assertRaises(ValueError):
+            node.edit('{"caption": "a cat"}')
+
     def test_merger_and_resize_files_load_in_core(self):
         merged_path = loras.HaDeSMossLoraMerger().merge(self.model, "split.safetensors", 1.0, "fused.safetensors", 1.0, 64, "merged", overwrite_existing=True)["result"][0]
         key = "diffusion_model.layers.1.proj.qkv.weight"

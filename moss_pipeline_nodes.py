@@ -3,6 +3,7 @@ import math
 
 import torch
 import comfy.model_management
+import nodes
 
 from .moss_common import format_info
 
@@ -198,5 +199,48 @@ class HaDeSMossLayoutCompiler:
                                                                                 multiline=[[t.count("\n") + 1, w, h] for t, w, h in multi]))
 
 
-NODE_CLASS_MAPPINGS = {"HaDeSMossLatent": HaDeSMossLatent, "HaDeSMossLayoutCompiler": HaDeSMossLayoutCompiler}
-NODE_DISPLAY_NAME_MAPPINGS = {"HaDeSMossLatent": "MOSS Latent", "HaDeSMossLayoutCompiler": "MOSS Layout Compiler"}
+class HaDeSMossLayoutEditor:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "draft": ("STRING", {"multiline": True, "default": EXAMPLE_DRAFT,
+                                     "tooltip": "The layout draft the canvas edits (the Layout Compiler's schema): move, resize, draw and delete boxes "
+                                                "on the canvas, edit a box's label, caption and text in the rows below it."}),
+            },
+            "optional": {
+                "draft_in": ("STRING", {"forceInput": True, "tooltip": "A draft to start from, e.g. the Prompt Enhancer's draft output. After a run "
+                                                                        "the canvas offers it with an IMPORT button; it never replaces your edits by itself."}),
+                "image": ("IMAGE", {"tooltip": "Optional background for placing the boxes (a reference or an earlier render), shown on the canvas "
+                                               "at once from a Load Image node (even a muted one), otherwise after a run. Not sent to the model."}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "INT", "INT", "STRING")
+    RETURN_NAMES = ("draft", "width", "height", "info")
+    FUNCTION = "edit"
+    CATEGORY = "HaDeS/MOSS Pipeline"
+    DESCRIPTION = ("Visual editor for a layout draft: boxes on a canvas of the draft's size, colored by label (object, character, text), "
+                   "with an optional background image. Its draft goes to the Layout Compiler.")
+
+    def edit(self, draft, draft_in=None, image=None):
+        try:
+            data = json.loads(draft)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"HaDeS MOSS Layout Editor: the draft is not valid JSON ({e}).") from e
+        _check(isinstance(data, dict) and "items" in data, "the editor needs a layout draft (width, height, summary, items), not a caption draft")
+        _, width, height, texts = compile_layout(data)  # same validation as the Layout Compiler
+        counts = {label: sum(1 for item in data["items"] if item["label"] == label) for label in ("object", "character", "text")}
+        text = (f"HaDeS MOSS Layout Editor | {width}x{height} | {len(data['items'])} boxes: "
+                + ", ".join(f"{n} {label}" for label, n in counts.items() if n))
+        ui = {"draft_in": [draft_in] if draft_in is not None else []}  # always sent, so an unplugged draft_in clears IMPORT
+        if image is not None:
+            ui["images"] = nodes.PreviewImage().save_images(image[:1], filename_prefix="hades_moss_layout_bg")["ui"]["images"]
+        out = json.dumps(data, ensure_ascii=False, indent=2)
+        return {"ui": ui, "result": (out, width, height, format_info(text, "layout_editor", width=width, height=height, items=len(data["items"])))}
+
+
+NODE_CLASS_MAPPINGS = {"HaDeSMossLatent": HaDeSMossLatent, "HaDeSMossLayoutCompiler": HaDeSMossLayoutCompiler,
+                       "HaDeSMossLayoutEditor": HaDeSMossLayoutEditor}
+NODE_DISPLAY_NAME_MAPPINGS = {"HaDeSMossLatent": "MOSS Latent", "HaDeSMossLayoutCompiler": "MOSS Layout Compiler",
+                              "HaDeSMossLayoutEditor": "MOSS Layout Editor"}

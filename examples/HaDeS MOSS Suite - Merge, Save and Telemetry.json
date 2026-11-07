@@ -501,7 +501,8 @@
     "bfloat16",
     true,
     "HaDeS",
-    ""
+    "",
+    "stochastic"
    ],
    "properties": {
     "Node name for S&R": "HaDeSMossModelSaver"
