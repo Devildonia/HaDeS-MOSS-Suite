@@ -296,9 +296,12 @@ def fit(args):
                         den = denoise(x, sigmas[s], context)
                         pred = den if args.objective == "final" else euler(x, den, sigmas[s], sigmas[s + 1])
                         loss = (pred.float() - goal.float()).square().mean()
-                        torch.cuda.synchronize(); timing["student_fwd"] += time.time() - t; t = time.time()
+                        torch.cuda.synchronize()
+                        timing["student_fwd"] += time.time() - t
+                        t = time.time()
                         (loss / args.steps).backward()
-                        torch.cuda.synchronize(); timing["student_bwd"] += time.time() - t
+                        torch.cuda.synchronize()
+                        timing["student_bwd"] += time.time() - t
                 finally:
                     comfy.model_management.in_training = False
                 den = den.detach()
