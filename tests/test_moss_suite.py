@@ -37,6 +37,7 @@ loras = importlib.import_module(f"{PACK}.moss_lora_nodes")
 pipeline = importlib.import_module(f"{PACK}.moss_pipeline_nodes")
 telemetry = importlib.import_module(f"{PACK}.moss_telemetry_nodes")
 saver = importlib.import_module(f"{PACK}.moss_saver_nodes")
+enhancer = importlib.import_module(f"{PACK}.moss_enhancer_nodes")
 
 DIM, LAYERS = 256, 6  # 2 heads of 128; 256 keeps every linear a multiple of the ConvRot group size
 TMP = tempfile.mkdtemp(prefix="hades_moss_tests_")
@@ -419,6 +420,89 @@ class TestTelemetry(unittest.TestCase):
         infos = [f("x", "latent", width=1024, height=1024, batch=1),
                  f("x", "ksampler", width=1024, height=1024, steps=25, cfg=2.5, flow_shift=5.0, sampler="er_sde", scheduler="simple", seed=1, denoise=1.0, slg="off")]
         self.assertEqual(json.loads(telemetry.HaDeSMossSuiteTelemetry().audit("T", info_1=infos[0], info_2=infos[1])["result"][1])["findings"], [])
+
+
+class FakeClip:
+    """Stands in for the moss_image CLIP: records the chat text and answers with a fixed string."""
+    def __init__(self, answer):
+        self.answer, self.seen = answer, None
+
+    def tokenize(self, text, images=None):
+        self.seen = (text, images)
+        return {"text": text}
+
+    def generate(self, tokens, **kwargs):
+        self.kwargs = kwargs
+        return [0]
+
+    def decode(self, ids):
+        return self.answer
+
+
+class TestPromptEnhancer(unittest.TestCase):
+    def test_caption_parsing(self):
+        self.assertEqual(enhancer.parse_caption('```json\n{"caption": "A red fox in snow."}\n```'), "A red fox in snow.")
+        self.assertEqual(enhancer.parse_caption('Caption: "A red fox in snow."'), "A red fox in snow.")
+        self.assertEqual(enhancer.parse_caption('<think>\nhmm {"x": 1}\n</think>\n\n{"caption": "A fox."}'), "A fox.")
+
+    def test_layout_draft_is_fitted_and_compiles(self):
+        answer = ('Here is the draft:\n```json\n{"width": 512, "height": 512, "summary": {"caption": "A poster.", "canvas": "single", "id": 3},'
+                  '"items": [{"label": "text", "caption": "Bold title.", "text": "HELLO", "bbox": [100.4, -20, 1100, 200.6]},'
+                  '{"label": "object", "caption": "No box."},'
+                  '{"label": "thing", "caption": "A sun.", "bbox_2d": [300, 300, 200, 400]}]}\n```')
+        node = enhancer.HaDeSMossPromptEnhancer()
+        clip = FakeClip(answer)
+        prompt, draft, w, h, info = node.enhance(clip, "a poster", "layout", 1024, 768, 0.0, 1, 512)["result"]
+        d = json.loads(draft)
+        self.assertEqual((w, h, d["width"], d["height"]), (1024, 768, 1024, 768))
+        self.assertEqual([it["bbox"] for it in d["items"]], [[100, 0, 1024, 201], [200, 300, 300, 400]])
+        self.assertEqual([it["label"] for it in d["items"]], ["text", "object"])
+        self.assertNotIn("id", d["summary"])
+        self.assertEqual(json.loads(prompt)["items"][0]["text"], "HELLO")
+        self.assertIn("left out", info)
+        self.assertIn("Canvas: width 1024, height 768.", clip.seen[0])
+        self.assertFalse(clip.kwargs["do_sample"])  # temperature 0 is greedy
+
+    def test_caption_mode_and_image_tokens(self):
+        clip = FakeClip('{"caption": "An old fisherman mending nets at dawn."}')
+        image = torch.rand(2, 1500, 1000, 3)
+        prompt, draft, *_ = enhancer.HaDeSMossPromptEnhancer().enhance(clip, "", "caption", 1024, 1024, 0.7, 5, 256, image=image)["result"]
+        self.assertEqual(prompt, "An old fisherman mending nets at dawn.")
+        self.assertEqual(json.loads(draft), {"caption": prompt})
+        text, images = clip.seen
+        self.assertEqual(text.count(enhancer.VISION_BLOCK), 1)
+        self.assertEqual(len(images), 1)
+        self.assertLessEqual(images[0].shape[1] * images[0].shape[2], 1024 * 1024)
+        self.assertEqual(images[0].shape[0], 1)
+
+    def test_needs_idea_or_image(self):
+        with self.assertRaisesRegex(ValueError, "idea"):
+            enhancer.HaDeSMossPromptEnhancer().enhance(FakeClip(""), "  ", "caption", 1024, 1024, 0.7, 0, 256)
+
+    def test_decode_fallback_only_on_stride_errors(self):
+        try:
+            import comfy_kitchen
+            import comfy_kitchen.flash_attention as fa
+            comfy_kitchen.flash_attention_decode_gqa, fa._decode_gqa_torch
+        except (ImportError, AttributeError):
+            self.skipTest("comfy-kitchen without the GQA decode kernel")
+        native, torch_impl = comfy_kitchen.flash_attention_decode_gqa, fa._decode_gqa_torch
+        calls = []
+
+        def refusing(*a, **k):
+            calls.append("native")
+            raise RuntimeError("Unsupported Flash Attention tensor strides")
+        comfy_kitchen.flash_attention_decode_gqa = refusing
+        fa._decode_gqa_torch = lambda q, k, v, l, c: (calls.append("torch") or ("out", "lse"))
+        try:
+            with enhancer.decode_fallback() as state:
+                self.assertEqual(comfy_kitchen.flash_attention_decode_gqa(1, 2, 3, 4), "out")
+                self.assertEqual(comfy_kitchen.flash_attention_decode_gqa(1, 2, 3, 4, return_lse=True), ("out", "lse"))
+            self.assertTrue(state["fallback"])
+            self.assertEqual(calls, ["native", "torch", "torch"])  # after the first refusal the native kernel is not retried
+            self.assertIs(comfy_kitchen.flash_attention_decode_gqa, refusing)  # restored on exit
+        finally:
+            comfy_kitchen.flash_attention_decode_gqa, fa._decode_gqa_torch = native, torch_impl
 
 
 if __name__ == "__main__":

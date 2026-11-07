@@ -99,6 +99,15 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 - **Line breaks:** write them as `\n` in `text`. Measured, the box shape decides whether they are kept: a two-line title in an 832×192 box came out on one line in 3 of 6 seeds, in a 640×384 box on two lines in 6 of 6; a literal newline instead of `\n` changed nothing ([`tools/RESULTS.md`](tools/RESULTS.md)).
 - Unlike the core `MOSS-Image Layout Prompt` (boxes from `Create Bounding Boxes`), this node takes hand-written or LLM-written drafts, including `meta`, `canvas`, `palette` and `tags`.
 
+### `MOSS Prompt Enhancer` (`HaDeS/MOSS Pipeline`)
+- **Class:** `HaDeSMossPromptEnhancer`
+- **Purpose:** writes a detailed MOSS-Image prompt from a short idea and / or an image, with MOSS-Image's own text encoder: the Qwen3.5-9B file loaded as the `moss_image` CLIP holds the language head and the vision tower, so the same CLIP that encodes the prompt writes it and no other model is loaded. The instructions are adapted from OpenMOSS' official [`moss-image-prompt-enhancer`](https://github.com/OpenMOSS/MOSS-Image/tree/main/skills/moss-image-prompt-enhancer) skill (Apache-2.0).
+- **Inputs:** `clip` (MOSS-Image's text encoder), `idea`, `mode` (`caption`: a paragraph for `CLIPTextEncode`; `layout`: a pixel Layout draft with boxes for objects and text, compiled here), `width` / `height` (layout canvas), `temperature` (0 always gives the same answer), `seed`, `max_tokens`; optional `image` (the whole brief with no idea, otherwise the starting point; resized to about 1 MP) and `negative` (told to the model, not encoded).
+- **Outputs:** `prompt` (ready for `CLIPTextEncode`), `draft` (the editable JSON: a caption draft, or the layout draft for the Layout Compiler, which also outputs the matching latent), `width`, `height`, `info`.
+- **Layout answers** are fitted before compiling: the canvas set to `width` / `height`, boxes rounded and clamped into it, fields the compiler does not know dropped, items without a box left out; `info` lists what was changed.
+- **ComfyUI 0.43 / comfy-kitchen 0.2.40:** text generation with this text encoder stops on a decode-kernel error ("Unsupported Flash Attention tensor strides"), in the core `TextGenerate` node too. While this node generates, a refused call runs comfy-kitchen's own torch version of the same attention; `info` says when that happened. About 13 tokens per second on an RTX 5090.
+- **Tried, not measured** ([`tools/RESULTS.md`](tools/RESULTS.md)): one seed each, a caption and a poster layout rendered against the idea as written.
+
 ### `MOSS KSampler` (`HaDeS/MOSS Samplers`)
 - **Class:** `HaDeSMossKSampler`
 - **Purpose:** KSampler with the official ComfyUI MOSS-Image template settings as defaults (25 steps, CFG 2.5, `er_sde` / `simple`, the model's shift 5.0), an optional flow shift, optional skip-layer guidance and optional decode. With the same settings it renders the same image as the stock graph (`KSampler`, `ModelSamplingAuraFlow`, `SkipLayerGuidanceDiTSimple`, `VAEDecode`).

@@ -585,6 +585,21 @@ under 85% of SFT's chroma.
 - Not measured: 8 steps on the separating text tests above, other seeds, sizes between 1024 and 2048 (the hand tests were 1024 x
   1536), Turbo and Turbo Diverse at 8 steps beyond colour.
 
+## Prompt Enhancer (first try)
+
+MOSS Prompt Enhancer with MOSS-Image's own text encoder (`qwen3.5_9b_int8_convrot`, temperature 0.7, seed 1), its prompt
+into `CLIPTextEncode` and SFT (25 steps, CFG 2.5, er_sde / simple, seed 7000), against the idea typed straight into
+`CLIPTextEncode`. One seed per case: an example of what the node does, not a measurement of how often it helps.
+
+| Idea | Mode | As written | Through the enhancer |
+|---|---|---|---|
+| `a concert poster for a jazz night called "BLUE NOTES", friday 21:00, a saxophone silhouette` (832 x 1216) | layout | a poster crowded with invented, misspelled text | "BLUE NOTES" and "friday 21:00" spelled right in their boxes, a lit saxophone, nothing else written |
+| `an old fisherman mending nets at dawn` | caption | a wide shot at sunrise | a close shot following the caption (wool cap, wet ropes, low sun on the sea) |
+
+- The enhancer answers in 30–40 s (about 13 tokens per second on an RTX 5090, with comfy-kitchen's torch decode, see the
+  README); the layout answer needed no fixing before it compiled.
+- The same text encoder described an attached image (a neon diner) in prose and in boxes, so the image input works.
+
 ## Two-resolution sampling (prototype)
 
 `--mode progressive`, `mossImage_sft_bf16`, SageAttention, 1024 x 1024 output, er_sde / simple / 25 steps / CFG 2.5, café woman,

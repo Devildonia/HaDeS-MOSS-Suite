@@ -6,7 +6,7 @@ N_INFO = 8
 NODE_NAMES = {
     "model_block_merger": "Model Block Merger", "multi_model_merger": "Multi-Model Merger", "model_saver": "Model Saver",
     "lora_extractor": "LoRA Extractor", "lora_block_weight": "LoRA Block Weight", "lora_merger": "LoRA Merger", "lora_resize": "LoRA Resize",
-    "latent": "Latent", "layout": "Layout Compiler", "ksampler": "KSampler",
+    "latent": "Latent", "layout": "Layout Compiler", "ksampler": "KSampler", "prompt_enhancer": "Prompt Enhancer",
 }
 
 
