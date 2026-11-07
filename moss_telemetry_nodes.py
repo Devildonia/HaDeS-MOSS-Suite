@@ -7,7 +7,7 @@ NODE_NAMES = {
     "model_block_merger": "Model Block Merger", "multi_model_merger": "Multi-Model Merger", "model_saver": "Model Saver",
     "lora_extractor": "LoRA Extractor", "lora_block_weight": "LoRA Block Weight", "lora_merger": "LoRA Merger", "lora_resize": "LoRA Resize",
     "latent": "Latent", "layout": "Layout Compiler", "ksampler": "KSampler", "prompt_enhancer": "Prompt Enhancer",
-    "multi_lora": "Multi-LoRA", "layout_editor": "Layout Editor",
+    "multi_lora": "Multi-LoRA", "layout_editor": "Layout Editor", "loader": "Loader",
 }
 
 
@@ -56,6 +56,13 @@ def diagnose(metas):
                 out.append(("warning", f"{NODE_NAMES[kind]}: {m['energy_kept']:.1%} energy kept. Measured: 97.9-100% stayed within the "
                                        "noise floor of the source, 90.4-91.1% drifted visibly. Raise the rank to stay close."))
 
+    for m in by_node.get("loader", []):
+        if m["precision"].startswith("int8"):
+            out.append(("note", f"Loader: {m['model']} is int8. Measured on an RTX 5090 with the whole model in VRAM: 57% slower than bf16 at "
+                                "1024 x 1024 and 49% at 2048 (SageAttention, PyTorch 2.8.0+cu129), for about half the VRAM (5.2 GB against 9.7 GB)."))
+        if m.get("weight_dtype", "default") != "default":
+            out.append(("note", f"Loader: the model was loaded as {m['weight_dtype']}; that conversion was not measured."))
+
     # few-step LoRAs in a Multi-LoRA against the KSampler: the settings come from each file's own metadata
     for m in by_node.get("multi_lora", []):
         for t in m.get("turbo", []):
@@ -87,7 +94,7 @@ class HaDeSMossSuiteTelemetry:
     FUNCTION = "audit"
     OUTPUT_NODE = True
     CATEGORY = "HaDeS/MOSS Pipeline"
-    DESCRIPTION = "Reads the info outputs of HaDeS MOSS nodes and checks the pipeline against what was measured (canvas sizes, shift, SLG, quantized merges, LoRA energy, few-step LoRA settings, layout line breaks)."
+    DESCRIPTION = "Reads the info outputs of HaDeS MOSS nodes and checks the pipeline against what was measured (canvas sizes, shift, SLG, quantized merges, LoRA energy, few-step LoRA settings, int8 models, layout line breaks)."
 
     def audit(self, report_title, **infos):
         metas, foreign = [], 0

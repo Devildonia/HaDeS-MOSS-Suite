@@ -430,6 +430,19 @@ class TestSaverAndSampler(unittest.TestCase):
         self.assertEqual((seen["steps"], common.parse_info_meta(info)["steps"]), (6, 6))
 
 
+class TestLoader(unittest.TestCase):
+    def test_precision_and_telemetry_note(self):
+        loader = importlib.import_module(f"{PACK}.moss_loader_nodes")
+        sd = tiny_state_dict(9)
+        self.assertIn(loader.model_precision(load(sd)), ("bf16", "fp32"))  # the precision in memory: fp32 when ComfyUI runs on the CPU
+        q = loader.model_precision(load_int8(sd))
+        self.assertTrue(q.startswith("int8 ("), q)
+        info = common.format_info("x", "loader", model="m.safetensors", precision=q, weight_dtype="default", attention="comfy_kitchen_int8",
+                                  layers=LAYERS, text_encoder="te.safetensors", vae="flux2-vae.safetensors")
+        findings = json.loads(telemetry.HaDeSMossSuiteTelemetry().audit("T", info_1=info)["result"][1])["findings"]
+        self.assertTrue(any("57% slower" in f["message"] for f in findings))
+
+
 class TestTelemetry(unittest.TestCase):
     def test_turbo_notes(self):
         f = common.format_info

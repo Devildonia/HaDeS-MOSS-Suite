@@ -37,6 +37,7 @@ const SHORT_TAGS = {
     custom_width: "WIDTH", custom_height: "HEIGHT", batch_size: "BATCH", recipe_override: "RECIPE", include_metadata: "METADATA",
     overwrite_existing: "OVERWRITE", dynamic_energy: "ENERGY", target_rank: "RANK", custom_author: "AUTHOR", custom_model_title: "TITLE",
     report_title: "TITLE", time_modulation: "TIME MOD", text_embedder: "TEXT EMB", other_layers: "OTHER",
+    clip_name: "TEXT ENC", vae_name: "VAE", weight_dtype: "DTYPE", clip_device: "TE DEVICE",
 };
 
 // Text in a slider row next to its tag; the share each merge group carries alone of the SFT -> Base change (tools/RESULTS.md)
@@ -251,6 +252,7 @@ const INSTALLERS = {
 // Nodes without a specific installer: title banner and styled rows.
 const GENERIC = {
     HaDeSMossMultiModelMerger: { title: "MULTI-MODEL MERGE", sliders: { density: [0, 1], scale: [0, 2], weight_1: [0, 2], weight_2: [0, 2], weight_3: [0, 2], weight_4: [0, 2] } },
+    HaDeSMossLoader: { title: "MOSS LOADER · MODEL · TEXT ENCODER · VAE" },
     HaDeSMossModelSaver: { title: "MODEL SAVER" },
     HaDeSMossLoraExtractor: { title: "LORA EXTRACTOR" },
     HaDeSMossLoraMerger: { title: "LORA MERGER", sliders: { weight_a: [0, 2], weight_b: [0, 2], dynamic_energy: [0, 1] } },
