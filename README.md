@@ -102,8 +102,9 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 ### `MOSS Latent` (`HaDeS/MOSS Pipeline`)
 - **Class:** `HaDeSMossLatent`
 - **Purpose:** empty MOSS-Image latent (128 channels, 16 px grid) from an aspect ratio (`1:1`, `4:3`, `3:2`, `16:9`, `21:9` and their portrait forms) and a size in megapixels (`1.0` = 1024×1024), or a custom width / height snapped to 16 px. Outputs `width` / `height` for layout prompts.
-- **Inputs:** `aspect_ratio`, `megapixels` (`0.25..4.0`, default `1.0`), `custom_width`, `custom_height`, `batch_size`; optional `vae` (rejects a VAE that is not the 128-channel FLUX.2 one).
-- **Outputs:** `latent`, `width`, `height`, `info`.
+- **Inputs:** `aspect_ratio`, `megapixels` (`0.25..4.0`, default `1.0`), `custom_width`, `custom_height`, `batch_size`, `seed` (with control after generate, which starts on ComfyUI's default, `randomize`, as on the KSampler; `fixed` keeps it); optional `vae` (rejects a VAE that is not the 128-channel FLUX.2 one).
+- **Outputs:** `latent`, `width`, `height`, `info`, `seed`.
+- **Shared seed:** connect `seed` to the `seed` of the MOSS KSampler (and of a second sampler, e.g. a refine pass) and of the Prompt Enhancer, so one value set here reproduces the whole image, prompt included. The seed does not change the latent, which is empty; it is shown in the node's status line and written to `info`.
 - **Measured:** square images from 768 to 2048 render clean at the model's default shift 5.0, with no repeated subjects; larger canvases show more of the scene. Raising the shift is not needed at any of these sizes. Non-square ratios are not measured. See [`tools/RESULTS.md`](tools/RESULTS.md).
 - **Upscaling a MOSS latent (hi-res fix):** use the core `Upscale Latent By` (`LatentUpscaleBy`), not `Upscale Latent` (`LatentUpscale`). The latter takes a size in pixels and divides it by 8, as for SD VAEs, while the MOSS latent is 16 px per cell: asked for 1024 x 1024, it gives a 2048 x 2048 image.
 
@@ -172,12 +173,15 @@ The nodes draw their own moss-green rows on the canvas (the HaDeS Anima Suite wi
 
 In [`examples/`](examples) (drag a file into ComfyUI). They use the official Comfy-Org file names and carry their download links, so ComfyUI offers to download missing models.
 
+Every example loads the three files with the **MOSS Loader**, writes and encodes the prompts with the **Prompt Enhancer** (`as written`, the plain text encoder, unless said otherwise), shares the **MOSS Latent**'s seed with its samplers and ends in a **Suite Telemetry** report that reads the loader too.
+
 - **Merge, Save and Telemetry:** SFT with layers 24–35 from Base through the Block Merger, MOSS Latent and MOSS KSampler, telemetry report. Model Saver and a SLERP Multi-Model Merger come muted, ready to switch on.
+- **Prompt Enhancer:** a short idea written into a detailed prompt (`caption` mode) and encoded, with a text preview of what was written; the latent's seed drives both the writing and the sampler, so one seed reproduces the whole image. A Load Image comes muted, to have the prompt written from a picture. A note explains the modes.
 - **Layout Poster:** an OpenMOSS layout draft through the Layout Compiler, whose prompt and latent feed the sampler, with telemetry.
-- **Layout Editor:** the Layout Editor's draft through the Layout Compiler into the sampler, with a note on how to edit the boxes; a Load Image is the background (pick your picture there); the Prompt Enhancer (writes a draft to IMPORT) comes muted.
+- **Layout Editor:** the Layout Editor's draft through the Layout Compiler into the sampler, with a note on how to edit the boxes; a Load Image is the background (pick your picture there); a second Prompt Enhancer in `layout` mode (writes a draft to IMPORT) comes muted.
 - **Turbo:** MOSS Turbo LoRA into the MOSS KSampler's `turbo` input, 4 steps at CFG 1 on SFT; ComfyUI offers to download the LoRA from Hugging Face.
-- **Turbo 8 steps + Upscale x2:** Turbo 8-steps v0.7 at 8 steps, then two groups to switch on or off from the group's right-click menu: a 2x upscale with RealESRGAN x2 (on; pixels only, about a second) and, on top of it, a MOSS pass at 2048 with the same turbo at denoise 0.25 (off; adds hair, pores and fine texture the upscaler smooths, about 16 s). A note in the workflow explains both.
-- **LoRA Toolkit:** a LoRA through LoRA Block Weight into the sampler; LoRA Merger, LoRA Resize and LoRA Extractor (with a finetune loader) come muted, since they write files. Pick your own LoRA in `lora_name`.
+- **Turbo 8 steps + Upscale x2:** Turbo 8-steps v0.7 at 8 steps, then two groups to switch on or off from the group's right-click menu: a 2x upscale with RealESRGAN x2 (on; pixels only, about a second) and, on top of it, a MOSS pass at 2048 with the same turbo and seed at denoise 0.25 (off; adds hair, pores and fine texture the upscaler smooths, about 16 s). A note in the workflow explains both.
+- **LoRA Toolkit:** a LoRA through the Multi-LoRA into the sampler (add rows for more LoRAs; each row's group button holds its strength per group of layers); LoRA Merger, LoRA Resize and LoRA Extractor (with a finetune loader) come muted, since they write files. Pick your own LoRA in the Multi-LoRA's row.
 
 Every example was run end to end in ComfyUI 0.43.0 (muted nodes left out). `tools/make_examples.py` regenerates them from the node definitions of a running ComfyUI.
 

@@ -1,12 +1,12 @@
 {
- "id": "918a4b8f-fb12-58f4-a699-0ac8a05dc037",
+ "id": "756122ff-2fba-53d6-8df6-8ffd6b26f09c",
  "revision": 0,
- "last_node_id": 11,
- "last_link_id": 12,
+ "last_node_id": 8,
+ "last_link_id": 13,
  "nodes": [
   {
    "id": 1,
-   "type": "UNETLoader",
+   "type": "HaDeSMossLoader",
    "pos": [
     0,
     0
@@ -21,90 +21,24 @@
    "inputs": [],
    "widgets_values": [
     "moss_image_sft_bf16.safetensors",
+    "qwen3.5_9b_w4a8_gptq.safetensors",
+    "flux2-vae.safetensors",
+    "default",
     "default"
    ],
    "properties": {
-    "Node name for S&R": "UNETLoader",
+    "Node name for S&R": "HaDeSMossLoader",
     "models": [
      {
       "name": "moss_image_sft_bf16.safetensors",
       "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_sft_bf16.safetensors",
       "directory": "diffusion_models"
-     }
-    ]
-   },
-   "outputs": [
-    {
-     "name": "MODEL",
-     "type": "MODEL",
-     "links": [
-      3
-     ]
-    }
-   ]
-  },
-  {
-   "id": 2,
-   "type": "CLIPLoader",
-   "pos": [
-    0,
-    250
-   ],
-   "size": [
-    380,
-    100
-   ],
-   "flags": {},
-   "order": 1,
-   "mode": 0,
-   "inputs": [],
-   "widgets_values": [
-    "qwen3.5_9b_w4a8_gptq.safetensors",
-    "moss_image",
-    "default"
-   ],
-   "properties": {
-    "Node name for S&R": "CLIPLoader",
-    "models": [
+     },
      {
       "name": "qwen3.5_9b_w4a8_gptq.safetensors",
       "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_w4a8_gptq.safetensors",
       "directory": "text_encoders"
-     }
-    ]
-   },
-   "outputs": [
-    {
-     "name": "CLIP",
-     "type": "CLIP",
-     "links": [
-      1,
-      2
-     ]
-    }
-   ]
-  },
-  {
-   "id": 3,
-   "type": "VAELoader",
-   "pos": [
-    0,
-    530
-   ],
-   "size": [
-    380,
-    100
-   ],
-   "flags": {},
-   "order": 2,
-   "mode": 0,
-   "inputs": [],
-   "widgets_values": [
-    "flux2-vae.safetensors"
-   ],
-   "properties": {
-    "Node name for S&R": "VAELoader",
-    "models": [
+     },
      {
       "name": "flux2-vae.safetensors",
       "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae.safetensors",
@@ -114,64 +48,48 @@
    },
    "outputs": [
     {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      2
+     ]
+    },
+    {
+     "name": "CLIP",
+     "type": "CLIP",
+     "links": [
+      1
+     ]
+    },
+    {
      "name": "VAE",
      "type": "VAE",
      "links": [
       7
      ]
-    }
-   ]
-  },
-  {
-   "id": 4,
-   "type": "CLIPTextEncode",
-   "pos": [
-    500,
-    0
-   ],
-   "size": [
-    380,
-    100
-   ],
-   "flags": {},
-   "order": 5,
-   "mode": 0,
-   "inputs": [
+    },
     {
-     "name": "clip",
-     "type": "CLIP",
-     "link": 1
-    }
-   ],
-   "widgets_values": [
-    "nsfw, worst quality, bad anatomy, watermark, jpeg artifact"
-   ],
-   "properties": {
-    "Node name for S&R": "CLIPTextEncode"
-   },
-   "outputs": [
-    {
-     "name": "CONDITIONING",
-     "type": "CONDITIONING",
+     "name": "info",
+     "type": "STRING",
      "links": [
-      5
+      10
      ]
     }
    ]
   },
   {
-   "id": 5,
+   "id": 2,
    "type": "HaDeSMossTurbo",
    "pos": [
     0,
-    750
+    340
    ],
    "size": [
     380,
     100
    ],
    "flags": {},
-   "order": 3,
+   "order": 1,
    "mode": 0,
    "inputs": [],
    "widgets_values": [
@@ -200,55 +118,100 @@
    ]
   },
   {
-   "id": 6,
-   "type": "CLIPTextEncode",
+   "id": 3,
+   "type": "HaDeSMossPromptEnhancer",
    "pos": [
     500,
-    250
+    0
    ],
    "size": [
-    380,
+    440,
     100
    ],
    "flags": {},
-   "order": 6,
+   "order": 3,
    "mode": 0,
    "inputs": [
     {
      "name": "clip",
      "type": "CLIP",
-     "link": 2
+     "link": 1
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "link": null,
+     "shape": 7
     }
    ],
    "widgets_values": [
-    "Photograph of a hand-painted wooden sign outside a bakery that reads \"FRESH BREAD DAILY\" in large white letters and \"open 7am - 3pm\" in smaller letters below, morning light."
+    "Photograph of a hand-painted wooden sign outside a bakery that reads \"FRESH BREAD DAILY\" in large white letters and \"open 7am - 3pm\" in smaller letters below, morning light.",
+    "as written",
+    1024,
+    1024,
+    0.7,
+    1,
+    1024,
+    ""
    ],
    "properties": {
-    "Node name for S&R": "CLIPTextEncode"
+    "Node name for S&R": "HaDeSMossPromptEnhancer"
    },
    "outputs": [
     {
-     "name": "CONDITIONING",
+     "name": "positive",
+     "type": "CONDITIONING",
+     "links": [
+      3
+     ]
+    },
+    {
+     "name": "negative",
      "type": "CONDITIONING",
      "links": [
       4
      ]
+    },
+    {
+     "name": "prompt",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "draft",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "width",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "height",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
     }
    ]
   },
   {
-   "id": 7,
+   "id": 4,
    "type": "HaDeSMossLatent",
    "pos": [
     0,
-    1030
+    620
    ],
    "size": [
     380,
     100
    ],
    "flags": {},
-   "order": 4,
+   "order": 2,
    "mode": 0,
    "inputs": [
     {
@@ -263,7 +226,9 @@
     1.0,
     1024,
     1024,
-    1
+    1,
+    1000,
+    "fixed"
    ],
    "properties": {
     "Node name for S&R": "HaDeSMossLatent"
@@ -273,7 +238,7 @@
      "name": "latent",
      "type": "LATENT",
      "links": [
-      6
+      5
      ]
     },
     {
@@ -290,13 +255,20 @@
      "name": "info",
      "type": "STRING",
      "links": [
-      10
+      11
+     ]
+    },
+    {
+     "name": "seed",
+     "type": "INT",
+     "links": [
+      6
      ]
     }
    ]
   },
   {
-   "id": 8,
+   "id": 5,
    "type": "HaDeSMossKSampler",
    "pos": [
     1000,
@@ -307,28 +279,36 @@
     100
    ],
    "flags": {},
-   "order": 7,
+   "order": 4,
    "mode": 0,
    "inputs": [
     {
      "name": "model",
      "type": "MODEL",
-     "link": 3
+     "link": 2
     },
     {
      "name": "positive",
      "type": "CONDITIONING",
-     "link": 4
+     "link": 3
     },
     {
      "name": "negative",
      "type": "CONDITIONING",
-     "link": 5
+     "link": 4
     },
     {
      "name": "latent_image",
      "type": "LATENT",
-     "link": 6
+     "link": 5
+    },
+    {
+     "name": "seed",
+     "type": "INT",
+     "link": 6,
+     "widget": {
+      "name": "seed"
+     }
     },
     {
      "name": "vae",
@@ -344,7 +324,7 @@
     }
    ],
    "widgets_values": [
-    1000,
+    0,
     "fixed",
     25,
     2.5,
@@ -374,13 +354,13 @@
      "name": "info",
      "type": "STRING",
      "links": [
-      11
+      12
      ]
     }
    ]
   },
   {
-   "id": 9,
+   "id": 6,
    "type": "SaveImage",
    "pos": [
     1500,
@@ -391,7 +371,7 @@
     100
    ],
    "flags": {},
-   "order": 8,
+   "order": 5,
    "mode": 0,
    "inputs": [
     {
@@ -415,7 +395,7 @@
    ]
   },
   {
-   "id": 10,
+   "id": 7,
    "type": "HaDeSMossSuiteTelemetry",
    "pos": [
     1500,
@@ -426,7 +406,7 @@
     100
    ],
    "flags": {},
-   "order": 9,
+   "order": 6,
    "mode": 0,
    "inputs": [
     {
@@ -444,7 +424,7 @@
     {
      "name": "info_3",
      "type": "STRING",
-     "link": null,
+     "link": 12,
      "shape": 7
     },
     {
@@ -489,7 +469,7 @@
      "name": "report",
      "type": "STRING",
      "links": [
-      12
+      13
      ]
     },
     {
@@ -505,7 +485,7 @@
    ]
   },
   {
-   "id": 11,
+   "id": 8,
    "type": "PreviewAny",
    "pos": [
     2000,
@@ -516,13 +496,13 @@
     100
    ],
    "flags": {},
-   "order": 10,
+   "order": 7,
    "mode": 0,
    "inputs": [
     {
      "name": "source",
      "type": "*",
-     "link": 12
+     "link": 13
     }
    ],
    "widgets_values": [],
@@ -541,97 +521,105 @@
  "links": [
   [
    1,
-   2,
-   0,
-   4,
-   0,
-   "CLIP"
-  ],
-  [
-   2,
-   2,
-   0,
-   6,
-   0,
-   "CLIP"
-  ],
-  [
+   1,
+   1,
    3,
+   0,
+   "CLIP"
+  ],
+  [
+   2,
    1,
    0,
-   8,
+   5,
    0,
    "MODEL"
   ],
   [
-   4,
-   6,
+   3,
+   3,
    0,
-   8,
+   5,
    1,
    "CONDITIONING"
   ],
   [
-   5,
    4,
-   0,
-   8,
+   3,
+   1,
+   5,
    2,
    "CONDITIONING"
   ],
   [
-   6,
-   7,
+   5,
+   4,
    0,
-   8,
+   5,
    3,
    "LATENT"
   ],
   [
-   7,
-   3,
-   0,
-   8,
+   6,
    4,
+   4,
+   5,
+   4,
+   "INT"
+  ],
+  [
+   7,
+   1,
+   2,
+   5,
+   5,
    "VAE"
   ],
   [
    8,
-   5,
+   2,
    0,
-   8,
    5,
+   6,
    "MOSS_TURBO"
   ],
   [
    9,
-   8,
+   5,
    1,
-   9,
+   6,
    0,
    "IMAGE"
   ],
   [
    10,
-   7,
+   1,
    3,
-   10,
+   7,
    0,
    "STRING"
   ],
   [
    11,
-   8,
-   2,
-   10,
+   4,
+   3,
+   7,
    1,
    "STRING"
   ],
   [
    12,
-   10,
+   5,
+   2,
+   7,
+   2,
+   "STRING"
+  ],
+  [
+   13,
+   7,
    0,
-   11,
+   8,
    0,
    "STRING"
   ]

@@ -238,11 +238,12 @@ const INSTALLERS = {
             title: "MOSS LATENT",
             getStatusText: () => {
                 const aspect = widget(node, "aspect_ratio")?.value;
-                if (aspect === "custom") return `${num(node, "custom_width")} × ${num(node, "custom_height")} · custom`;
+                const seed = ` · seed ${widget(node, "seed")?.value ?? 0}`;
+                if (aspect === "custom") return `${num(node, "custom_width")} × ${num(node, "custom_height")} · custom${seed}`;
                 const [aw, ah] = String(aspect).split(":").map(Number);
                 const unit = Math.sqrt((num(node, "megapixels", 1) * 1024 * 1024) / (aw * ah));
                 const snap = (v) => Math.max(16, Math.round(v / 16) * 16);
-                return `${snap(aw * unit)} × ${snap(ah * unit)} · ${aspect} · 128-ch latent`;
+                return `${snap(aw * unit)} × ${snap(ah * unit)} · ${aspect}${seed}`;
             },
         });
         styleWidgets(node, { sliders: { megapixels: [0.25, 4] } });

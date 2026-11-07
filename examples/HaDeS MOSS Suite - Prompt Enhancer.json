@@ -1,0 +1,718 @@
+{
+ "id": "9116055d-8e26-5253-8241-89608e534509",
+ "revision": 0,
+ "last_node_id": 10,
+ "last_link_id": 16,
+ "nodes": [
+  {
+   "id": 1,
+   "type": "HaDeSMossLoader",
+   "pos": [
+    0,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "moss_image_sft_bf16.safetensors",
+    "qwen3.5_9b_w4a8_gptq.safetensors",
+    "flux2-vae.safetensors",
+    "default",
+    "default"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossLoader",
+    "models": [
+     {
+      "name": "moss_image_sft_bf16.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_sft_bf16.safetensors",
+      "directory": "diffusion_models"
+     },
+     {
+      "name": "qwen3.5_9b_w4a8_gptq.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_w4a8_gptq.safetensors",
+      "directory": "text_encoders"
+     },
+     {
+      "name": "flux2-vae.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae.safetensors",
+      "directory": "vae"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      4
+     ]
+    },
+    {
+     "name": "CLIP",
+     "type": "CLIP",
+     "links": [
+      1
+     ]
+    },
+    {
+     "name": "VAE",
+     "type": "VAE",
+     "links": [
+      9
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      12
+     ]
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "type": "HaDeSMossPromptEnhancer",
+   "pos": [
+    450,
+    0
+   ],
+   "size": [
+    440,
+    100
+   ],
+   "flags": {},
+   "order": 3,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "clip",
+     "type": "CLIP",
+     "link": 1
+    },
+    {
+     "name": "seed",
+     "type": "INT",
+     "link": 2,
+     "widget": {
+      "name": "seed"
+     }
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "link": 3,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "A cosy bookshop on a rainy evening, seen from the street.",
+    "caption",
+    1024,
+    1024,
+    0.7,
+    0,
+    1024,
+    ""
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossPromptEnhancer"
+   },
+   "outputs": [
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "links": [
+      5
+     ]
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "links": [
+      6
+     ]
+    },
+    {
+     "name": "prompt",
+     "type": "STRING",
+     "links": [
+      11
+     ]
+    },
+    {
+     "name": "draft",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "width",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "height",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      13
+     ]
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "type": "LoadImage",
+   "pos": [
+    0,
+    380
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 1,
+   "mode": 2,
+   "inputs": [],
+   "widgets_values": [
+    "example.png"
+   ],
+   "properties": {
+    "Node name for S&R": "LoadImage"
+   },
+   "outputs": [
+    {
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      3
+     ]
+    },
+    {
+     "name": "MASK",
+     "type": "MASK",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "type": "HaDeSMossLatent",
+   "pos": [
+    950,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 2,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "1:1",
+    1.0,
+    1024,
+    1024,
+    1,
+    1000,
+    "fixed"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossLatent"
+   },
+   "outputs": [
+    {
+     "name": "latent",
+     "type": "LATENT",
+     "links": [
+      7
+     ]
+    },
+    {
+     "name": "width",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "height",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      14
+     ]
+    },
+    {
+     "name": "seed",
+     "type": "INT",
+     "links": [
+      2,
+      8
+     ]
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "type": "HaDeSMossKSampler",
+   "pos": [
+    1400,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 4,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 4
+    },
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "link": 5
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "link": 6
+    },
+    {
+     "name": "latent_image",
+     "type": "LATENT",
+     "link": 7
+    },
+    {
+     "name": "seed",
+     "type": "INT",
+     "link": 8,
+     "widget": {
+      "name": "seed"
+     }
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": 9,
+     "shape": 7
+    },
+    {
+     "name": "turbo",
+     "type": "MOSS_TURBO",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    0,
+    "fixed",
+    25,
+    2.5,
+    "er_sde",
+    "simple",
+    1.0,
+    0.0,
+    "off"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossKSampler"
+   },
+   "outputs": [
+    {
+     "name": "latent",
+     "type": "LATENT",
+     "links": []
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "links": [
+      10
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "type": "SaveImage",
+   "pos": [
+    1850,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 6,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "images",
+     "type": "IMAGE",
+     "link": 10
+    }
+   ],
+   "widgets_values": [
+    "HaDeS_MOSS_enhancer"
+   ],
+   "properties": {
+    "Node name for S&R": "SaveImage"
+   },
+   "outputs": [
+    {
+     "name": "images",
+     "type": "IMAGE",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "type": "PreviewAny",
+   "pos": [
+    950,
+    380
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 5,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "source",
+     "type": "*",
+     "link": 11
+    }
+   ],
+   "widgets_values": [],
+   "properties": {
+    "Node name for S&R": "PreviewAny"
+   },
+   "outputs": [
+    {
+     "name": "STRING",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "type": "HaDeSMossSuiteTelemetry",
+   "pos": [
+    1850,
+    480
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 7,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "info_1",
+     "type": "STRING",
+     "link": 12,
+     "shape": 7
+    },
+    {
+     "name": "info_2",
+     "type": "STRING",
+     "link": 13,
+     "shape": 7
+    },
+    {
+     "name": "info_3",
+     "type": "STRING",
+     "link": 14,
+     "shape": 7
+    },
+    {
+     "name": "info_4",
+     "type": "STRING",
+     "link": 15,
+     "shape": 7
+    },
+    {
+     "name": "info_5",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "info_6",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "info_7",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "info_8",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "HaDeS MOSS Suite Telemetry"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossSuiteTelemetry"
+   },
+   "outputs": [
+    {
+     "name": "report",
+     "type": "STRING",
+     "links": [
+      16
+     ]
+    },
+    {
+     "name": "json",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "summary",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "type": "PreviewAny",
+   "pos": [
+    2300,
+    480
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 8,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "source",
+     "type": "*",
+     "link": 16
+    }
+   ],
+   "widgets_values": [],
+   "properties": {
+    "Node name for S&R": "PreviewAny"
+   },
+   "outputs": [
+    {
+     "name": "STRING",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "type": "Note",
+   "pos": [
+    0,
+    -560
+   ],
+   "size": [
+    800,
+    520
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "widgets_values": [
+    "HaDeS MOSS Suite - Prompt Enhancer\n\nMOSS Prompt Enhancer: a positive / negative prompt box that can also write the prompt,\nwith MOSS-Image's own text encoder (no other model is loaded).\n  - caption: writes a detailed paragraph from the short idea (shown in the text preview)\n  - layout: writes a layout draft with boxes (see the Layout Editor example)\n  - as written: encodes the idea as typed, like a plain text encoder\n  - negative: empty uses the official MOSS-Image negative; what you write is also kept out of the image\n\nThe MOSS Latent's seed drives both the writing and the sampler: one seed reproduces the whole image.\nSet the latent's after run to fixed to keep it.\n\nOptional (muted): Load Image. Unmute it (right-click > Mode > Always) to have the prompt written from\nthe picture: with an empty idea the picture is the whole brief, otherwise the starting point.\nTried on one seed per case, not measured (tools/RESULTS.md)."
+   ],
+   "properties": {}
+  }
+ ],
+ "links": [
+  [
+   1,
+   1,
+   1,
+   2,
+   0,
+   "CLIP"
+  ],
+  [
+   2,
+   4,
+   4,
+   2,
+   1,
+   "INT"
+  ],
+  [
+   3,
+   3,
+   0,
+   2,
+   2,
+   "IMAGE"
+  ],
+  [
+   4,
+   1,
+   0,
+   5,
+   0,
+   "MODEL"
+  ],
+  [
+   5,
+   2,
+   0,
+   5,
+   1,
+   "CONDITIONING"
+  ],
+  [
+   6,
+   2,
+   1,
+   5,
+   2,
+   "CONDITIONING"
+  ],
+  [
+   7,
+   4,
+   0,
+   5,
+   3,
+   "LATENT"
+  ],
+  [
+   8,
+   4,
+   4,
+   5,
+   4,
+   "INT"
+  ],
+  [
+   9,
+   1,
+   2,
+   5,
+   5,
+   "VAE"
+  ],
+  [
+   10,
+   5,
+   1,
+   6,
+   0,
+   "IMAGE"
+  ],
+  [
+   11,
+   2,
+   2,
+   7,
+   0,
+   "STRING"
+  ],
+  [
+   12,
+   1,
+   3,
+   8,
+   0,
+   "STRING"
+  ],
+  [
+   13,
+   2,
+   6,
+   8,
+   1,
+   "STRING"
+  ],
+  [
+   14,
+   4,
+   3,
+   8,
+   2,
+   "STRING"
+  ],
+  [
+   15,
+   5,
+   2,
+   8,
+   3,
+   "STRING"
+  ],
+  [
+   16,
+   8,
+   0,
+   9,
+   0,
+   "STRING"
+  ]
+ ],
+ "groups": [],
+ "config": {},
+ "extra": {},
+ "version": 0.4
+}

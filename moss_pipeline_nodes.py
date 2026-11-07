@@ -29,19 +29,23 @@ class HaDeSMossLatent:
                 "custom_width": ("INT", {"default": 1024, "min": 256, "max": 4096, "step": 16, "tooltip": "Used with aspect_ratio custom; snapped to 16 px."}),
                 "custom_height": ("INT", {"default": 1024, "min": 256, "max": 4096, "step": 16, "tooltip": "Used with aspect_ratio custom; snapped to 16 px."}),
                 "batch_size": ("INT", {"default": 1, "min": 1, "max": 64}),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFFFFFFFFFF, "control_after_generate": True,
+                                 "tooltip": "A seed to share: connect the seed output to the MOSS KSampler and the Prompt Enhancer so one value "
+                                            "reproduces the whole image. Set after run to fixed to keep it; it does not change the latent itself, which is empty."}),
             },
             "optional": {
                 "vae": ("VAE", {"tooltip": "Optional: checks that it is a 128-channel FLUX.2 VAE, the one MOSS-Image uses."}),
             },
         }
 
-    RETURN_TYPES = ("LATENT", "INT", "INT", "STRING")
-    RETURN_NAMES = ("latent", "width", "height", "info")
+    RETURN_TYPES = ("LATENT", "INT", "INT", "STRING", "INT")
+    RETURN_NAMES = ("latent", "width", "height", "info", "seed")
     FUNCTION = "generate"
     CATEGORY = "HaDeS/MOSS Pipeline"
-    DESCRIPTION = "Empty MOSS-Image latent (128 channels, 16 px grid) from an aspect ratio and megapixels; width / height out for layout prompts."
+    DESCRIPTION = ("Empty MOSS-Image latent (128 channels, 16 px grid) from an aspect ratio and megapixels; width / height out for layout "
+                   "prompts, and a seed to share between the samplers and the Prompt Enhancer.")
 
-    def generate(self, aspect_ratio, megapixels, custom_width, custom_height, batch_size, vae=None):
+    def generate(self, aspect_ratio, megapixels, custom_width, custom_height, batch_size, seed=0, vae=None):
         if vae is not None and getattr(vae, "latent_channels", LATENT_CHANNELS) != LATENT_CHANNELS:
             raise ValueError(f"HaDeS MOSS Latent: the VAE has {vae.latent_channels} latent channels; MOSS-Image needs the 128-channel "
                              f"FLUX.2 VAE (flux2-vae / flux2-vae_small).")
@@ -53,10 +57,10 @@ class HaDeSMossLatent:
             w, h = snap16(aw * unit), snap16(ah * unit)
         latent = torch.zeros([batch_size, LATENT_CHANNELS, h // 16, w // 16], device=comfy.model_management.intermediate_device())
         mp = w * h / (1024 * 1024)
-        text = f"HaDeS MOSS Latent | {w}x{h} ({mp:.2f} MP, {aspect_ratio}) | batch {batch_size} | {(w // 16) * (h // 16)} image tokens"
+        text = f"HaDeS MOSS Latent | {w}x{h} ({mp:.2f} MP, {aspect_ratio}) | batch {batch_size} | {(w // 16) * (h // 16)} image tokens | seed {seed}"
         if not 0.55 <= mp <= 4.05:
             text += "\nOutside the measured range (768x768 to 2048x2048)."
-        return ({"samples": latent}, w, h, format_info(text, "latent", width=w, height=h, batch=batch_size))
+        return ({"samples": latent}, w, h, format_info(text, "latent", width=w, height=h, batch=batch_size, seed=int(seed)), int(seed))
 
 
 # ==============================================================================

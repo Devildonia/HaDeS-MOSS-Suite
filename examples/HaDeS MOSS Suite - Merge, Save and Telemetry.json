@@ -1,12 +1,12 @@
 {
- "id": "d4604795-df3e-5056-8e6c-c23529f570fa",
+ "id": "be59c1bd-6d6e-5a3e-9bc8-8195de4dddbf",
  "revision": 0,
- "last_node_id": 14,
- "last_link_id": 17,
+ "last_node_id": 11,
+ "last_link_id": 18,
  "nodes": [
   {
    "id": 1,
-   "type": "UNETLoader",
+   "type": "HaDeSMossLoader",
    "pos": [
     0,
     0
@@ -21,15 +21,28 @@
    "inputs": [],
    "widgets_values": [
     "moss_image_sft_bf16.safetensors",
+    "qwen3.5_9b_w4a8_gptq.safetensors",
+    "flux2-vae.safetensors",
+    "default",
     "default"
    ],
    "properties": {
-    "Node name for S&R": "UNETLoader",
+    "Node name for S&R": "HaDeSMossLoader",
     "models": [
      {
       "name": "moss_image_sft_bf16.safetensors",
       "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_sft_bf16.safetensors",
       "directory": "diffusion_models"
+     },
+     {
+      "name": "qwen3.5_9b_w4a8_gptq.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_w4a8_gptq.safetensors",
+      "directory": "text_encoders"
+     },
+     {
+      "name": "flux2-vae.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae.safetensors",
+      "directory": "vae"
      }
     ]
    },
@@ -41,6 +54,27 @@
       1,
       12
      ]
+    },
+    {
+     "name": "CLIP",
+     "type": "CLIP",
+     "links": [
+      3
+     ]
+    },
+    {
+     "name": "VAE",
+     "type": "VAE",
+     "links": [
+      9
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      14
+     ]
     }
    ]
   },
@@ -49,7 +83,7 @@
    "type": "UNETLoader",
    "pos": [
     0,
-    250
+    340
    ],
    "size": [
     380,
@@ -96,7 +130,7 @@
     100
    ],
    "flags": {},
-   "order": 5,
+   "order": 3,
    "mode": 0,
    "inputs": [
     {
@@ -131,7 +165,7 @@
      "name": "MODEL",
      "type": "MODEL",
      "links": [
-      5,
+      4,
       11
      ]
     },
@@ -139,17 +173,99 @@
      "name": "info",
      "type": "STRING",
      "links": [
-      14
+      15
      ]
     }
    ]
   },
   {
    "id": 4,
-   "type": "CLIPLoader",
+   "type": "HaDeSMossPromptEnhancer",
+   "pos": [
+    500,
+    580
+   ],
+   "size": [
+    440,
+    100
+   ],
+   "flags": {},
+   "order": 4,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "clip",
+     "type": "CLIP",
+     "link": 3
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "Studio photograph of an elderly fisherman with a weathered face and a grey knitted cap, soft window light from the left, shallow depth of field, 85mm lens, muted colors.",
+    "as written",
+    1024,
+    1024,
+    0.7,
+    1,
+    1024,
+    ""
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossPromptEnhancer"
+   },
+   "outputs": [
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "links": [
+      5
+     ]
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "links": [
+      6
+     ]
+    },
+    {
+     "name": "prompt",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "draft",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "width",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "height",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "type": "HaDeSMossLatent",
    "pos": [
     0,
-    500
+    590
    ],
    "size": [
     380,
@@ -157,159 +273,6 @@
    ],
    "flags": {},
    "order": 2,
-   "mode": 0,
-   "inputs": [],
-   "widgets_values": [
-    "qwen3.5_9b_w4a8_gptq.safetensors",
-    "moss_image",
-    "default"
-   ],
-   "properties": {
-    "Node name for S&R": "CLIPLoader",
-    "models": [
-     {
-      "name": "qwen3.5_9b_w4a8_gptq.safetensors",
-      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_w4a8_gptq.safetensors",
-      "directory": "text_encoders"
-     }
-    ]
-   },
-   "outputs": [
-    {
-     "name": "CLIP",
-     "type": "CLIP",
-     "links": [
-      3,
-      4
-     ]
-    }
-   ]
-  },
-  {
-   "id": 5,
-   "type": "VAELoader",
-   "pos": [
-    0,
-    780
-   ],
-   "size": [
-    380,
-    100
-   ],
-   "flags": {},
-   "order": 3,
-   "mode": 0,
-   "inputs": [],
-   "widgets_values": [
-    "flux2-vae.safetensors"
-   ],
-   "properties": {
-    "Node name for S&R": "VAELoader",
-    "models": [
-     {
-      "name": "flux2-vae.safetensors",
-      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae.safetensors",
-      "directory": "vae"
-     }
-    ]
-   },
-   "outputs": [
-    {
-     "name": "VAE",
-     "type": "VAE",
-     "links": [
-      9
-     ]
-    }
-   ]
-  },
-  {
-   "id": 6,
-   "type": "CLIPTextEncode",
-   "pos": [
-    500,
-    580
-   ],
-   "size": [
-    380,
-    100
-   ],
-   "flags": {},
-   "order": 6,
-   "mode": 0,
-   "inputs": [
-    {
-     "name": "clip",
-     "type": "CLIP",
-     "link": 3
-    }
-   ],
-   "widgets_values": [
-    "nsfw, worst quality, bad anatomy, watermark, jpeg artifact"
-   ],
-   "properties": {
-    "Node name for S&R": "CLIPTextEncode"
-   },
-   "outputs": [
-    {
-     "name": "CONDITIONING",
-     "type": "CONDITIONING",
-     "links": [
-      7
-     ]
-    }
-   ]
-  },
-  {
-   "id": 7,
-   "type": "CLIPTextEncode",
-   "pos": [
-    500,
-    830
-   ],
-   "size": [
-    380,
-    100
-   ],
-   "flags": {},
-   "order": 7,
-   "mode": 0,
-   "inputs": [
-    {
-     "name": "clip",
-     "type": "CLIP",
-     "link": 4
-    }
-   ],
-   "widgets_values": [
-    "Studio photograph of an elderly fisherman with a weathered face and a grey knitted cap, soft window light from the left, shallow depth of field, 85mm lens, muted colors."
-   ],
-   "properties": {
-    "Node name for S&R": "CLIPTextEncode"
-   },
-   "outputs": [
-    {
-     "name": "CONDITIONING",
-     "type": "CONDITIONING",
-     "links": [
-      6
-     ]
-    }
-   ]
-  },
-  {
-   "id": 8,
-   "type": "HaDeSMossLatent",
-   "pos": [
-    0,
-    1000
-   ],
-   "size": [
-    380,
-    100
-   ],
-   "flags": {},
-   "order": 4,
    "mode": 0,
    "inputs": [
     {
@@ -324,7 +287,9 @@
     1.0,
     1024,
     1024,
-    1
+    1,
+    1000,
+    "fixed"
    ],
    "properties": {
     "Node name for S&R": "HaDeSMossLatent"
@@ -334,7 +299,7 @@
      "name": "latent",
      "type": "LATENT",
      "links": [
-      8
+      7
      ]
     },
     {
@@ -351,13 +316,20 @@
      "name": "info",
      "type": "STRING",
      "links": [
-      15
+      16
+     ]
+    },
+    {
+     "name": "seed",
+     "type": "INT",
+     "links": [
+      8
      ]
     }
    ]
   },
   {
-   "id": 9,
+   "id": 6,
    "type": "HaDeSMossKSampler",
    "pos": [
     1000,
@@ -368,28 +340,36 @@
     100
    ],
    "flags": {},
-   "order": 9,
+   "order": 6,
    "mode": 0,
    "inputs": [
     {
      "name": "model",
      "type": "MODEL",
-     "link": 5
+     "link": 4
     },
     {
      "name": "positive",
      "type": "CONDITIONING",
-     "link": 6
+     "link": 5
     },
     {
      "name": "negative",
      "type": "CONDITIONING",
-     "link": 7
+     "link": 6
     },
     {
      "name": "latent_image",
      "type": "LATENT",
-     "link": 8
+     "link": 7
+    },
+    {
+     "name": "seed",
+     "type": "INT",
+     "link": 8,
+     "widget": {
+      "name": "seed"
+     }
     },
     {
      "name": "vae",
@@ -405,7 +385,7 @@
     }
    ],
    "widgets_values": [
-    1000,
+    0,
     "fixed",
     25,
     2.5,
@@ -435,13 +415,13 @@
      "name": "info",
      "type": "STRING",
      "links": [
-      16
+      17
      ]
     }
    ]
   },
   {
-   "id": 10,
+   "id": 7,
    "type": "SaveImage",
    "pos": [
     1500,
@@ -452,7 +432,7 @@
     100
    ],
    "flags": {},
-   "order": 11,
+   "order": 8,
    "mode": 0,
    "inputs": [
     {
@@ -476,18 +456,18 @@
    ]
   },
   {
-   "id": 11,
+   "id": 8,
    "type": "HaDeSMossModelSaver",
    "pos": [
     1000,
-    640
+    670
    ],
    "size": [
     380,
     100
    ],
    "flags": {},
-   "order": 10,
+   "order": 7,
    "mode": 2,
    "inputs": [
     {
@@ -526,18 +506,18 @@
    ]
   },
   {
-   "id": 12,
+   "id": 9,
    "type": "HaDeSMossMultiModelMerger",
    "pos": [
     500,
-    1080
+    1260
    ],
    "size": [
     380,
     100
    ],
    "flags": {},
-   "order": 8,
+   "order": 5,
    "mode": 2,
    "inputs": [
     {
@@ -597,7 +577,7 @@
    ]
   },
   {
-   "id": 13,
+   "id": 10,
    "type": "HaDeSMossSuiteTelemetry",
    "pos": [
     1500,
@@ -608,7 +588,7 @@
     100
    ],
    "flags": {},
-   "order": 12,
+   "order": 9,
    "mode": 0,
    "inputs": [
     {
@@ -632,7 +612,7 @@
     {
      "name": "info_4",
      "type": "STRING",
-     "link": null,
+     "link": 17,
      "shape": 7
     },
     {
@@ -671,7 +651,7 @@
      "name": "report",
      "type": "STRING",
      "links": [
-      17
+      18
      ]
     },
     {
@@ -687,7 +667,7 @@
    ]
   },
   {
-   "id": 14,
+   "id": 11,
    "type": "PreviewAny",
    "pos": [
     2000,
@@ -698,13 +678,13 @@
     100
    ],
    "flags": {},
-   "order": 13,
+   "order": 10,
    "mode": 0,
    "inputs": [
     {
      "name": "source",
      "type": "*",
-     "link": 17
+     "link": 18
     }
    ],
    "widgets_values": [],
@@ -739,65 +719,65 @@
   ],
   [
    3,
+   1,
+   1,
    4,
-   0,
-   6,
    0,
    "CLIP"
   ],
   [
    4,
-   4,
-   0,
-   7,
-   0,
-   "CLIP"
-  ],
-  [
-   5,
    3,
    0,
-   9,
+   6,
    0,
    "MODEL"
   ],
   [
-   6,
-   7,
+   5,
+   4,
    0,
-   9,
+   6,
    1,
    "CONDITIONING"
   ],
   [
-   7,
    6,
-   0,
-   9,
+   4,
+   1,
+   6,
    2,
    "CONDITIONING"
   ],
   [
-   8,
-   8,
+   7,
+   5,
    0,
-   9,
+   6,
    3,
    "LATENT"
   ],
   [
-   9,
+   8,
    5,
-   0,
-   9,
    4,
+   6,
+   4,
+   "INT"
+  ],
+  [
+   9,
+   1,
+   2,
+   6,
+   5,
    "VAE"
   ],
   [
    10,
-   9,
+   6,
    1,
-   10,
+   7,
    0,
    "IMAGE"
   ],
@@ -805,7 +785,7 @@
    11,
    3,
    0,
-   11,
+   8,
    0,
    "MODEL"
   ],
@@ -813,7 +793,7 @@
    12,
    1,
    0,
-   12,
+   9,
    0,
    "MODEL"
   ],
@@ -821,39 +801,47 @@
    13,
    2,
    0,
-   12,
+   9,
    1,
    "MODEL"
   ],
   [
    14,
-   3,
    1,
-   13,
+   3,
+   10,
    0,
    "STRING"
   ],
   [
    15,
-   8,
    3,
-   13,
+   1,
+   10,
    1,
    "STRING"
   ],
   [
    16,
-   9,
-   2,
-   13,
+   5,
+   3,
+   10,
    2,
    "STRING"
   ],
   [
    17,
-   13,
+   6,
+   2,
+   10,
+   3,
+   "STRING"
+  ],
+  [
+   18,
+   10,
    0,
-   14,
+   11,
    0,
    "STRING"
   ]

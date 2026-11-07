@@ -1,12 +1,12 @@
 {
- "id": "96d0abd2-591f-5e61-afce-08a60380c0aa",
+ "id": "1ecf92f1-8a24-54a9-a40d-c6982500d0c8",
  "revision": 0,
- "last_node_id": 10,
+ "last_node_id": 7,
  "last_link_id": 12,
  "nodes": [
   {
    "id": 1,
-   "type": "UNETLoader",
+   "type": "HaDeSMossLoader",
    "pos": [
     0,
     0
@@ -21,90 +21,24 @@
    "inputs": [],
    "widgets_values": [
     "moss_image_sft_bf16.safetensors",
+    "qwen3.5_9b_w4a8_gptq.safetensors",
+    "flux2-vae.safetensors",
+    "default",
     "default"
    ],
    "properties": {
-    "Node name for S&R": "UNETLoader",
+    "Node name for S&R": "HaDeSMossLoader",
     "models": [
      {
       "name": "moss_image_sft_bf16.safetensors",
       "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_sft_bf16.safetensors",
       "directory": "diffusion_models"
-     }
-    ]
-   },
-   "outputs": [
-    {
-     "name": "MODEL",
-     "type": "MODEL",
-     "links": [
-      4
-     ]
-    }
-   ]
-  },
-  {
-   "id": 2,
-   "type": "CLIPLoader",
-   "pos": [
-    0,
-    250
-   ],
-   "size": [
-    380,
-    100
-   ],
-   "flags": {},
-   "order": 1,
-   "mode": 0,
-   "inputs": [],
-   "widgets_values": [
-    "qwen3.5_9b_w4a8_gptq.safetensors",
-    "moss_image",
-    "default"
-   ],
-   "properties": {
-    "Node name for S&R": "CLIPLoader",
-    "models": [
+     },
      {
       "name": "qwen3.5_9b_w4a8_gptq.safetensors",
       "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_w4a8_gptq.safetensors",
       "directory": "text_encoders"
-     }
-    ]
-   },
-   "outputs": [
-    {
-     "name": "CLIP",
-     "type": "CLIP",
-     "links": [
-      1,
-      3
-     ]
-    }
-   ]
-  },
-  {
-   "id": 3,
-   "type": "VAELoader",
-   "pos": [
-    0,
-    530
-   ],
-   "size": [
-    380,
-    100
-   ],
-   "flags": {},
-   "order": 2,
-   "mode": 0,
-   "inputs": [],
-   "widgets_values": [
-    "flux2-vae.safetensors"
-   ],
-   "properties": {
-    "Node name for S&R": "VAELoader",
-    "models": [
+     },
      {
       "name": "flux2-vae.safetensors",
       "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae.safetensors",
@@ -114,64 +48,48 @@
    },
    "outputs": [
     {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      3
+     ]
+    },
+    {
+     "name": "CLIP",
+     "type": "CLIP",
+     "links": [
+      1
+     ]
+    },
+    {
      "name": "VAE",
      "type": "VAE",
      "links": [
-      8
+      7
      ]
-    }
-   ]
-  },
-  {
-   "id": 4,
-   "type": "CLIPTextEncode",
-   "pos": [
-    500,
-    0
-   ],
-   "size": [
-    380,
-    100
-   ],
-   "flags": {},
-   "order": 4,
-   "mode": 0,
-   "inputs": [
+    },
     {
-     "name": "clip",
-     "type": "CLIP",
-     "link": 1
-    }
-   ],
-   "widgets_values": [
-    "nsfw, worst quality, bad anatomy, watermark, jpeg artifact"
-   ],
-   "properties": {
-    "Node name for S&R": "CLIPTextEncode"
-   },
-   "outputs": [
-    {
-     "name": "CONDITIONING",
-     "type": "CONDITIONING",
+     "name": "info",
+     "type": "STRING",
      "links": [
-      6
+      9
      ]
     }
    ]
   },
   {
-   "id": 5,
+   "id": 2,
    "type": "HaDeSMossLayoutCompiler",
    "pos": [
     0,
-    750
+    340
    ],
    "size": [
     380,
     100
    ],
    "flags": {},
-   "order": 3,
+   "order": 1,
    "mode": 0,
    "inputs": [],
    "widgets_values": [
@@ -193,7 +111,7 @@
      "name": "latent",
      "type": "LATENT",
      "links": [
-      7
+      6
      ]
     },
     {
@@ -216,52 +134,97 @@
    ]
   },
   {
-   "id": 6,
-   "type": "CLIPTextEncode",
+   "id": 3,
+   "type": "HaDeSMossPromptEnhancer",
    "pos": [
     500,
-    250
+    0
    ],
    "size": [
-    380,
+    440,
     100
    ],
    "flags": {},
-   "order": 5,
+   "order": 2,
    "mode": 0,
    "inputs": [
     {
-     "name": "text",
+     "name": "clip",
+     "type": "CLIP",
+     "link": 1
+    },
+    {
+     "name": "idea",
      "type": "STRING",
      "link": 2,
      "widget": {
-      "name": "text"
+      "name": "idea"
      }
     },
     {
-     "name": "clip",
-     "type": "CLIP",
-     "link": 3
+     "name": "image",
+     "type": "IMAGE",
+     "link": null,
+     "shape": 7
     }
    ],
    "widgets_values": [
+    "",
+    "as written",
+    1024,
+    1024,
+    0.7,
+    1,
+    1024,
     ""
    ],
    "properties": {
-    "Node name for S&R": "CLIPTextEncode"
+    "Node name for S&R": "HaDeSMossPromptEnhancer"
    },
    "outputs": [
     {
-     "name": "CONDITIONING",
+     "name": "positive",
+     "type": "CONDITIONING",
+     "links": [
+      4
+     ]
+    },
+    {
+     "name": "negative",
      "type": "CONDITIONING",
      "links": [
       5
      ]
+    },
+    {
+     "name": "prompt",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "draft",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "width",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "height",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
     }
    ]
   },
   {
-   "id": 7,
+   "id": 4,
    "type": "HaDeSMossKSampler",
    "pos": [
     1000,
@@ -272,33 +235,33 @@
     100
    ],
    "flags": {},
-   "order": 6,
+   "order": 3,
    "mode": 0,
    "inputs": [
     {
      "name": "model",
      "type": "MODEL",
-     "link": 4
+     "link": 3
     },
     {
      "name": "positive",
      "type": "CONDITIONING",
-     "link": 5
+     "link": 4
     },
     {
      "name": "negative",
      "type": "CONDITIONING",
-     "link": 6
+     "link": 5
     },
     {
      "name": "latent_image",
      "type": "LATENT",
-     "link": 7
+     "link": 6
     },
     {
      "name": "vae",
      "type": "VAE",
-     "link": 8,
+     "link": 7,
      "shape": 7
     },
     {
@@ -332,7 +295,7 @@
      "name": "image",
      "type": "IMAGE",
      "links": [
-      9
+      8
      ]
     },
     {
@@ -345,7 +308,7 @@
    ]
   },
   {
-   "id": 8,
+   "id": 5,
    "type": "SaveImage",
    "pos": [
     1500,
@@ -356,13 +319,13 @@
     100
    ],
    "flags": {},
-   "order": 7,
+   "order": 4,
    "mode": 0,
    "inputs": [
     {
      "name": "images",
      "type": "IMAGE",
-     "link": 9
+     "link": 8
     }
    ],
    "widgets_values": [
@@ -380,7 +343,7 @@
    ]
   },
   {
-   "id": 9,
+   "id": 6,
    "type": "HaDeSMossSuiteTelemetry",
    "pos": [
     1500,
@@ -391,25 +354,25 @@
     100
    ],
    "flags": {},
-   "order": 8,
+   "order": 5,
    "mode": 0,
    "inputs": [
     {
      "name": "info_1",
      "type": "STRING",
-     "link": 10,
+     "link": 9,
      "shape": 7
     },
     {
      "name": "info_2",
      "type": "STRING",
-     "link": 11,
+     "link": 10,
      "shape": 7
     },
     {
      "name": "info_3",
      "type": "STRING",
-     "link": null,
+     "link": 11,
      "shape": 7
     },
     {
@@ -470,7 +433,7 @@
    ]
   },
   {
-   "id": 10,
+   "id": 7,
    "type": "PreviewAny",
    "pos": [
     2000,
@@ -481,7 +444,7 @@
     100
    ],
    "flags": {},
-   "order": 9,
+   "order": 6,
    "mode": 0,
    "inputs": [
     {
@@ -506,97 +469,97 @@
  "links": [
   [
    1,
-   2,
-   0,
-   4,
+   1,
+   1,
+   3,
    0,
    "CLIP"
   ],
   [
    2,
-   5,
+   2,
    0,
-   6,
-   0,
+   3,
+   1,
    "STRING"
   ],
   [
    3,
-   2,
-   0,
-   6,
    1,
-   "CLIP"
-  ],
-  [
+   0,
    4,
-   1,
-   0,
-   7,
    0,
    "MODEL"
   ],
   [
-   5,
-   6,
+   4,
+   3,
    0,
-   7,
+   4,
    1,
    "CONDITIONING"
   ],
   [
-   6,
+   5,
+   3,
+   1,
    4,
-   0,
-   7,
    2,
    "CONDITIONING"
   ],
   [
-   7,
-   5,
+   6,
+   2,
    1,
-   7,
+   4,
    3,
    "LATENT"
   ],
   [
-   8,
-   3,
-   0,
    7,
+   1,
+   2,
+   4,
    4,
    "VAE"
   ],
   [
-   9,
-   7,
-   1,
    8,
+   4,
+   1,
+   5,
    0,
    "IMAGE"
   ],
   [
-   10,
-   5,
-   4,
    9,
+   1,
+   3,
+   6,
    0,
    "STRING"
   ],
   [
-   11,
-   7,
+   10,
    2,
-   9,
+   4,
+   6,
    1,
    "STRING"
   ],
   [
+   11,
+   4,
+   2,
+   6,
+   2,
+   "STRING"
+  ],
+  [
    12,
-   9,
+   6,
    0,
-   10,
+   7,
    0,
    "STRING"
   ]

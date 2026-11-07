@@ -146,10 +146,15 @@ class TestLatent(unittest.TestCase):
     def test_sizes(self):
         node = pipeline.HaDeSMossLatent()
         for aspect, mp, size in (("1:1", 1.0, (1024, 1024)), ("16:9", 1.0, (1360, 768)), ("1:1", 4.0, (2048, 2048))):
-            latent, w, h, _ = node.generate(aspect, mp, 1024, 1024, 1)
+            latent, w, h, _, _ = node.generate(aspect, mp, 1024, 1024, 1)
             self.assertEqual((w, h), size)
             self.assertEqual(tuple(latent["samples"].shape), (1, 128, h // 16, w // 16))
         self.assertEqual(node.generate("custom", 1.0, 1010, 600, 1)[1:3], (1008, 608))
+
+    def test_seed_passes_through(self):
+        out = pipeline.HaDeSMossLatent().generate("1:1", 1.0, 1024, 1024, 1, seed=123456789012)
+        self.assertEqual(out[4], 123456789012)
+        self.assertEqual(common.parse_info_meta(out[3])["seed"], 123456789012)
 
 
 class TestMergers(unittest.TestCase):
