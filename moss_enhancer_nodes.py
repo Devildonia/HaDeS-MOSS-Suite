@@ -156,8 +156,9 @@ def fit_draft(obj, width, height):
 
 @contextlib.contextmanager
 def decode_fallback():
-    """With ComfyUI 0.43 / comfy-kitchen 0.2.40 the native GQA decode kernel refuses this text encoder's tensors
-    ("Unsupported Flash Attention tensor strides") and text generation stops. While this node generates, a refused call
+    """On PyTorch 2.8.0+cu129 the native GQA decode kernel of comfy-kitchen 0.2.40 refuses every input, even plain contiguous
+    tensors ("Unsupported Flash Attention tensor strides"; ComfyUI warns that its CUDA operations need cu130+), and text
+    generation stops. While this node generates, a refused call
     runs comfy-kitchen's own torch implementation of the same attention instead. Nothing changes where the kernel works."""
     try:
         import comfy_kitchen
