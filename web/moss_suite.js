@@ -204,9 +204,6 @@ const INSTALLERS = {
             },
         });
         styleWidgets(node, { sliders: { temperature: [0, 1.5] }, dimmed: (name) => UNUSED[mode()]?.has(name) ?? false });
-        // banner and rows first, the idea / negative text boxes below them (they are the first widgets ComfyUI creates)
-        const boxes = node.widgets.filter((w) => w.name === "idea" || w.name === "negative");
-        node.widgets = [...node.widgets.filter((w) => !boxes.includes(w)), ...boxes];
     },
     HaDeSMossLatent(node) {
         banner(node, {
