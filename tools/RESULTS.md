@@ -596,8 +596,12 @@ into `CLIPTextEncode` and SFT (25 steps, CFG 2.5, er_sde / simple, seed 7000), a
 | `a concert poster for a jazz night called "BLUE NOTES", friday 21:00, a saxophone silhouette` (832 x 1216) | layout | a poster crowded with invented, misspelled text | "BLUE NOTES" and "friday 21:00" spelled right in their boxes, a lit saxophone, nothing else written |
 | `an old fisherman mending nets at dawn` | caption | a wide shot at sunrise | a close shot following the caption (wool cap, wet ropes, low sun on the sea) |
 
-- The enhancer answers in 30–40 s (about 13 tokens per second on an RTX 5090, with comfy-kitchen's torch decode, see the
-  README); the layout answer needed no fixing before it compiled.
+- The enhancer answered in 30–40 s on PyTorch 2.8.0+cu129 (about 13 tokens per second on an RTX 5090, with comfy-kitchen's
+  torch decode, see the README) and in 2–3 s on PyTorch 2.9.1+cu130, where the native decode kernel runs (three captions,
+  one poster layout, new seeds); the layout answer needed no fixing before it compiled.
+- The measurements elsewhere in this file were made on PyTorch 2.8.0+cu129 with SageAttention 2.2.0 for it. After the update
+  to 2.9.1+cu130 and SageAttention 2.2.0+cu130 the same SFT render (seed 4000, 1024 x 1024, 25 steps) differs from the old
+  one by 7.4 (mean pixel difference, 0-255) and took 13.8 s instead of about 16 s.
 - The same text encoder described an attached image (a neon diner) in prose and in boxes, so the image input works.
 
 ## Two-resolution sampling (prototype)
