@@ -259,6 +259,7 @@ const GENERIC = {
     HaDeSMossLoraExtractor: { title: "LORA EXTRACTOR" },
     HaDeSMossLoraMerger: { title: "LORA MERGER", sliders: { weight_a: [0, 2], weight_b: [0, 2], dynamic_energy: [0, 1] } },
     HaDeSMossLoraResize: { title: "LORA RESIZE", sliders: { dynamic_energy: [0, 1] } },
+    HaDeSMossMetadataReader: { title: "METADATA READER · LORA · MODEL" },
     HaDeSMossLayoutCompiler: { title: "LAYOUT COMPILER" },
     HaDeSMossSamplerMetadata: { title: "SAMPLER METADATA" },
     HaDeSMossTurbo: { title: "TURBO LORA · CFG 1", sliders: { strength: [0, 2] } },

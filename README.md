@@ -89,6 +89,15 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 - **Outputs:** `saved_lora_path`, `info` (sizes, rank, mean and worst-layer energy kept).
 - **Measured:** AnubisCitronOC (142 MB) at rank 32 (126 MB, 97.9% energy) stays within the noise floor; rank 16 (63 MB, 91.1%) and dynamic 0.90 (56 MB) drift visibly from the source.
 
+### `MOSS Metadata Reader` (`HaDeS/MOSS Mergers`)
+- **Class:** `HaDeSMossMetadataReader`
+- **Purpose:** shows what a LoRA or diffusion model file says about itself and what its tensors show, reading only the safetensors header (instant on a 10 GB model; the weights are not loaded).
+  - **Metadata:** every key of the file (the Suite's `hades/*`, kohya / ai-toolkit `ss_*`, `modelspec.*`, a saved ComfyUI workflow...); long values are cut in `info` and whole in `metadata_json`.
+  - **Measured from the tensors:** size, tensor count and dtypes; for a LoRA its kind (lora_up / lora_down, PEFT, full diffs, LoHa, LoKr), rank (per layer when it varies), alpha, the MOSS-Image layers and modules it touches, or a note when no key name is MOSS-Image's; for a model whether it is MOSS-Image, its layers, parameters, fused or split q/k/v, int8 ConvRot.
+  - **Recipe:** for LoRAs made with the Suite's Merger, Resize or Extractor, the chain of sources from their `hades/*` keys, followed into the source files still in `models/loras` (a source moved to another subfolder is found by its file name when only one LoRA has it), with the weight of each original file in the result. A source replaced since under the same name is read as it is now.
+- **Inputs:** `lora_name` and `model_name` (each can be `(none)`), optional `sha256` (hashes the files, cached while unchanged and shared with the MOSS Image Saver; seconds on a 10 GB model).
+- **Outputs:** `info` (text plus HADES_META with the recipe; into a Save Text node it keeps the recipe on disk), `metadata_json`.
+
 ### `MOSS Model Saver` (`HaDeS/MOSS Mergers`)
 - **Class:** `HaDeSMossModelSaver`
 - **Purpose:** saves a `MODEL` with its merge / LoRA patches baked in, loadable by the stock `Load Diffusion Model` node, and passes the model through.

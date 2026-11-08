@@ -38,6 +38,7 @@ pipeline = importlib.import_module(f"{PACK}.moss_pipeline_nodes")
 telemetry = importlib.import_module(f"{PACK}.moss_telemetry_nodes")
 saver = importlib.import_module(f"{PACK}.moss_saver_nodes")
 enhancer = importlib.import_module(f"{PACK}.moss_enhancer_nodes")
+metadata = importlib.import_module(f"{PACK}.moss_metadata_nodes")
 
 DIM, LAYERS = 256, 6  # 2 heads of 128; 256 keeps every linear a multiple of the ConvRot group size
 TMP = tempfile.mkdtemp(prefix="hades_moss_tests_")
@@ -652,6 +653,42 @@ class TestPromptEnhancer(unittest.TestCase):
             self.assertIs(comfy_kitchen.flash_attention_decode_gqa, refusing)  # restored on exit
         finally:
             comfy_kitchen.flash_attention_decode_gqa, fa._decode_gqa_torch = native, torch_impl
+
+
+class TestMetadataReader(unittest.TestCase):
+    @staticmethod
+    def lora_file(path, rank, meta):
+        sd = {}
+        for i in (2, 3):
+            p = f"diffusion_model.layers.{i}.proj.o"
+            sd.update({f"{p}.lora_up.weight": torch.zeros(DIM, rank), f"{p}.lora_down.weight": torch.zeros(rank, DIM), f"{p}.alpha": torch.tensor(float(rank))})
+        safetensors.torch.save_file(sd, path, metadata=meta)
+
+    def test_lora_model_and_recipe(self):
+        """A resize of a merge whose first source was moved to a subfolder: the recipe is followed to both originals."""
+        folder_paths.folder_names_and_paths["diffusion_models"] = ([TMP], {".safetensors"})
+        os.makedirs(os.path.join(TMP, "moved"), exist_ok=True)
+        self.lora_file(os.path.join(TMP, "moved", "meta_a.safetensors"), 4, {"settings": "8 steps"})
+        self.lora_file(os.path.join(TMP, "meta_b.safetensors"), 2, {})
+        self.lora_file(os.path.join(TMP, "meta_ab.safetensors"), 6, {"hades/lora_a": "meta_a.safetensors", "hades/lora_b": "meta_b.safetensors",
+                                                                     "hades/weights": "0.5,1.0", "hades/rank": "6"})
+        self.lora_file(os.path.join(TMP, "meta_r.safetensors"), 3, {"hades/source_lora": "meta_ab.safetensors", "hades/target_rank": "3",
+                                                                    "hades/dynamic_energy": "0.0"})
+        safetensors.torch.save_file(tiny_state_dict(10), os.path.join(TMP, "meta_model.safetensors"))
+        info, js = metadata.HaDeSMossMetadataReader().read("meta_r.safetensors", "meta_model.safetensors")["result"]
+        d = json.loads(js)
+        lt, mt = d["lora"]["tensors"], d["model"]["tensors"]
+        self.assertEqual((lt["rank_max"], lt["layers"], lt["layer_modules"], lt["alphas"]), (3, [2, 3], ["proj.o"], [3.0]))
+        self.assertEqual(common.parse_info_meta(info)["recipe"], {os.path.join("moved", "meta_a.safetensors"): 0.5, "meta_b.safetensors": 1.0})
+        self.assertEqual((mt["moss_image"], len(mt["layers"]), mt["fused_qkv"], mt["int8_convrot"]), (True, LAYERS, True, False))
+
+    def test_errors(self):
+        with open(os.path.join(TMP, "not_safetensors.safetensors"), "wb") as f:
+            f.write(b"PK\x03\x04 not a safetensors file")
+        with self.assertRaisesRegex(ValueError, "not a safetensors file"):
+            metadata.HaDeSMossMetadataReader().read("not_safetensors.safetensors", metadata.NONE)
+        with self.assertRaisesRegex(ValueError, "pick a LoRA"):
+            metadata.HaDeSMossMetadataReader().read(metadata.NONE, metadata.NONE)
 
 
 if __name__ == "__main__":

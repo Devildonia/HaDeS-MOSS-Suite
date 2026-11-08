@@ -7,6 +7,9 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **MOSS Metadata Reader:** shows a LoRA's and / or a diffusion model's safetensors metadata and what its tensors show (size, dtypes, LoRA kind, rank and alpha, the MOSS-Image layers and modules touched, MOSS-Image or not, parameters, fused q/k/v, int8 ConvRot), reading only the file header. For LoRAs from the Suite's Merger, Resize and Extractor it follows the `hades/*` recipe into the source files still in `models/loras` (also when moved to another subfolder) and gives each original file's weight in the result. Optional SHA256. Outputs `info` (with HADES_META) and `metadata_json`.
+
 ## [0.4.1] - 2026-11-07
 
 The MOSS Image Saver.
