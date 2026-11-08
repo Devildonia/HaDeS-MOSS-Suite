@@ -47,6 +47,10 @@ class HaDeSMossModelSaver:
                     "ComfyUI's own saving; such changes are partly lost. Measured with two subtle LoRAs baked into a merge: nearest kept "
                     "about 80-85% of their effect, stochastic all of it, with renders as close to the float32 result as two equally "
                     "valid roundings are to each other (tools/RESULTS.md). Unpatched weights are copied unchanged either way."}),
+                "recipe": ("STRING", {"default": "", "multiline": True, "tooltip":
+                    "Optional. How this model was made, written into the file as hades/recipe (with include_metadata). Link the info "
+                    "output of the MOSS Loader, Multi-LoRA or a merger here (several joined with the core Concatenate node), or type notes. "
+                    "The MOSS Metadata Reader shows it and follows the models and LoRAs it names."}),
             },
         }
 
@@ -57,7 +61,7 @@ class HaDeSMossModelSaver:
     CATEGORY = "HaDeS/MOSS Mergers"
     DESCRIPTION = "Saves a MOSS-Image MODEL with its merge / LoRA patches baked in, loadable by the stock Load Diffusion Model node."
 
-    def save(self, model, filename_prefix, precision, include_metadata, custom_author="HaDeS", custom_model_title="", rounding="stochastic"):
+    def save(self, model, filename_prefix, precision, include_metadata, custom_author="HaDeS", custom_model_title="", rounding="stochastic", recipe=""):
         full_output_folder, filename, counter, _, _ = folder_paths.get_save_image_path(filename_prefix, folder_paths.get_output_directory())
         os.makedirs(full_output_folder, exist_ok=True)
         out_path = os.path.join(full_output_folder, f"{filename}_{counter:05}_.safetensors")
@@ -126,12 +130,15 @@ class HaDeSMossModelSaver:
                 "hades/layers": str(n_layers),
                 "hades/timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             }
+            if recipe.strip():
+                metadata["hades/recipe"] = recipe.strip()
         comfy.utils.save_torch_file(sd, out_path, metadata=metadata)
 
         size_gb = os.path.getsize(out_path) / 1024 ** 3
         info = format_info(f"HaDeS MOSS Model Saver | {os.path.basename(out_path)} | {precision}{', stochastic rounding' if stochastic else ''} | "
-                           f"{size_gb:.2f} GB | {n_layers} layers",
-                           "model_saver", saved_path=out_path, precision=precision, n_layers=n_layers, rounding=rounding_used)
+                           f"{size_gb:.2f} GB | {n_layers} layers" + (" | recipe saved" if metadata and "hades/recipe" in metadata else ""),
+                           "model_saver", saved_path=out_path, precision=precision, n_layers=n_layers, rounding=rounding_used,
+                           recipe=bool(metadata and "hades/recipe" in metadata))
         return {"ui": {"saved_path": [out_path], "info": [info]}, "result": (model, out_path, info)}
 
 

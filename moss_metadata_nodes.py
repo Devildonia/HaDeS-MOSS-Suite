@@ -7,7 +7,7 @@ from collections import Counter
 
 import folder_paths
 
-from .moss_common import format_info
+from .moss_common import HADES_META_PREFIX, format_info
 from .moss_image_saver_nodes import file_sha256
 
 NONE = "(none)"
@@ -117,22 +117,22 @@ def _weights(text):
         return None
 
 
-def find_lora(name):
-    """(name in the LoRA list, path) for a name as a metadata key wrote it; a file moved to another subfolder since is found by its file
-    name when exactly one LoRA has it. (None, None) when it is not there."""
-    path = folder_paths.get_full_path("loras", name)
+def find_file(folder, name):
+    """(name in the folder's list, path) for a name as a metadata key wrote it; a file moved to another subfolder since is found by its file
+    name when exactly one file has it. (None, None) when it is not there."""
+    path = folder_paths.get_full_path(folder, name)
     if path is not None:
         return name, path
     base = re.split(r"[\\/]", name)[-1].lower()
-    hits = [n for n in folder_paths.get_filename_list("loras") if re.split(r"[\\/]", n)[-1].lower() == base]
-    return (hits[0], folder_paths.get_full_path("loras", hits[0])) if len(hits) == 1 else (None, None)
+    hits = [n for n in folder_paths.get_filename_list(folder) if re.split(r"[\\/]", n)[-1].lower() == base]
+    return (hits[0], folder_paths.get_full_path(folder, hits[0])) if len(hits) == 1 else (None, None)
 
 
 def recipe(name, weight=1.0, chain=()):
     """The LoRA's recipe from the hades/ keys the Suite's Merger and Resize write, followed into the source files while they are in models/loras.
     A source replaced since under the same name is read as it is now."""
     node = {"lora": name, "weight": weight}
-    found, path = find_lora(name)
+    found, path = find_file("loras", name)
     if path is None:
         return {**node, "missing": True}
     if found != name:
@@ -151,7 +151,8 @@ def recipe(name, weight=1.0, chain=()):
         dyn = meta.get("hades/dynamic_energy", "0")
         node.update(op="resize", rank=meta.get("hades/target_rank"), dynamic_energy=dyn, sources=[recipe(meta["hades/source_lora"], weight, chain)])
     elif "hades/energy_kept" in meta:
-        node.update(op="extract", rank=meta.get("hades/rank"), energy_kept=meta["hades/energy_kept"])
+        node.update(op="extract", rank=meta.get("hades/rank"), energy_kept=meta["hades/energy_kept"],
+                    tuned=meta.get("hades/model_tuned"), base=meta.get("hades/model_base"))
     return node
 
 
@@ -170,7 +171,8 @@ def recipe_lines(node, depth=0):
     elif op == "resize":
         head += f"  = resize to rank {node['rank']}" + (f", dynamic energy {node['dynamic_energy']}" if node["dynamic_energy"] not in ("0", "0.0") else "")
     elif op == "extract":
-        head += f"  = extracted from two models, rank {node['rank']}, energy kept {float(node['energy_kept']):.1%}"
+        models = f"{node['tuned'] or '?'} - {node['base'] or '?'}" if node.get("tuned") or node.get("base") else "two models"
+        head += f"  = extracted from {models}, rank {node['rank']}, energy kept {float(node['energy_kept']):.1%}"
     return [head] + [line for s in node.get("sources", []) for line in recipe_lines(s, depth + 1)]
 
 
@@ -184,6 +186,64 @@ def recipe_leaves(node, out=None):
         name = node.get("found_as", node["lora"])
         out[name] = out.get(name, 0.0) + node["weight"]
     return out
+
+
+def info_metas(text):
+    """Every HADES_META trailer in a text that may join several info outputs."""
+    out = []
+    for line in str(text).splitlines():
+        if line.startswith(HADES_META_PREFIX):
+            try:
+                out.append(json.loads(line[len(HADES_META_PREFIX):]))
+            except json.JSONDecodeError:
+                pass
+    return out
+
+
+def model_recipe(name, chain=()):
+    """A model's hades/recipe (written by the MOSS Model Saver), with the models and LoRAs its info trailers name followed into their own
+    recipes: the MOSS Loader's model file, the Multi-LoRA's and LoRA Block Weight's LoRAs with their strengths."""
+    node = {"model": name}
+    found, path = find_file("diffusion_models", name)
+    if path is None:
+        return {**node, "missing": True}
+    if found != name:
+        node["found_as"] = found
+    if os.path.abspath(path) in chain or len(chain) >= _MAX_DEPTH:
+        return {**node, "loop": True}
+    try:
+        meta = read_header(path)[0]
+    except (OSError, ValueError):
+        return {**node, "unreadable": True}
+    text = meta.get("hades/recipe", "").strip()
+    if not text:
+        return node
+    chain = chain + (os.path.abspath(path),)
+    parts = []
+    for m in info_metas(text):
+        kind = m.get("node")
+        if kind == "loader" and m.get("model_file"):
+            parts.append(model_recipe(m["model_file"], chain))
+        elif kind == "multi_lora":
+            parts += [recipe(r["name"], float(r.get("strength", 1.0))) for r in m.get("loras", []) if r.get("name")]
+        elif kind == "lora_block_weight" and m.get("lora"):
+            parts.append(recipe(m["lora"], float(m.get("strength_model", 1.0))))
+    return {**node, "text": text, "parts": parts}
+
+
+def model_recipe_lines(node, depth=0):
+    pad = "  " * depth
+    head = f"{pad}model {node['model']}" + (f" (now {node['found_as']})" if node.get("found_as") else "")
+    for flag, note in (("missing", "not in models/diffusion_models"), ("loop", "loop or too deep, not followed"), ("unreadable", "unreadable")):
+        if node.get(flag):
+            return [f"{head}  ({note})"]
+    if "text" not in node:
+        return [f"{head}  (no recipe in the file)"]
+    lines = [f"{head}  recipe as saved:"]
+    lines += [f"{pad}  | {line}" for line in node["text"].splitlines() if line.strip() and not line.startswith(HADES_META_PREFIX)]
+    for part in node["parts"]:
+        lines += model_recipe_lines(part, depth + 1) if "model" in part else recipe_lines(part, depth + 1)
+    return lines
 
 
 def _shown(v):
@@ -215,10 +275,11 @@ def _common_lines(d):
     return lines
 
 
-def _metadata_lines(meta):
+def _metadata_lines(meta, shown_above=()):
     if not meta:
         return ["Metadata: none in the file"]
-    return [f"Metadata ({len(meta)} keys):"] + [f"  {k}: {_shown(v)}" for k, v in sorted(meta.items())]
+    head = f"Metadata ({len(meta)} keys" + (f"; {', '.join(shown_above)} above" if shown_above else "") + "):"
+    return [head] + [f"  {k}: {_shown(v)}" for k, v in sorted(meta.items()) if k not in shown_above]
 
 
 def lora_report(d):
@@ -235,7 +296,8 @@ def lora_report(d):
     if r.get("op"):
         lines.append("Recipe (from the hades/ metadata of each file):")
         lines += recipe_lines(r, 1)
-        lines.append("Original files in the result: " + ", ".join(f"{w:+.4g} × {n}" for n, w in recipe_leaves(r).items()))
+        if r.get("sources"):
+            lines.append("Original files in the result: " + ", ".join(f"{w:+.4g} × {n}" for n, w in recipe_leaves(r).items()))
     return lines + _metadata_lines(d["metadata"])
 
 
@@ -248,7 +310,13 @@ def model_report(d):
                      f"text embedder blocks {s['text_embedder_blocks']}")
     else:
         lines.append(f"Measured: no shared_block_modulation key, so not a MOSS-Image diffusion model ({s['elements'] / 1e9:.2f} B elements)")
-    return lines + _metadata_lines(d["metadata"])
+    r = d["recipe"]
+    if "text" not in r:
+        lines.append("Recipe: none in the file (the MOSS Model Saver writes one from its recipe input)")
+        return lines + _metadata_lines(d["metadata"])
+    lines.append("Recipe (hades/recipe, with the models and LoRAs it names followed into their files):")
+    lines += model_recipe_lines(r, 1)[1:]
+    return lines + _metadata_lines(d["metadata"], ("hades/recipe",))
 
 
 def describe(folder, name, sha256):
@@ -262,6 +330,7 @@ def describe(folder, name, sha256):
         d["recipe"] = recipe(name)
     else:
         d["tensors"] = model_summary(tensors)
+        d["recipe"] = model_recipe(name)
     return d
 
 
@@ -285,8 +354,9 @@ class HaDeSMossMetadataReader:
     OUTPUT_NODE = True
     CATEGORY = "HaDeS/MOSS Mergers"
     DESCRIPTION = ("Shows what a LoRA or model file says about itself (its safetensors metadata) and what its tensors show (size, dtypes, layers, "
-                   "LoRA rank, MOSS-Image layout). Reads the header only, not the weights. For LoRAs made with the Suite's Merger and Resize "
-                   "it follows the recipe into the source files that are still in models/loras.")
+                   "LoRA rank, MOSS-Image layout). Reads the header only, not the weights. For LoRAs made with the Suite's Merger, Resize and "
+                   "Extractor, and models saved with a recipe by the MOSS Model Saver, it follows the recipe into the source files that are "
+                   "still in models/.")
 
     @classmethod
     def IS_CHANGED(cls, lora_name, model_name, sha256=False):
@@ -310,7 +380,8 @@ class HaDeSMossMetadataReader:
         lt = data.get("lora", {}).get("tensors", {})
         info = format_info("\n".join(lines), "metadata_reader", lora=lora_name if lora_name != NONE else None,
                            model=model_name if model_name != NONE else None, lora_rank=lt.get("rank_max"),
-                           recipe=recipe_leaves(data["lora"]["recipe"]) if data.get("lora", {}).get("recipe", {}).get("op") else None)
+                           recipe=recipe_leaves(data["lora"]["recipe"]) if data.get("lora", {}).get("recipe", {}).get("op") else None,
+                           model_recipe="text" in data.get("model", {}).get("recipe", {}))
         out = json.dumps(data, indent=1, ensure_ascii=False)
         return {"ui": {"text": [info]}, "result": (info, out)}
 

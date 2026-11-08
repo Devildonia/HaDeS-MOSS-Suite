@@ -8,7 +8,9 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- **MOSS Metadata Reader:** shows a LoRA's and / or a diffusion model's safetensors metadata and what its tensors show (size, dtypes, LoRA kind, rank and alpha, the MOSS-Image layers and modules touched, MOSS-Image or not, parameters, fused q/k/v, int8 ConvRot), reading only the file header. For LoRAs from the Suite's Merger, Resize and Extractor it follows the `hades/*` recipe into the source files still in `models/loras` (also when moved to another subfolder) and gives each original file's weight in the result. Optional SHA256. Outputs `info` (with HADES_META) and `metadata_json`.
+- **MOSS Model Saver:** an optional `recipe` input (text, or the `info` of the MOSS Loader, Multi-LoRA or a merger), written into the file as `hades/recipe`, so a model with merges and LoRAs baked in keeps how it was made. Empty, the file is as before.
+- **MOSS LoRA Extractor:** optional `tuned_name` and `base_name`, written into the LoRA as `hades/model_tuned` / `hades/model_base`.
+- **MOSS Metadata Reader:** shows a LoRA's and / or a diffusion model's safetensors metadata and what its tensors show (size, dtypes, LoRA kind, rank and alpha, the MOSS-Image layers and modules touched, MOSS-Image or not, parameters, fused q/k/v, int8 ConvRot), reading only the file header. For LoRAs from the Suite's Merger, Resize and Extractor it follows the `hades/*` recipe into the source files still in `models/loras` (also when moved to another subfolder) and gives each original file's weight in the result. For models it shows the Model Saver's `hades/recipe` and follows the model (MOSS Loader) and LoRAs (Multi-LoRA, LoRA Block Weight) named in it into their own recipes; for extracted LoRAs, the model names when the Extractor was given them. Optional SHA256. Outputs `info` (with HADES_META) and `metadata_json`.
 
 ## [0.4.1] - 2026-11-07
 

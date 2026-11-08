@@ -682,6 +682,36 @@ class TestMetadataReader(unittest.TestCase):
         self.assertEqual(common.parse_info_meta(info)["recipe"], {os.path.join("moved", "meta_a.safetensors"): 0.5, "meta_b.safetensors": 1.0})
         self.assertEqual((mt["moss_image"], len(mt["layers"]), mt["fused_qkv"], mt["int8_convrot"]), (True, LAYERS, True, False))
 
+    def test_model_recipe_is_saved_and_followed(self):
+        """The Model Saver writes its recipe input; the reader follows the Loader's model and the Multi-LoRA's LoRAs named in it."""
+        self.test_lora_model_and_recipe()  # the meta_* files
+        recipe = "\n".join([common.format_info("HaDeS MOSS Loader | 6 layers", "loader", model_file="meta_model.safetensors"),
+                             common.format_info("HaDeS MOSS Multi-LoRA | 1 of 1 on", "multi_lora", enabled=True,
+                                                loras=[{"name": "meta_r.safetensors", "strength": 0.5}], turbo=[])])
+        path, info = saver.HaDeSMossModelSaver().save(load(tiny_state_dict(11)), "tests/recipe", "bfloat16", True, recipe=recipe)["result"][1:]
+        self.assertTrue(common.parse_info_meta(info)["recipe"])
+        name = os.path.relpath(path, TMP)
+        text, js = metadata.HaDeSMossMetadataReader().read(metadata.NONE, name)["result"]
+        r = json.loads(js)["model"]["recipe"]
+        self.assertEqual(r["text"], recipe)
+        loader_part, lora_part = r["parts"]
+        self.assertEqual((loader_part["model"], "text" in loader_part), ("meta_model.safetensors", False))
+        self.assertEqual(metadata.recipe_leaves(lora_part), {os.path.join("moved", "meta_a.safetensors"): 0.25, "meta_b.safetensors": 0.5})
+        self.assertIn("model meta_model.safetensors  (no recipe in the file)", text)
+        self.assertTrue(common.parse_info_meta(text)["model_recipe"])
+        # without a recipe the file says so
+        path = saver.HaDeSMossModelSaver().save(load(tiny_state_dict(11)), "tests/norecipe", "bfloat16", True)["result"][1]
+        self.assertIn("Recipe: none in the file", metadata.HaDeSMossMetadataReader().read(metadata.NONE, os.path.relpath(path, TMP))["result"][0])
+
+    def test_extractor_writes_model_names(self):
+        sd = tiny_state_dict(12)
+        base = load(sd)
+        sd["layers.1.proj.o.weight"] = (sd["layers.1.proj.o.weight"].float() + 0.01).to(torch.bfloat16)
+        path = loras.HaDeSMossLoraExtractor().extract(load(sd), base, 4, "meta_extracted", overwrite_existing=True,
+                                                      tuned_name="tuned.safetensors", base_name="base.safetensors")["result"][0]
+        text = metadata.HaDeSMossMetadataReader().read(os.path.basename(path), metadata.NONE)["result"][0]
+        self.assertIn("extracted from tuned.safetensors - base.safetensors", text)
+
     def test_errors(self):
         with open(os.path.join(TMP, "not_safetensors.safetensors"), "wb") as f:
             f.write(b"PK\x03\x04 not a safetensors file")

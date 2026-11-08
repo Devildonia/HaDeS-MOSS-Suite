@@ -45,6 +45,9 @@ class HaDeSMossLoraExtractor:
             },
             "optional": {
                 "overwrite_existing": ("BOOLEAN", {"default": False}),
+                "tuned_name": ("STRING", {"default": "", "tooltip": "Optional. Name of model_tuned (e.g. its file), written into the LoRA as hades/model_tuned; "
+                                                                    "the MOSS Metadata Reader shows it."}),
+                "base_name": ("STRING", {"default": "", "tooltip": "Optional. Name of model_base, written as hades/model_base."}),
             },
         }
 
@@ -55,7 +58,7 @@ class HaDeSMossLoraExtractor:
     CATEGORY = "HaDeS/MOSS Mergers"
     DESCRIPTION = "Saves model_tuned - model_base as a LoRA: truncated SVD per linear layer, full diffs for norms and biases."
 
-    def extract(self, model_tuned, model_base, rank, export_filename, overwrite_existing=False):
+    def extract(self, model_tuned, model_base, rank, export_filename, overwrite_existing=False, tuned_name="", base_name=""):
         wts, wbs = model_weights(model_tuned), model_weights(model_base)
         n_layers = check_compatible([("model_base", wbs), ("model_tuned", wts)])
         # an fp16-fixed finetune is brought to the base's residual scale, or the residual writes would extract as -15/16 of the weights
@@ -102,7 +105,9 @@ class HaDeSMossLoraExtractor:
         path = lora_output_path(export_filename, "HaDeS_MOSS_Extracted_LoRA", overwrite_existing)
         mean_energy = sum(energy_kept) / len(energy_kept) if energy_kept else 1.0
         safetensors.torch.save_file(lora_sd, path, metadata={"format": "pt", "ss_base_model_version": "moss_image",
-                                                              "hades/rank": str(rank), "hades/energy_kept": f"{mean_energy:.4f}"})
+                                                              "hades/rank": str(rank), "hades/energy_kept": f"{mean_energy:.4f}",
+                                                              **({"hades/model_tuned": tuned_name.strip()} if tuned_name.strip() else {}),
+                                                              **({"hades/model_base": base_name.strip()} if base_name.strip() else {})})
 
         lines = [
             f"HaDeS MOSS LoRA Extractor | {os.path.basename(path)} ({os.path.getsize(path) / 1024 ** 2:.1f} MB) | rank {rank} | {n_layers} layers",
