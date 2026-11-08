@@ -1045,3 +1045,38 @@ Findings:
 - Layers 24–35 from Base land between the two models in look as well (more film / black-and-white frames than SFT, some SFT polish
   left). There is no merge here that keeps SFT's look and drops its bias, so the merger gets no "de-bias" preset.
 - Naming the ethnicity in the prompt works on every model (phase 0), which stays the reliable fix.
+
+## HaDeS MOSS beta v0.8: blind vote (2026-11-08)
+
+`HaDeS_MOSS_beta_v0.8` = SFT with 30% of Base in layers 24–29 (Block Merger, the rest SFT) plus `HaDeS_test_colour_v01` at 0.7,
+baked once with stochastic rounding (Model Saver). Not released.
+
+The 20 prompts of the few-step comparison above, one seed each (4000 + index), 1024 x 1024, `qwen3.5_9b_int8_convrot`, flux2-vae,
+model shift 5, all four rendered the same day on the same stack (cu130, SageAttention):
+
+- SFT, 25 steps, CFG 2.5, er_sde / simple
+- v0.8, the same
+- v0.8 + `HaDeS-MOSS-Turbo-8steps-v0.7` at 1.0, 8 steps, CFG 1, euler / simple
+- the same at 12 steps
+
+Four images per prompt as A–D in a shuffled order (key kept apart, JPEGs without metadata), the prompt shown; each judge picked the
+best (required) and optionally the worst. Judge 1 had not seen any of the images or variants; judge 2 (the maintainer) knows the
+turbo's look and may recognise its compositions, so their vote is not fully blind. Script: `vote_v08.py` (session tool, not in the
+repository); images, key and votes kept outside the repository.
+
+| Variant | Best (judge 1 / 2 / total) | Worst (judge 1 / 2 / total) |
+|---|---|---|
+| SFT, 25 steps | 4 / 3 / 7 | 8 / 5 / 13 |
+| v0.8, 25 steps | 5 / 4 / 9 | 5 / 4 / 9 |
+| v0.8 + Turbo, 8 steps | 4 / 3 / 7 | 2 / 3 / 5 |
+| v0.8 + Turbo, 12 steps | 7 / 10 / 17 | 5 / 1 / 6 |
+
+(20 best picks per judge; worst picks 20 and 13.)
+
+- Turbo against 25 steps: best 24 / 16 (judge 1: 11 / 9), worst 11 / 22. Two-sided binomial p = 0.27 on the best picks.
+- Turbo 12 against 8 steps: best 17 / 7, p = 0.064. SFT against v0.8: best 7 / 9, p = 0.80.
+- The judges picked the same image on 9 / 20 prompts (chance: 5) and the same group, 25 steps or turbo, on 16 / 20 (chance: 10).
+- Nothing reaches p < 0.05 with two judges and 20 prompts. The direction is the same for both: the turbo at 12 steps picked most
+  often, SFT the most often worst, v0.8 level with SFT or slightly ahead.
+- The images come in pairs: SFT and v0.8 share each seed's composition, and so do turbo 8 and 12 steps, so best picks split
+  inside each pair.
