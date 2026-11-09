@@ -136,7 +136,8 @@ class HaDeSMossModelSaver:
 
         size_gb = os.path.getsize(out_path) / 1024 ** 3
         info = format_info(f"HaDeS MOSS Model Saver | {os.path.basename(out_path)} | {precision}{', stochastic rounding' if stochastic else ''} | "
-                           f"{size_gb:.2f} GB | {n_layers} layers" + (" | recipe saved" if metadata and "hades/recipe" in metadata else ""),
+                           f"{size_gb:.2f} GB | {n_layers} layers" + (" | recipe saved" if metadata and "hades/recipe" in metadata else "")
+                           + (" | recipe NOT saved: include_metadata is off" if recipe.strip() and not include_metadata else ""),
                            "model_saver", saved_path=out_path, precision=precision, n_layers=n_layers, rounding=rounding_used,
                            recipe=bool(metadata and "hades/recipe" in metadata))
         return {"ui": {"saved_path": [out_path], "info": [info]}, "result": (model, out_path, info)}

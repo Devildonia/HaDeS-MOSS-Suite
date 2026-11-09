@@ -700,7 +700,7 @@ class TestMetadataReader(unittest.TestCase):
         self.test_lora_model_and_recipe()  # the meta_* files
         recipe = "\n".join([common.format_info("HaDeS MOSS Loader | 6 layers", "loader", model_file="meta_model.safetensors"),
                              common.format_info("HaDeS MOSS Multi-LoRA | 1 of 1 on", "multi_lora", enabled=True,
-                                                loras=[{"name": "meta_r.safetensors", "strength": 0.5}], turbo=[])])
+                                                loras=[{"name": "meta_r.safetensors", "strength": 0.5, "groups": {"layers_00_05": 0.0}}], turbo=[])])
         path, info = saver.HaDeSMossModelSaver().save(load(tiny_state_dict(11)), "tests/recipe", "bfloat16", True, recipe=recipe)["result"][1:]
         self.assertTrue(common.parse_info_meta(info)["recipe"])
         name = os.path.relpath(path, TMP)
@@ -711,6 +711,10 @@ class TestMetadataReader(unittest.TestCase):
         self.assertEqual((loader_part["model"], "text" in loader_part), ("meta_model.safetensors", False))
         self.assertEqual(metadata.recipe_leaves(lora_part), {os.path.join("moved", "meta_a.safetensors"): 0.25, "meta_b.safetensors": 0.5})
         self.assertIn("model meta_model.safetensors  (no recipe in the file)", text)
+        self.assertIn("[groups: layers_00_05 0]", text)
+        # a recipe with include_metadata off is not written, and the info says so
+        info = saver.HaDeSMossModelSaver().save(load(tiny_state_dict(11)), "tests/nometa", "bfloat16", False, recipe=recipe)["result"][2]
+        self.assertIn("recipe NOT saved", info)
         self.assertTrue(common.parse_info_meta(text)["model_recipe"])
         # without a recipe the file says so
         path = saver.HaDeSMossModelSaver().save(load(tiny_state_dict(11)), "tests/norecipe", "bfloat16", True)["result"][1]

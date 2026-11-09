@@ -8,6 +8,7 @@ from collections import Counter
 import folder_paths
 
 from .moss_common import HADES_META_PREFIX, format_info
+from .moss_merger_nodes import GROUPS
 from .moss_image_saver_nodes import file_sha256
 
 NONE = "(none)"
@@ -159,6 +160,8 @@ def recipe(name, weight=1.0, chain=()):
 def recipe_lines(node, depth=0):
     pad = "  " * depth
     head = f"{pad}{node['weight']:+.4g} × {node['lora']}" + (f" (now {node['found_as']})" if node.get("found_as") else "")
+    if node.get("groups"):
+        head += "  [groups: " + ", ".join(f"{g} {w:g}" for g, w in node["groups"].items()) + "]"
     if node.get("missing"):
         return [head + "  (not in models/loras)"]
     if node.get("loop"):
@@ -225,9 +228,13 @@ def model_recipe(name, chain=()):
         if kind == "loader" and m.get("model_file"):
             parts.append(model_recipe(m["model_file"], chain))
         elif kind == "multi_lora":
-            parts += [recipe(r["name"], float(r.get("strength", 1.0))) for r in m.get("loras", []) if r.get("name")]
+            parts += [{**recipe(r["name"], float(r.get("strength", 1.0))), **({"groups": r["groups"]} if r.get("groups") else {})}
+                      for r in m.get("loras", []) if r.get("name")]
         elif kind == "lora_block_weight" and m.get("lora"):
-            parts.append(recipe(m["lora"], float(m.get("strength_model", 1.0))))
+            groups = {g: w for g, w in zip(GROUPS, m.get("weights") or []) if w != 1.0}
+            if m.get("other_layers", 1.0) != 1.0:
+                groups["other_layers"] = m["other_layers"]
+            parts.append({**recipe(m["lora"], float(m.get("strength_model", 1.0))), **({"groups": groups} if groups else {})})
     return {**node, "text": text, "parts": parts}
 
 

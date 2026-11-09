@@ -21,6 +21,11 @@ The MOSS Metadata Reader, recipes stored in saved models and LoRAs, and a turbo 
 - **MOSS LoRA Extractor:** optional `tuned_name` and `base_name`, written into the LoRA as `hades/model_tuned` / `hades/model_base`.
 - **MOSS Metadata Reader:** shows a LoRA's and / or a diffusion model's safetensors metadata and what its tensors show (size, dtypes, LoRA kind, rank and alpha, the MOSS-Image layers and modules touched, MOSS-Image or not, parameters, fused q/k/v, int8 ConvRot), reading only the file header. For LoRAs from the Suite's Merger, Resize and Extractor it follows the `hades/*` recipe into the source files still in `models/loras` (also when moved to another subfolder) and gives each original file's weight in the result. For models it shows the Model Saver's `hades/recipe` and follows the model (MOSS Loader) and LoRAs (Multi-LoRA, LoRA Block Weight) named in it into their own recipes; for extracted LoRAs, the model names when the Extractor was given them. Optional SHA256. Outputs `info` (with HADES_META) and `metadata_json`.
 
+### Fixed
+- **MOSS Model Saver:** a `recipe` connected with `include_metadata` off was dropped without a word; `info` now says it was not saved.
+- **MOSS Metadata Reader:** a model recipe listed Multi-LoRA and LoRA Block Weight LoRAs at their strength without their group weights, so a LoRA applied to some layer groups only read as applied everywhere; the groups are shown now.
+- **Suite Telemetry:** a Metadata Reader `info` was counted as an input without a HaDeS MOSS trailer.
+
 ## [0.4.1] - 2026-11-07
 
 The MOSS Image Saver.
