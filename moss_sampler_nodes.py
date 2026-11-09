@@ -28,7 +28,7 @@ def with_shift(model, shift):
     return m
 
 
-# the settings the turbo LoRAs were trained and measured at (tools/RESULTS.md, "Our own few-step LoRA")
+# the settings the turbo LoRAs were trained and measured at (tools/RESULTS.md, "Our own few-step LoRA"); the node's defaults
 TURBO_SETTINGS = {"steps": 4, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple"}
 
 
@@ -49,17 +49,32 @@ class HaDeSMossTurbo:
                                              "Turbo Diverse give 6-10% less colour than SFT at 4 steps (6-14% at 2048) and are back near it at 8 (only colour measured "
                                              "at 8 for them). Other counts run, their quality is untested (tools/RESULTS.md)."}),
             },
+            "optional": {
+                "cfg": ("FLOAT", {"default": TURBO_SETTINGS["cfg"], "min": 1.0, "max": 4.0, "step": 0.05, "round": 0.01,
+                                  "tooltip": "1.0 is what the turbo LoRAs were trained at. Above 1 the negative prompt takes part and each step runs "
+                                             "the model twice (about 1.9x the time). Measured with one seed per prompt: Turbo 8-steps at 1.5 rendered "
+                                             "10 hard prompts on SFT and Base without burning; on a merge with a turbo baked in, 1.25-1.5 brought back "
+                                             "prompt details lost at 1.0, saturation rose with every step and 2.5 looked overdone; texture-heavy "
+                                             "prompts looked better at 1.0-1.2 (tools/RESULTS.md, \"Turbo LoRAs above CFG 1\")."}),
+                "sampler_name": (comfy.samplers.KSampler.SAMPLERS, {"default": TURBO_SETTINGS["sampler_name"],
+                                                                    "tooltip": "euler: what the turbo LoRAs were trained and measured with; er_sde was used in the CFG runs above."}),
+                "scheduler": (comfy.samplers.KSampler.SCHEDULERS, {"default": TURBO_SETTINGS["scheduler"],
+                                                                   "tooltip": "simple: what the turbo LoRAs were trained and measured with."}),
+            },
         }
 
     RETURN_TYPES = ("MOSS_TURBO",)
     RETURN_NAMES = ("turbo",)
     FUNCTION = "pick"
     CATEGORY = "HaDeS/MOSS Samplers"
-    DESCRIPTION = ("Few-step LoRA for the MOSS KSampler's turbo input: the KSampler applies it to its model and samples at the settings it "
-                   "was trained for (CFG 1, euler / simple, and this node's steps, 4 by default), whatever its own widgets say.")
+    DESCRIPTION = ("Few-step LoRA for the MOSS KSampler's turbo input: the KSampler applies it to its model and samples at this node's "
+                   "steps, CFG, sampler and scheduler (by default the settings the LoRAs were trained at: 4 steps, CFG 1, euler / simple), "
+                   "whatever its own widgets say.")
 
-    def pick(self, lora_name, strength, steps=TURBO_SETTINGS["steps"]):
-        return ({"lora_name": lora_name, "strength": float(strength), **TURBO_SETTINGS, "steps": int(steps)},)
+    def pick(self, lora_name, strength, steps=TURBO_SETTINGS["steps"], cfg=TURBO_SETTINGS["cfg"], sampler_name=TURBO_SETTINGS["sampler_name"],
+             scheduler=TURBO_SETTINGS["scheduler"]):
+        return ({"lora_name": lora_name, "strength": float(strength), "steps": int(steps), "cfg": float(cfg), "sampler_name": sampler_name,
+                 "scheduler": scheduler},)
 
 
 class HaDeSMossKSampler:
@@ -92,7 +107,8 @@ class HaDeSMossKSampler:
             "optional": {
                 "vae": ("VAE", {"tooltip": "Optional: also decode the result. Needed when the image output is connected."}),
                 "turbo": ("MOSS_TURBO", {"tooltip": "Optional: a MOSS Turbo LoRA. When connected, the LoRA is applied to the model and the KSampler "
-                                                    "samples at CFG 1, euler / simple with SLG off and the turbo node's steps, ignoring those widgets; "
+                                                    "samples with SLG off and the turbo node's steps, CFG, sampler and scheduler (4, 1, euler / simple "
+                                                    "by default), ignoring those widgets; "
                                                     "seed, denoise and flow_shift still apply. Measured at 4 or 8 steps, denoise 1.0 (Turbo 8-steps also at "
                                                     "0.25 / 0.40 on a 2x-upscaled image) and the model's shift 5.0 (tools/RESULTS.md)."}),
             },

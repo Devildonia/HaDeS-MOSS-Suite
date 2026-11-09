@@ -107,6 +107,16 @@ def make_prompts(n, seed):
     return sorted(rng.sample(text, n_text) + rng.sample(plain, n - n_text))
 
 
+def load_prompts(path, n, seed):
+    """Distinct prompts from a JSON list; n of them drawn with seed when the file has more, all of them otherwise."""
+    with open(path, encoding="utf-8") as f:
+        items = list(dict.fromkeys(str(x).strip() for x in json.load(f) if str(x).strip()))
+    if len(items) > n:
+        items = random.Random(seed).sample(items, n)
+    print(f"{len(items)} prompts from {path}", flush=True)
+    return sorted(items)
+
+
 class LoRASet(torch.nn.Module):
     """up / down factors per linear, fp32; delta = (x @ down.T) @ up.T (alpha = rank)."""
 
@@ -160,6 +170,8 @@ def main():
     p.add_argument("--guidance", type=float, default=3.0, help="teacher CFG")
     p.add_argument("--ema-decay", type=float, default=0.999)
     p.add_argument("--num-prompts", type=int, default=1024)
+    p.add_argument("--prompts-file", default=None, help="JSON list of training prompts instead of the built-in generator; "
+                   "--num-prompts of them, drawn with --seed when the file has more")
     p.add_argument("--save-every", type=int, default=50)
     p.add_argument("--sample-every", type=int, default=100)
     p.add_argument("--seed", type=int, default=0)
@@ -194,7 +206,7 @@ def train(args):
     dm = bm.diffusion_model
 
     # prompt embeddings, cached in --out (CPU, bf16)
-    prompts = make_prompts(args.num_prompts, args.seed)
+    prompts = load_prompts(args.prompts_file, args.num_prompts, args.seed) if args.prompts_file else make_prompts(args.num_prompts, args.seed)
     cache_path = os.path.join(args.out, "prompts.pt")
     cache = torch.load(cache_path) if os.path.exists(cache_path) else {}
     t0 = time.time()

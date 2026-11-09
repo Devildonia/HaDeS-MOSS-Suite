@@ -451,6 +451,15 @@ class TestSaverAndSampler(unittest.TestCase):
         finally:
             sampler.nodes.common_ksampler = original
         self.assertEqual((seen["steps"], common.parse_info_meta(info)["steps"]), (6, 6))
+        # the turbo node's CFG, sampler and scheduler replace CFG 1, euler / simple
+        sampler.nodes.common_ksampler = fake_ksampler
+        try:
+            info = sampler.HaDeSMossKSampler().sample(load(tiny_state_dict(10)), None, None, None, 7, 25, 2.5, "euler", "beta", 1.0, 0.0, "off",
+                                                      turbo=sampler.HaDeSMossTurbo().pick("turbo_test.safetensors", 1.0, 12, 1.5, "er_sde", "simple")[0])[2]
+        finally:
+            sampler.nodes.common_ksampler = original
+        self.assertEqual({k: seen[k] for k in ("steps", "cfg", "sampler", "scheduler")}, {"steps": 12, "cfg": 1.5, "sampler": "er_sde", "scheduler": "simple"})
+        self.assertEqual((common.parse_info_meta(info)["cfg"], common.parse_info_meta(info)["sampler"]), (1.5, "er_sde"))
 
 
 class TestImageSaver(unittest.TestCase):
@@ -524,6 +533,10 @@ class TestTelemetry(unittest.TestCase):
                  "denoise": (dict(denoise=0.6, turbo="t.safetensors", turbo_strength=1.0), 1),
                  "steps": (dict(denoise=1.0, turbo="t.safetensors", turbo_strength=1.0, steps=6), 1),
                  "8 steps": (dict(denoise=1.0, turbo="t.safetensors", turbo_strength=1.0, steps=8), 0),
+                 "cfg 1.5": (dict(denoise=1.0, turbo="t.safetensors", turbo_strength=1.0, cfg=1.5), 1),
+                 "er_sde": (dict(denoise=1.0, turbo="t.safetensors", turbo_strength=1.0, sampler="er_sde"), 0),
+                 "dpmpp_2m / karras": (dict(denoise=1.0, turbo="t.safetensors", turbo_strength=1.0, sampler="dpmpp_2m", scheduler="karras"), 1),
+                 "no turbo, cfg 2.5": (dict(denoise=1.0, steps=25, cfg=2.5), 0),
                  "no turbo, denoise": (dict(denoise=0.6), 0),
                  "no turbo, 25 steps": (dict(denoise=1.0, steps=25), 0)}
         for name, (extra, notes) in cases.items():

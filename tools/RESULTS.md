@@ -1080,3 +1080,35 @@ repository); images, key and votes kept outside the repository.
   often, SFT the most often worst, v0.8 level with SFT or slightly ahead.
 - The images come in pairs: SFT and v0.8 share each seed's composition, and so do turbo 8 and 12 steps, so best picks split
   inside each pair.
+
+## Turbo LoRAs above CFG 1 (2026-11-08)
+
+The turbo LoRAs were trained and first measured at CFG 1. These runs sample them above it, where the negative prompt takes part and
+each step evaluates the model twice. One seed (1200) per prompt, the maintainer's own prompts, 1152 x 1536, `qwen3.5_9b_int8_convrot`,
+flux2-vae, shift 5; by eye and with the colour statistics used above, not a blind vote. Scripts `v09_cfg.py`, `v09_turbo07.py`,
+`v09_turbo_all.py` (session tools, not in the repository); images kept outside the repository.
+
+**Turbo 8-steps v0.7 at CFG 1.5** on SFT and on Base, 12 steps, er_sde / simple, 10 hard prompts (a 1940s train compartment, a 1970s
+union hall, four subway passengers, five coloured spheres in a set order, a needle being threaded, a glass cube with lime slices, a
+Hanoi street stall, an Andean weaver, a tailor's mirror, stencilled text on a canvas bag): no image burned or broke on either model.
+Means over the 10 (SFT / Base): brightness 82.5 / 82.6, saturation 75.5 / 69.7, Laplacian sharpness 15.6 / 13.4, contrast 55.8 / 59.6.
+The turbo set the composition (it was close to the one another turbo LoRA gave with the same seed); the model set the look. An earlier
+hand test whose settings were not recorded looked overdone at CFG 1.2; it was not reproduced here.
+
+**CFG sweep on an unreleased merge with a turbo LoRA baked in** (int8 ConvRot, the maintainer's settings: er_sde / simple; 4, 6 or
+12 steps by prompt), 9 prompts, CFG 1.0 / 1.25 / 1.5 / 1.75 / 2.0, means:
+
+| | 1.0 | 1.25 | 1.5 | 1.75 | 2.0 | SFT, 25 steps, CFG 2.5 |
+|---|---|---|---|---|---|---|
+| Brightness | 114.4 | 108.2 | 105.4 | 104.2 | 102.3 | 85.5 |
+| Saturation | 99.7 | 107.5 | 110.1 | 112.8 | 115.4 | 106.5 |
+| Laplacian sharpness | 12.6 | 13.8 | 14.8 | 15.0 | 15.6 | 19.5 |
+| Contrast | 62.5 | 63.4 | 63.6 | 64.2 | 64.7 | 53.5 |
+
+- From 1.25 to 1.5 prompt details lost at CFG 1 came back: the icy surface of Europa with Jupiter behind it instead of a gas giant,
+  a tiny traveller giving scale to a colossus, a translucent cape and a golden-hour sky, a porthole and frost on an explorer.
+- Nothing broke up to 2.0 on these prompts; saturation rises with every step and was the first thing to look overdone. At 2.5 the
+  explorer prompt looked overdone (frost in rows, harder contrast).
+- Prompts heavy with texture words (an Andean weaver, a rustic still life) looked better at 1.0-1.2: at 1.5 a brick wall turned into
+  a repeating grid. Dark knitwear showed faint green / purple vertical streaks at 1.5 on some prompts, gone lower.
+- Time: about 1.9x per image above CFG 1 (12 steps, int8 on an RTX 5090: about 3.1 s at CFG 1, 5.8 s at 2.0).

@@ -7,6 +7,15 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-09
+
+The MOSS Metadata Reader, recipes stored in saved models and LoRAs, and a turbo input that can run above CFG 1.
+
+### Changed
+- **MOSS Turbo LoRA:** `cfg`, `sampler_name` and `scheduler` widgets; the MOSS KSampler's turbo input samples at them instead of fixed CFG 1, euler / simple. The defaults are those settings, so saved workflows render as before. Above CFG 1 the negative prompt takes part and each step runs twice (about 1.9x the time). Measured with one seed per prompt (`tools/RESULTS.md`, "Turbo LoRAs above CFG 1"): Turbo 8-steps at 1.5 rendered 10 hard prompts on SFT and Base without burning; on a merge with a turbo baked in, 1.25–1.5 brought back prompt details lost at 1.0, saturation rose with every step and 2.5 looked overdone; texture-heavy prompts looked better at 1.0–1.2. The KSampler's status line shows the turbo node's sampler and CFG.
+- **Suite Telemetry:** a turbo LoRA above CFG 1 or a few-step LoRA in Multi-LoRA above CFG 1 is now a note with what was measured (it was a warning for Multi-LoRA); a note for a turbo LoRA with a sampler other than euler / er_sde (simple); a Multi-LoRA few-step LoRA below CFG 1 stays a warning.
+- **`tools/moss_dmd_train.py`:** `--prompts-file`, a JSON list of training prompts in place of the built-in generator.
+
 ### Added
 - **MOSS Model Saver:** an optional `recipe` input (text, or the `info` of the MOSS Loader, Multi-LoRA or a merger), written into the file as `hades/recipe`, so a model with merges and LoRAs baked in keeps how it was made. Empty, the file is as before.
 - **MOSS LoRA Extractor:** optional `tuned_name` and `base_name`, written into the LoRA as `hades/model_tuned` / `hades/model_base`.

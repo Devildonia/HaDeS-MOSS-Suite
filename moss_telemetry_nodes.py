@@ -40,6 +40,13 @@ def diagnose(metas):
         if m.get("turbo") and m.get("steps", 4) not in (4, 8):
             out.append(("note", f"Turbo LoRA at {m['steps']} steps: the turbo LoRAs were measured at 4 steps (Turbo, Turbo Diverse) and 8 "
                                 "(Turbo 8-steps) only."))
+        if m.get("turbo") and m.get("cfg", 1.0) > 1.0 + 1e-6:
+            out.append(("note", f"Turbo LoRA at CFG {m['cfg']:g}: trained at CFG 1; above it the negative prompt takes part and each step runs "
+                                "twice (about 1.9x the time). Measured with one seed per prompt: 1.25-1.5 brought back prompt details, saturation "
+                                "rose with CFG, 2.5 looked overdone, texture-heavy prompts looked better at 1.0-1.2 (tools/RESULTS.md)."))
+        if m.get("turbo") and (m.get("sampler"), m.get("scheduler")) not in (("euler", "simple"), ("er_sde", "simple")):
+            out.append(("note", f"Turbo LoRA with {m.get('sampler')} / {m.get('scheduler')}: measured with euler / simple (training) and "
+                                "er_sde / simple (the CFG runs) only."))
         if m.get("turbo") and m.get("denoise", 1.0) < 1.0:
             out.append(("note", f"Turbo LoRA at denoise {m['denoise']:.2f}: measured at denoise 1.0, and Turbo 8-steps at 0.25 / 0.40 "
                                 "on a 2x-upscaled image only."))
@@ -76,9 +83,15 @@ def diagnose(metas):
                 if k.get("turbo"):
                     out.append(("warning", f"Multi-LoRA holds the few-step LoRA {t['name']} and the KSampler's turbo input adds {k['turbo']}: "
                                            "two few-step LoRAs, never measured together."))
-                elif k["steps"] != t["steps"] or k["cfg"] != 1.0:
-                    out.append(("warning", f"Multi-LoRA: {t['name']} was trained for {t['steps']} steps at CFG 1 (file metadata); "
-                                           f"the KSampler runs {k['steps']} steps at CFG {k['cfg']:g}."))
+                else:
+                    if k["steps"] != t["steps"]:
+                        out.append(("warning", f"Multi-LoRA: {t['name']} was trained for {t['steps']} steps (file metadata); "
+                                               f"the KSampler runs {k['steps']}."))
+                    if k["cfg"] > 1.0 + 1e-6:
+                        out.append(("note", f"Multi-LoRA: {t['name']} was trained at CFG 1; the KSampler runs CFG {k['cfg']:g}. Measured with one "
+                                            "seed per prompt: 1.25-1.5 brought back prompt details, 2.5 looked overdone (tools/RESULTS.md)."))
+                    elif k["cfg"] < 1.0 - 1e-6:
+                        out.append(("warning", f"Multi-LoRA: {t['name']} was trained at CFG 1; the KSampler runs CFG {k['cfg']:g}."))
 
     for m in by_node.get("layout", []):
         for lines, w, h in m.get("multiline", []):

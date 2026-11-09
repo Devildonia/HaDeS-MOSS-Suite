@@ -199,6 +199,10 @@ const INSTALLERS = {
         const TURBO_OVERRIDES = new Set(["steps", "cfg", "sampler_name", "scheduler", "slg"]);
         const turboLinked = () => node.inputs?.find((i) => i.name === "turbo")?.link != null;
         // the steps widget of the MOSS Turbo LoRA node feeding the turbo input (4, its default, if it cannot be read)
+        const turboNode = () => {
+            const slot = node.inputs?.findIndex((i) => i.name === "turbo") ?? -1;
+            return slot >= 0 ? node.getInputNode?.(slot) : null;
+        };
         const turboSteps = () => {
             const slot = node.inputs?.findIndex((i) => i.name === "turbo") ?? -1;
             const src = slot >= 0 ? node.getInputNode?.(slot) : null;
@@ -210,7 +214,12 @@ const INSTALLERS = {
             getStatusText: () => {
                 const shift = ` · shift ${num(node, "flow_shift") > 0 ? num(node, "flow_shift") : "model"}`;
                 // a connected turbo input overrides steps / CFG / sampler / scheduler / SLG in the backend
-                if (turboLinked()) return `TURBO · euler / simple · ${turboSteps()} steps · CFG 1.0${shift}`;
+                if (turboLinked()) {
+                    const t = turboNode();
+                    const cfg = Number((t && widget(t, "cfg")?.value) ?? 1);
+                    const smp = `${(t && widget(t, "sampler_name")?.value) ?? "euler"} / ${(t && widget(t, "scheduler")?.value) ?? "simple"}`;
+                    return `TURBO · ${smp} · ${turboSteps()} steps · CFG ${(Number.isFinite(cfg) ? cfg : 1).toFixed(2)}${shift}`;
+                }
                 return `${widget(node, "sampler_name")?.value} / ${widget(node, "scheduler")?.value} · ${num(node, "steps")} steps · CFG ${num(node, "cfg").toFixed(1)}`
                     + `${shift}${widget(node, "slg")?.value !== "off" ? " · SLG" : ""}`;
             },
@@ -262,7 +271,7 @@ const GENERIC = {
     HaDeSMossMetadataReader: { title: "METADATA READER · LORA · MODEL" },
     HaDeSMossLayoutCompiler: { title: "LAYOUT COMPILER" },
     HaDeSMossSamplerMetadata: { title: "SAMPLER METADATA" },
-    HaDeSMossTurbo: { title: "TURBO LORA · CFG 1", sliders: { strength: [0, 2] } },
+    HaDeSMossTurbo: { title: "TURBO LORA", sliders: { strength: [0, 2], cfg: [1, 4] } },
     HaDeSMossSuiteTelemetry: { title: "SUITE TELEMETRY" },
 };
 for (const [cls, { title, sliders = {} }] of Object.entries(GENERIC)) {
