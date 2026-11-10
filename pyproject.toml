@@ -1,7 +1,7 @@
 [project]
 name = "hades-moss-suite"
-description = "ComfyUI nodes for the MOSS-Image model family: a one-node loader, block and multi-model (TIES, DARE, Model Stock, SLERP) mergers for the 42-layer single-stream DiT, a model saver (bf16 with stochastic rounding, float32, int8 ConvRot) that can store the model's recipe, a metadata reader for LoRA and model files that follows their recipes, a multi-LoRA loader with per-layer-group strength and LoRA tools (extractor, merger, resize), color / depth control for MOSS-Image control adapters, a prompt enhancer that writes captions or layouts with the model's own text encoder, a visual layout editor and compiler, a latent node with a shared seed, a KSampler with metadata, an image saver with A1111 metadata for Civitai and a turbo input for our own 4- and 8-step LoRAs with its own CFG and sampler, and a telemetry node."
-version = "0.6.0"
+description = "ComfyUI nodes for the MOSS-Image model family: a one-node loader, block and multi-model (TIES, DARE, Model Stock, SLERP) mergers for the 42-layer single-stream DiT, a model saver (bf16 with stochastic rounding, float32, int8 ConvRot) that can store the model's recipe, a metadata reader for LoRA and model files that follows their recipes, a multi-LoRA loader with per-layer-group strength and LoRA tools (extractor, merger, resize), color / depth control for MOSS-Image control adapters, a prompt enhancer that writes captions or layouts with the model's own text encoder and encodes reference images for MOSS-Image edit LoRAs, a visual layout editor and compiler, a latent node with a shared seed, a KSampler with metadata, an image saver with A1111 metadata for Civitai and a turbo input for our own 4- and 8-step LoRAs with its own CFG and sampler, and a telemetry node."
+version = "0.6.1"
 authors = [
     { name = "Devildonia" }
 ]

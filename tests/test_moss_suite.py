@@ -680,6 +680,34 @@ class TestPromptEnhancer(unittest.TestCase):
         self.assertEqual((w, h), (1008, 1024))
         self.assertFalse(hasattr(clip, "kwargs"))  # nothing generated
 
+    def test_edit_mode_adds_the_reference(self):
+        class EditClip(FakeClip):
+            def tokenize(self, text, images=None):
+                return {"text": text, "images": len(images or [])}
+
+            def encode_from_tokens_scheduled(self, tokens):
+                return [[tokens["text"], {"images": tokens["images"]}]]
+
+        class FakeVAE:
+            def encode(self, img):
+                self.size = tuple(img.shape)
+                return torch.zeros(1, 128, img.shape[1] // 16, img.shape[2] // 16)
+
+        image, vae = torch.rand(1, 600, 1200, 3), FakeVAE()  # 2:1
+        for fmt, vision in (("Moss-Image-Edit", False), ("ai-toolkit", True)):
+            with self.subTest(fmt):
+                pos, neg, prompt, draft, w, h, info = enhancer.HaDeSMossPromptEnhancer().enhance(
+                    EditClip("unused"), "her hair blonde", "as written", 1024, 1024, 0.7, 0, 256, image=image, edit_format=fmt, vae=vae)["result"]
+                self.assertEqual((w, h), (1456, 720))  # about 1 MP at 2:1, 16 px grid
+                self.assertEqual(vae.size, (1, 720, 1456, 3))
+                for cond in (pos, neg):
+                    self.assertEqual(cond[0][1]["reference_latents_method"], enhancer.EDIT_FORMATS[fmt][0])
+                    self.assertEqual(tuple(cond[0][1]["reference_latents"][0].shape), (1, 128, 45, 91))
+                    self.assertEqual(cond[0][0].startswith("Picture 1:"), vision)
+                self.assertEqual(common.parse_info_meta(info)["edit_format"], fmt)
+        with self.assertRaisesRegex(ValueError, "needs the image"):
+            enhancer.HaDeSMossPromptEnhancer().enhance(EditClip("x"), "x", "as written", 1024, 1024, 0.7, 0, 256, edit_format="ai-toolkit")
+
     def test_needs_idea_or_image(self):
         with self.assertRaisesRegex(ValueError, "idea"):
             enhancer.HaDeSMossPromptEnhancer().enhance(FakeClip(""), "  ", "caption", 1024, 1024, 0.7, 0, 256)

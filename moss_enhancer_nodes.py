@@ -11,6 +11,7 @@ import re
 
 import torch
 import comfy.utils
+import node_helpers
 
 from .moss_common import format_info
 from .moss_pipeline_nodes import compile_layout, snap16
@@ -202,6 +203,35 @@ def encode(clip, text):
     return clip.encode_from_tokens_scheduled(clip.tokenize(text))
 
 
+# edit LoRAs: the core's own table (reference method, and whether the text encoder also sees the image), so both stay in step
+try:
+    from comfy_extras.nodes_moss_image import EDIT_FORMATS
+except ImportError:  # an older core without MOSS-Image edit support
+    EDIT_FORMATS = {}
+EDIT_OFF = "off"
+
+
+def edit_reference(image, megapixels=1.0):
+    """The reference at about `megapixels`, sides snapped to 16 px with its aspect kept: the size the edited image is generated at."""
+    h, w = int(image.shape[1]), int(image.shape[2])
+    k = (megapixels * 1024 * 1024 / float(h * w)) ** 0.5
+    nw, nh = max(256, snap16(w * k)), max(256, snap16(h * k))
+    return comfy.utils.common_upscale(image[:1, :, :, :3].movedim(-1, 1), nw, nh, "lanczos", "center").movedim(1, -1).clamp(0.0, 1.0), nw, nh
+
+
+def encode_edit(clip, text, ref, latent, edit_format):
+    """TextEncodeMOSSImageEdit's conditioning: ai-toolkit formats also show the reference (at most 384x384) to the text encoder after a
+    "Picture 1:" marker; every format carries the reference latent at t = 0 with the format's method."""
+    method, vision = EDIT_FORMATS[edit_format]
+    if vision:
+        scale = min(1.0, (384 * 384 / float(ref.shape[1] * ref.shape[2])) ** 0.5)
+        small = comfy.utils.common_upscale(ref.movedim(-1, 1), round(ref.shape[2] * scale), round(ref.shape[1] * scale), "area", "disabled").movedim(1, -1)
+        cond = clip.encode_from_tokens_scheduled(clip.tokenize("Picture 1: <|vision_start|><|image_pad|><|vision_end|>" + text, images=[small]))
+    else:
+        cond = encode(clip, text)
+    return node_helpers.conditioning_set_values(cond, {"reference_latents": [latent], "reference_latents_method": method})
+
+
 class HaDeSMossPromptEnhancer:
     @classmethod
     def INPUT_TYPES(cls):
@@ -232,6 +262,15 @@ class HaDeSMossPromptEnhancer:
                 "negative": ("STRING", {"multiline": True, "default": "", "tooltip": "The negative prompt, encoded to the negative output; empty uses the "
                                                                                      "official MOSS-Image template's. What you write here is also told "
                                                                                      "to the model as things to keep out."}),
+                "edit_format": ([EDIT_OFF] + list(EDIT_FORMATS), {"default": EDIT_OFF, "tooltip":
+                    "Edit mode, for an image-edit LoRA loaded in the Multi-LoRA: the image becomes the reference latent of both outputs (needs "
+                    "the vae input). Moss-Image-Edit: MOSS-edit and Moss-Image-Edit LoRAs (use mode 'as written' with a direct edit instruction, "
+                    "or 'caption' to have the model write the full target description). ai-toolkit (kv_cache on / off): LoRAs trained with "
+                    "ai-toolkit (e.g. the pose LoRA); the text encoder also sees the image. The same formats as the core Text Encode MOSS-Image Edit."}),
+                "vae": ("VAE", {"tooltip": "Edit mode: encodes the image as the reference latent."}),
+                "edit_megapixels": ("FLOAT", {"default": 1.0, "min": 0.25, "max": 4.0, "step": 0.05, "tooltip":
+                    "Edit mode: the reference is resized to this area with its aspect kept (16 px grid); width / height out are that size, "
+                    "so link them to the MOSS Latent's custom_width / custom_height to generate at the reference's size."}),
             },
         }
 
@@ -247,18 +286,39 @@ class HaDeSMossPromptEnhancer:
                    "text encoder and instructions adapted from OpenMOSS' official prompt enhancer. Outputs the encoded conditionings for the "
                    "sampler and the text.")
 
-    def enhance(self, clip, idea, mode, width, height, temperature, seed, max_tokens, image=None, negative=""):
+    def enhance(self, clip, idea, mode, width, height, temperature, seed, max_tokens, image=None, negative="", edit_format=EDIT_OFF, vae=None,
+                edit_megapixels=1.0):
         width, height = snap16(width), snap16(height)
         negative = negative or ""
         neg_text = negative.strip() or DEFAULT_NEGATIVE
+        editing = edit_format != EDIT_OFF
+        ref = ref_latent = None
+        if editing:
+            if edit_format not in EDIT_FORMATS:
+                raise ValueError(f"MOSS Prompt Enhancer: edit format '{edit_format}' is not in this ComfyUI core; update ComfyUI.")
+            if image is None or vae is None:
+                raise ValueError("MOSS Prompt Enhancer: edit mode needs the image (the picture to edit) and the vae inputs.")
+            if getattr(vae, "latent_channels", 128) != 128:
+                raise ValueError(f"MOSS Prompt Enhancer: the VAE has {vae.latent_channels} latent channels; MOSS-Image needs the 128-channel FLUX.2 VAE.")
+            if mode == "layout":
+                raise ValueError("MOSS Prompt Enhancer: edit mode works with caption or as written, not layout.")
+            ref, width, height = edit_reference(image, edit_megapixels)
+            ref_latent = vae.encode(ref)
+
+        def outputs(prompt):
+            if editing:
+                return encode_edit(clip, prompt, ref, ref_latent, edit_format), encode_edit(clip, neg_text, ref, ref_latent, edit_format)
+            return encode(clip, prompt), encode(clip, neg_text)
+
         if mode == "as written":
             if not idea.strip():
                 raise ValueError("MOSS Prompt Enhancer: as written needs an idea to encode")
             prompt = idea
-            info = format_info("HaDeS MOSS Prompt Enhancer | as written (no generation)" + (" | image ignored" if image is not None else ""),
-                               "prompt_enhancer", mode=mode, width=width, height=height, image=False, decode_fallback=False, notes=[],
-                               prompt=prompt, negative=neg_text)
-            return {"ui": {"text": [prompt]}, "result": (encode(clip, prompt), encode(clip, neg_text), prompt,
+            info = format_info("HaDeS MOSS Prompt Enhancer | as written (no generation)"
+                               + (f" | edit {edit_format}, reference {width}x{height}" if editing else (" | image ignored" if image is not None else "")),
+                               "prompt_enhancer", mode=mode, width=width, height=height, image=editing, decode_fallback=False, notes=[],
+                               prompt=prompt, negative=neg_text, edit_format=edit_format)
+            return {"ui": {"text": [prompt]}, "result": (*outputs(prompt), prompt,
                                                          json.dumps({"caption": prompt}, ensure_ascii=False), width, height, info)}
         if not idea.strip() and image is None:
             raise ValueError("MOSS Prompt Enhancer: write an idea, connect an image, or both")
@@ -289,11 +349,12 @@ class HaDeSMossPromptEnhancer:
             draft = json.dumps(draft_obj, ensure_ascii=False, indent=2)
             prompt = compile_layout(draft_obj)[0]
         info = format_info(f"HaDeS MOSS Prompt Enhancer | {mode}" + (f" | {width}x{height}" if mode == "layout" else "")
-                           + (" | image" if images else "") + f" | {len(prompt)} chars"
+                           + (" | image" if images else "") + (f" | edit {edit_format}, reference {width}x{height}" if editing else "")
+                           + f" | {len(prompt)} chars"
                            + (" | torch decode fallback" if fallback else "") + "".join(f"\nnote: {n}" for n in notes),
                            "prompt_enhancer", mode=mode, width=width, height=height, image=bool(images), decode_fallback=fallback, notes=notes,
-                           prompt=prompt, negative=neg_text)
-        return {"ui": {"text": [prompt]}, "result": (encode(clip, prompt), encode(clip, neg_text), prompt, draft, width, height, info)}
+                           prompt=prompt, negative=neg_text, edit_format=edit_format)
+        return {"ui": {"text": [prompt]}, "result": (*outputs(prompt), prompt, draft, width, height, info)}
 
 
 NODE_CLASS_MAPPINGS = {"HaDeSMossPromptEnhancer": HaDeSMossPromptEnhancer}

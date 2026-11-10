@@ -7,6 +7,13 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-10
+
+Edit mode in the MOSS Prompt Enhancer.
+
+### Added
+- **MOSS Prompt Enhancer, edit mode:** `edit_format` (`off`, `Moss-Image-Edit`, `ai-toolkit`, `ai-toolkit (kv_cache off)`, the core's formats), `vae` and `edit_megapixels`: with an image-edit LoRA in the Multi-LoRA (e.g. `MOSS-edit` / `Moss-Image-Edit`, or an `ai-toolkit` edit / pose LoRA), the image becomes the reference latent of both the positive and negative outputs, replacing two core `Text Encode MOSS-Image Edit` nodes. Use `as written` for a direct edit instruction (e.g. on `MOSS-edit`, which also runs cleanly with `HaDeS MOSS Turbo 8-steps` on the KSampler's `turbo` input) or `caption` to have the model write the full target description from the image and the idea. The reference is resized to `edit_megapixels` with its aspect kept (16 px grid) and `width` / `height` out give its size for the MOSS Latent. Shown in the status line and `info`.
+
 ## [0.6.0] - 2026-11-10
 
 MOSS Control (color / depth), and fixes for MOSS Latent and the MOSS Image Saver.

@@ -235,12 +235,17 @@ const INSTALLERS = {
             title: "MOSS PROMPT ENHANCER",
             getStatusText: () => {
                 const m = mode();
-                if (m === "as written") return "AS WRITTEN · plain prompt box, no generation";
+                const fmt = widget(node, "edit_format")?.value;
+                const edit = fmt && fmt !== "off" ? ` · EDIT ${fmt}` : "";
+                if (m === "as written") return `AS WRITTEN · plain prompt box, no generation${edit}`;
                 const what = m === "layout" ? `LAYOUT · ${num(node, "width")} × ${num(node, "height")}` : "CAPTION";
-                return `${what} · temp ${num(node, "temperature").toFixed(2)}${imageLinked() ? " · + image" : ""} · MOSS text encoder`;
+                return `${what} · temp ${num(node, "temperature").toFixed(2)}${imageLinked() ? " · + image" : ""}${edit} · MOSS text encoder`;
             },
         });
-        styleWidgets(node, { sliders: { temperature: [0, 1.5] }, dimmed: (name) => UNUSED[mode()]?.has(name) ?? false });
+        styleWidgets(node, {
+            sliders: { temperature: [0, 1.5], edit_megapixels: [0.25, 4] },
+            dimmed: (name) => (UNUSED[mode()]?.has(name) ?? false) || (name === "edit_megapixels" && (widget(node, "edit_format")?.value ?? "off") === "off"),
+        });
     },
     HaDeSMossLatent(node) {
         // editing custom_width / custom_height (or linking them) means a custom size: switch the combo so the backend uses them
