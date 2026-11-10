@@ -8,7 +8,7 @@ from comfy.ldm.moss_image.model import MOSSImage
 from comfy.quant_ops import QuantizedTensor
 from comfy.text_encoders.moss_image import MOSSImageTEModel
 
-from .moss_common import format_info, model_weights
+from .moss_common import format_model_info, model_weights
 
 LATENT_CHANNELS = 128  # FLUX.2 VAE, the one MOSS-Image uses
 
@@ -89,7 +89,7 @@ class HaDeSMossLoader:
         # model_file / text_encoder_file: the names as listed under models/, which the MOSS Image Saver hashes
         meta = {"model": os.path.basename(unet_name), "model_file": unet_name, "text_encoder_file": clip_name, "precision": precision, "weight_dtype": weight_dtype, "attention": attention,
                 "layers": len(dm.layers), "text_encoder": os.path.basename(clip_name), "vae": vae_name}
-        return (model, clip, vae, format_info("\n".join(lines), "loader", **meta))
+        return (model, clip, vae, format_model_info("\n".join(lines), "loader", model, **meta))
 
 
 NODE_CLASS_MAPPINGS = {"HaDeSMossLoader": HaDeSMossLoader}

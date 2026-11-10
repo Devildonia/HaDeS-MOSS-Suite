@@ -22,6 +22,12 @@ def format_info(text, node, **meta):
     return f"{text}\n{HADES_META_PREFIX}{json.dumps({'node': node, **meta}, separators=(',', ':'))}"
 
 
+def format_model_info(text, node, model, **meta):
+    """Keep the recipe on the patcher clone so later mergers can name their actual inputs."""
+    model.set_attachments("hades_moss_recipe", {"node": node, **meta})
+    return format_info(text, node, **meta)
+
+
 def parse_info_meta(text):
     """Return the HADES_META trailer of an info string, or None for foreign strings."""
     for line in reversed(str(text).splitlines()):

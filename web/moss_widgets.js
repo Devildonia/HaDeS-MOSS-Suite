@@ -423,10 +423,7 @@ export function setGlobalClassicUI(enableGlobalClassic) {
     const graph = app?.graph || window?.app?.graph;
     if (graph?._nodes) {
         for (const n of graph._nodes) {
-            if (n._hadesCustomWidgets || n._hasHadesFrameStyle || (n.type && n.type.startsWith("HaDeSMoss"))) {
-                if (!enableGlobalClassic && n.flags?.classic_ui) {
-                    delete n.flags.classic_ui;
-                }
+            if (n.type?.startsWith("HaDeSMoss")) {
                 const shouldBeClassic = enableGlobalClassic ? true : Boolean(n.flags?.classic_ui);
                 setNodeClassicUI(n, shouldBeClassic, false, false);
             }

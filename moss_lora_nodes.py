@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import re
 
@@ -11,7 +12,7 @@ import comfy.model_management
 import comfy.utils
 import comfy.weight_adapter
 
-from .moss_common import (check_compatible, format_info, is_quantized, key_patches, key_patches_weight, key_slot, model_weights,
+from .moss_common import (check_compatible, format_info, format_model_info, is_quantized, key_patches, key_patches_weight, key_slot, model_weights,
                           rescale_for, residual_scale)
 from .moss_merger_nodes import GROUPS, layer_group
 
@@ -163,8 +164,8 @@ class HaDeSMossLoraBlockWeight:
         text = (f"HaDeS MOSS LoRA Block Weight | {lora_name} | model {strength_model:+.2f} | "
                 f"{' / '.join(f'{w:.2f}' for w in weights)} | other {other_layers:.2f}\n"
                 f"LoRA weights per group: {', '.join(f'{g} {c}' for g, c in counts.items())}")
-        return (m, format_info(text, "lora_block_weight", lora=lora_name, strength_model=strength_model, weights=weights,
-                               other_layers=other_layers, counts=counts))
+        return (m, format_model_info(text, "lora_block_weight", m, lora=lora_name, strength_model=strength_model, weights=weights,
+                                     other_layers=other_layers, counts=counts, sources={"model": model.get_attachment("hades_moss_recipe")}))
 
 
 def add_lora_by_group(m, model, lora_name, strength, groups, other_layers=1.0):
@@ -226,8 +227,11 @@ def parse_lora_rows(text):
         groups = row.get("groups") or {}
         if not isinstance(groups, dict):
             raise ValueError(f"HaDeS MOSS Multi-LoRA: row {i} 'groups' must be an object of group: weight.")
-        out.append({"name": row["name"], "on": bool(row.get("on", True)), "strength": float(row.get("strength", 1.0)),
-                    "groups": {g: float(groups[g]) for g in GROUPS + ["other_layers"] if g in groups}})
+        strength = float(row.get("strength", 1.0))
+        groups = {g: float(groups[g]) for g in GROUPS + ["other_layers"] if g in groups}
+        if not all(math.isfinite(v) for v in [strength, *groups.values()]):
+            raise ValueError(f"HaDeS MOSS Multi-LoRA: row {i} strengths must be finite numbers.")
+        out.append({"name": row["name"], "on": bool(row.get("on", True)), "strength": strength, "groups": groups})
     return out
 
 
@@ -274,7 +278,8 @@ class HaDeSMossMultiLora:
         for t in turbo:
             if t["strength"] != 1.0:
                 lines.append(f"Note: {t['name']} at {t['strength']:+.2f}; its metadata gives the strength it was trained at.")
-        return (m, format_info("\n".join(lines), "multi_lora", enabled=True, loras=applied, turbo=turbo))
+        return (m, format_model_info("\n".join(lines), "multi_lora", m, enabled=True, loras=applied, turbo=turbo,
+                                     sources={"model": model.get_attachment("hades_moss_recipe")}))
 
 
 # ==============================================================================
@@ -330,6 +335,8 @@ def save_lora(path, factors, diffs, max_rank, energy_target, metadata):
     """Compresses every factor pair and writes diffusion_model.* keys. Returns (energies, ranks)."""
     out, energies, ranks = {}, [], []
     for key, (up, down) in factors.items():
+        if key in diffs:
+            continue  # the core replaces factors with .diff on the same weight; export their exact sum below
         new_up, new_down, kept = compress(up, down, max_rank, energy_target)
         prefix = key.removesuffix(".weight")
         out[f"{prefix}.lora_up.weight"] = new_up.cpu().to(torch.bfloat16).contiguous()
@@ -338,12 +345,17 @@ def save_lora(path, factors, diffs, max_rank, energy_target, metadata):
         energies.append(kept)
         ranks.append(new_up.shape[1])
     for key, d in diffs.items():
-        out[f"{key.removesuffix('.weight').removesuffix('.bias')}.{'diff_b' if key.endswith('.bias') else 'diff'}"] = d.cpu().to(torch.bfloat16)
+        if key in factors:
+            up, down = factors[key]
+            d = d + up @ down
+        out[f"{key.removesuffix('.weight').removesuffix('.bias')}.{'diff_b' if key.endswith('.bias') else 'diff'}"] = d.cpu().to(torch.bfloat16).contiguous()
     safetensors.torch.save_file(out, path, metadata={"format": "pt", "ss_base_model_version": "moss_image", **metadata})
     return energies, ranks
 
 
 def resize_summary(path, energies, ranks, energy_target, target_rank, n_diffs):
+    if not ranks:
+        return [f"Saved {os.path.basename(path)} ({os.path.getsize(path) / 1024 ** 2:.1f} MB) | {n_diffs} full diffs | no rank compression"], None
     mean = sum(energies) / len(energies)
     lines = [f"Saved {os.path.basename(path)} ({os.path.getsize(path) / 1024 ** 2:.1f} MB) | rank max {max(ranks)}, mean {sum(ranks) / len(ranks):.1f} "
              f"({'dynamic ' + format(energy_target, '.3f') if energy_target > 0.0 else 'fixed'}, cap {target_rank}) | {len(ranks)} LoRA layers, {n_diffs} full diffs",
@@ -382,14 +394,14 @@ class HaDeSMossLoraResize:
             raise ValueError(f"HaDeS MOSS LoRA Resize: '{lora_name}' has no LoRA layer that applies to this model.")
         src = folder_paths.get_full_path_or_raise("loras", lora_name)
         path = lora_output_path(export_filename, "HaDeS_MOSS_Resized_LoRA", overwrite_existing)
-        if os.path.abspath(path) == os.path.abspath(src):
+        if os.path.exists(path) and os.path.samefile(path, src):
             raise ValueError("HaDeS MOSS LoRA Resize: the output would overwrite the source LoRA; choose another export_filename.")
         energies, ranks = save_lora(path, factors, diffs, target_rank, dynamic_energy,
                                     {"hades/source_lora": lora_name, "hades/target_rank": str(target_rank), "hades/dynamic_energy": str(dynamic_energy)})
         lines, mean = resize_summary(path, energies, ranks, dynamic_energy, target_rank, len(diffs))
         lines.insert(0, f"HaDeS MOSS LoRA Resize | {lora_name} ({os.path.getsize(src) / 1024 ** 2:.1f} MB)")
         return {"ui": {"text": [path]}, "result": (path, format_info("\n".join(lines), "lora_resize", saved_path=path, rank=target_rank,
-                                                                      layers=len(ranks), energy_kept=round(mean, 4)))}
+                                                                      layers=len(ranks), energy_kept=round(mean, 4) if mean is not None else None))}
 
 
 class HaDeSMossLoraMerger:
@@ -433,9 +445,9 @@ class HaDeSMossLoraMerger:
         diffs = {k: da.get(k, 0) + db.get(k, 0) for k in da.keys() | db.keys()}
         if not factors and not diffs:
             raise ValueError("HaDeS MOSS LoRA Merger: neither LoRA applies to this model.")
-        sources = {os.path.abspath(folder_paths.get_full_path_or_raise("loras", n)) for n in (lora_a, lora_b)}
+        sources = [folder_paths.get_full_path_or_raise("loras", n) for n in (lora_a, lora_b)]
         path = lora_output_path(export_filename, "HaDeS_MOSS_Merged_LoRA", overwrite_existing)
-        if os.path.abspath(path) in sources:
+        if os.path.exists(path) and any(os.path.samefile(path, src) for src in sources):
             raise ValueError("HaDeS MOSS LoRA Merger: the output would overwrite a source LoRA; choose another export_filename.")
         energies, ranks = save_lora(path, factors, diffs, rank, dynamic_energy,
                                     {"hades/lora_a": lora_a, "hades/lora_b": lora_b, "hades/weights": f"{weight_a},{weight_b}", "hades/rank": str(rank)})
@@ -443,7 +455,7 @@ class HaDeSMossLoraMerger:
         lines.insert(0, f"HaDeS MOSS LoRA Merger | {weight_a:+.2f} x {lora_a} + {weight_b:+.2f} x {lora_b} | layers only in A: {len(fa.keys() - fb.keys())}, "
                         f"only in B: {len(fb.keys() - fa.keys())}, shared: {len(fa.keys() & fb.keys())}")
         return {"ui": {"text": [path]}, "result": (path, format_info("\n".join(lines), "lora_merger", saved_path=path, rank=rank,
-                                                                      layers=len(ranks), energy_kept=round(mean, 4)))}
+                                                                      layers=len(ranks), energy_kept=round(mean, 4) if mean is not None else None))}
 
 
 NODE_CLASS_MAPPINGS = {

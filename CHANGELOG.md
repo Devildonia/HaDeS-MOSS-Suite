@@ -7,6 +7,17 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **LoRA export:** factors and full diffs on the same weight are added before saving; diff-only merges finish with compression energy marked as not applicable. Merger and Resize protect source files by filesystem identity, including Windows filename case and hard links.
+- **Image Saver:** ComfyUI's `--disable-metadata` now suppresses every embedded text chunk, including A1111 parameters and `hades_moss`.
+- **Model merges:** zero-weight models no longer amplify TIES / DARE-TIES. SLERP uses linear interpolation for zero-length and nearly antiparallel inputs. Recipe overrides and Multi-LoRA JSON reject non-finite strengths.
+- **Model Saver:** quantized inputs are converted to the requested int8 ConvRot layout with matching scales and configuration; existing matching int8 weights and scales are preserved.
+- **Recipes:** merger info includes complete ratios / weights, seed and sources known to the Suite; the Metadata Reader follows these nested recipes and invalidates its cache when a source changes or appears.
+- **Interface:** the MOSS classic-widget switch leaves other suites untouched and preserves individual node preferences.
+
+### Tests
+- Added real-core export / reload regressions, Windows source-file identity checks, frontend setting tests and opt-in CUDA export checks. CI now includes ComfyUI v0.43.0 on Linux and Windows, plus upstream master on Linux. Local measurements and remaining limits: `docs/AUDIT_0.6.1.md`.
+
 ## [0.6.1] - 2026-11-10
 
 Edit mode in the MOSS Prompt Enhancer.

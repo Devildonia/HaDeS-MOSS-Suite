@@ -180,8 +180,9 @@ class HaDeSMossImageSaver:
         for batch_number, image in enumerate(images):
             img = Image.fromarray(np.clip(255.0 * image.cpu().numpy(), 0, 255).astype(np.uint8))
             info = PngInfo()
-            info.add_text("parameters", parameters)
-            info.add_text("hades_moss", json.dumps(metas, ensure_ascii=False))
+            if not args.disable_metadata:
+                info.add_text("parameters", parameters)
+                info.add_text("hades_moss", json.dumps(metas, ensure_ascii=False))
             if embed_workflow and not args.disable_metadata:
                 if prompt is not None:
                     info.add_text("prompt", json.dumps(prompt))

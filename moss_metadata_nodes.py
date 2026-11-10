@@ -206,6 +206,29 @@ def info_metas(text):
     return out
 
 
+def model_recipe_parts(m, chain, depth=0):
+    """Follow a saved node recipe, including the input recipes captured by mergers."""
+    if not isinstance(m, dict) or depth >= _MAX_DEPTH:
+        return []
+    kind = m.get("node")
+    parts = []
+    if kind == "loader" and m.get("model_file"):
+        return [model_recipe(m["model_file"], chain)]
+    for source in (m.get("sources") or {}).values():
+        parts += model_recipe_parts(source, chain, depth + 1)
+    if kind in ("model_block_merger", "multi_model_merger"):
+        return [{"operation": kind, "settings": {k: v for k, v in m.items() if k not in ("node", "sources")}, "parts": parts}]
+    if kind == "multi_lora":
+        parts += [{**recipe(r["name"], float(r.get("strength", 1.0))), **({"groups": r["groups"]} if r.get("groups") else {})}
+                  for r in m.get("loras", []) if r.get("name")]
+    elif kind == "lora_block_weight" and m.get("lora"):
+        groups = {g: w for g, w in zip(GROUPS, m.get("weights") or []) if w != 1.0}
+        if m.get("other_layers", 1.0) != 1.0:
+            groups["other_layers"] = m["other_layers"]
+        parts.append({**recipe(m["lora"], float(m.get("strength_model", 1.0))), **({"groups": groups} if groups else {})})
+    return parts
+
+
 def model_recipe(name, chain=()):
     """A model's hades/recipe (written by the MOSS Model Saver), with the models and LoRAs its info trailers name followed into their own
     recipes: the MOSS Loader's model file, the Multi-LoRA's and LoRA Block Weight's LoRAs with their strengths."""
@@ -227,22 +250,17 @@ def model_recipe(name, chain=()):
     chain = chain + (os.path.abspath(path),)
     parts = []
     for m in info_metas(text):
-        kind = m.get("node")
-        if kind == "loader" and m.get("model_file"):
-            parts.append(model_recipe(m["model_file"], chain))
-        elif kind == "multi_lora":
-            parts += [{**recipe(r["name"], float(r.get("strength", 1.0))), **({"groups": r["groups"]} if r.get("groups") else {})}
-                      for r in m.get("loras", []) if r.get("name")]
-        elif kind == "lora_block_weight" and m.get("lora"):
-            groups = {g: w for g, w in zip(GROUPS, m.get("weights") or []) if w != 1.0}
-            if m.get("other_layers", 1.0) != 1.0:
-                groups["other_layers"] = m["other_layers"]
-            parts.append({**recipe(m["lora"], float(m.get("strength_model", 1.0))), **({"groups": groups} if groups else {})})
+        parts += model_recipe_parts(m, chain)
     return {**node, "text": text, "parts": parts}
 
 
 def model_recipe_lines(node, depth=0):
     pad = "  " * depth
+    if "operation" in node:
+        lines = [f"{pad}{node['operation']}: {json.dumps(node['settings'], ensure_ascii=False)}"]
+        for part in node["parts"]:
+            lines += model_recipe_lines(part, depth + 1) if "lora" not in part else recipe_lines(part, depth + 1)
+        return lines
     head = f"{pad}model {node['model']}" + (f" (now {node['found_as']})" if node.get("found_as") else "")
     for flag, note in (("missing", "not in models/diffusion_models"), ("loop", "loop or too deep, not followed"), ("unreadable", "unreadable")):
         if node.get(flag):
@@ -252,7 +270,7 @@ def model_recipe_lines(node, depth=0):
     lines = [f"{head}  recipe as saved:"]
     lines += [f"{pad}  | {line}" for line in node["text"].splitlines() if line.strip() and not line.startswith(HADES_META_PREFIX)]
     for part in node["parts"]:
-        lines += model_recipe_lines(part, depth + 1) if "model" in part else recipe_lines(part, depth + 1)
+        lines += model_recipe_lines(part, depth + 1) if "lora" not in part else recipe_lines(part, depth + 1)
     return lines
 
 
@@ -371,10 +389,26 @@ class HaDeSMossMetadataReader:
     @classmethod
     def IS_CHANGED(cls, lora_name, model_name, sha256=False):
         out = []
+        seen = set()
+
+        def visit(node):
+            if "lora" in node or "model" in node:
+                folder = "loras" if "lora" in node else "diffusion_models"
+                name = node.get("found_as", node.get("lora", node.get("model")))
+                _, path = find_file(folder, name)
+                key = (folder, name, path)
+                if key in seen:
+                    return
+                seen.add(key)
+                st = os.stat(path) if path and os.path.exists(path) else None
+                out.append((*key, st.st_size, st.st_mtime_ns) if st else key)
+            for child in node.get("sources", []) + node.get("parts", []):
+                visit(child)
+
         for folder, name in (("loras", lora_name), ("diffusion_models", model_name)):
-            path = folder_paths.get_full_path(folder, name) if name != NONE else None
-            st = os.stat(path) if path and os.path.exists(path) else None
-            out.append((name, st.st_size, st.st_mtime_ns) if st else name)
+            if name == NONE:
+                continue
+            visit(recipe(name) if folder == "loras" else model_recipe(name))
         return json.dumps([out, sha256])
 
     def read(self, lora_name, model_name, sha256=False):

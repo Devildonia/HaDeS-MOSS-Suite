@@ -1,10 +1,11 @@
+import math
 import zlib
 
 import torch
 import comfy.weight_adapter
 from comfy.quant_ops import QuantizedTensor
 
-from .moss_common import (PARTS, apply_block_merge, check_compatible, format_info, is_quantized, key_patches, key_patches_weight, logger,
+from .moss_common import (PARTS, apply_block_merge, check_compatible, format_model_info, is_quantized, key_patches, key_patches_weight, logger,
                           model_weights, rescale_for, residual_scale, same_weight)
 
 N_GROUPS = 7  # groups of 6 layers on the 42-layer model; other depths are split proportionally
@@ -46,6 +47,8 @@ def parse_recipe(text, n_layers):
         values = [float(p) for p in parts]
     except ValueError:
         raise ValueError(f"HaDeS MOSS Merger: recipe_override must be numbers only, got {[p for p in parts if not p.replace('.', '', 1).lstrip('-').isdigit()][:3]}.") from None
+    if not all(math.isfinite(v) for v in values):
+        raise ValueError("HaDeS MOSS Merger: recipe_override values must be finite numbers.")
     return values[:n_layers], dict(zip(PARTS, values[n_layers:]))
 
 
@@ -90,8 +93,10 @@ class HaDeSMossModelBlockMerger:
                      f"the rounding of the quantized file is kept, the original weights are not recovered.")
             if "model1" in quantized:
                 text += " The result is quantized again into model1's format; connect the bf16 model as model1 to keep it in bf16."
-        return (m, format_info(text, "model_block_merger", mode=mode, n_layers=n_layers, modified_tensors=merged, quantized=quantized,
-                               model2_residual_rescale=scale))
+        return (m, format_model_info(text, "model_block_merger", m, mode=mode, n_layers=n_layers, modified_tensors=merged, quantized=quantized,
+                                     model2_residual_rescale=scale, layer_ratios=layer_ratios, part_ratios=part_ratios,
+                                     sources={"model1": model1.get_attachment("hades_moss_recipe"),
+                                              "model2": model2.get_attachment("hades_moss_recipe")}))
 
 
 # ==============================================================================
@@ -127,11 +132,17 @@ def sign_consensus(taus):
 
 
 def slerp(a, b, t):
-    """Spherical interpolation of two whole weight tensors; linear when they are (nearly) parallel."""
+    """Spherical interpolation; linear for zero-length or nearly collinear inputs."""
+    if t == 0.0:
+        return a
+    if t == 1.0:
+        return b
     cos = torch.nn.functional.cosine_similarity(a.flatten(), b.flatten(), dim=0).clamp(-1.0, 1.0)
-    omega = torch.arccos(cos)
-    if float(omega) < 1e-4:
+    c = float(cos)
+    angle = math.acos(c)
+    if angle < 1e-4 or math.pi - angle < 1e-4 or (c == 0.0 and (a.norm() == 0 or b.norm() == 0)):
         return a + (b - a) * t
+    omega = torch.arccos(cos)
     so = torch.sin(omega)
     return a * (torch.sin((1.0 - t) * omega) / so) + b * (torch.sin(t * omega) / so)
 
@@ -152,7 +163,8 @@ def multi_merge_tensor(method, base, thetas, weights, density, scale, generators
         t = n * c / (1.0 + (n - 1) * c)
         return base + t * torch.stack(taus).mean(0)
     total = sum(weights)
-    taus = [tau * (w * len(weights) / total) for tau, w in zip(taus, weights)]
+    n = sum(w != 0 for w in weights) if method in ("TIES", "DARE-TIES") else len(weights)
+    taus = [tau * (w * n / total) for tau, w in zip(taus, weights)]
     if method in ("DARE", "DARE-TIES"):
         taus = [dare_drop(tau, density, g) for tau, g in zip(taus, generators)]
     if method == "TIES":
@@ -290,8 +302,12 @@ class HaDeSMossMultiModelMerger:
             if anchor_name in quantized:
                 text += f" The result is quantized again into {anchor_name}'s format; use a bf16 {anchor_name} to keep it in bf16."
             logger.warning(f"HaDeS MOSS Multi-Model Merger: {', '.join(quantized)} quantized; merging their dequantized weights.")
-        return (m, format_info(text, "multi_model_merger", method=method, models=len(models), density=float(density), scale=float(scale),
-                               modified_tensors=merged, quantized=quantized, rescaled=rescaled))
+        sources = {name: mm.get_attachment("hades_moss_recipe") for name, mm, _ in models}
+        if method != "SLERP":
+            sources["base_model"] = base_model.get_attachment("hades_moss_recipe")
+        return (m, format_model_info(text, "multi_model_merger", m, method=method, models=len(models), density=float(density), scale=float(scale),
+                                     modified_tensors=merged, quantized=quantized, rescaled=rescaled,
+                                     weights=model_weights_, seed=int(seed), n_layers=n_layers, sources=sources))
 
 
 NODE_CLASS_MAPPINGS = {

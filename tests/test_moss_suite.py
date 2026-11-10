@@ -6,9 +6,11 @@ Run from a ComfyUI checkout with this pack in custom_nodes:
 import importlib
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 PACK_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 COMFY_ROOT = os.path.dirname(os.path.dirname(PACK_DIR))
@@ -225,6 +227,44 @@ class TestMergers(unittest.TestCase):
         torch.testing.assert_close(patched_weight(m, key), expected, rtol=0, atol=1e-6)
         self.assertEqual(common.parse_info_meta(info)["method"], "Task Arithmetic")
 
+    def test_zero_weight_does_not_amplify_ties(self):
+        base = torch.zeros(4)
+        for method in ("TIES", "DARE-TIES"):
+            gs = [torch.Generator().manual_seed(i) for i in range(2)]
+            actual = mergers.multi_merge_tensor(method, base, [torch.ones(4), torch.full((4,), 3.0)], [1.0, 0.0], 1.0, 1.0, gs)
+            torch.testing.assert_close(actual, torch.ones(4))
+
+    def test_slerp_degenerate_and_regular_inputs(self):
+        a = torch.tensor([1.0, 0.0])
+        for b in (-a, torch.zeros_like(a), a):
+            for t in (0.0, 0.25, 1.0):
+                torch.testing.assert_close(mergers.slerp(a, b, t), a + (b - a) * t)
+        b = torch.tensor([0.0, 1.0])
+        torch.testing.assert_close(mergers.slerp(a, b, 0.5), torch.full((2,), 2 ** -0.5))
+
+    def test_recipe_rejects_nonfinite_ratios(self):
+        for value in ("nan", "inf", "-inf", "1e999"):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "finite"):
+                mergers.parse_recipe(",".join([value] + ["0"] * (LAYERS + 2)), LAYERS)
+
+    def test_merger_info_keeps_settings_and_sources(self):
+        a, b = self.a.clone(), self.b.clone()
+        a.set_attachments("hades_moss_recipe", {"node": "loader", "model_file": "source_a.safetensors"})
+        b.set_attachments("hades_moss_recipe", {"node": "loader", "model_file": "source_b.safetensors"})
+        ratios = [0.123456] * LAYERS
+        m, info = mergers.HaDeSMossModelBlockMerger().merge(a, b, 0.2, 0.3, 0.4,
+                                                          recipe_override=",".join(map(str, ratios + [0.2, 0.3, 0.4])))
+        meta = common.parse_info_meta(info)
+        self.assertEqual(meta["layer_ratios"], ratios)
+        self.assertEqual(meta["part_ratios"], {"text_embedder": 0.2, "time_modulation": 0.3, "io": 0.4})
+        self.assertEqual(meta["sources"]["model2"]["model_file"], "source_b.safetensors")
+        self.assertEqual(m.get_attachment("hades_moss_recipe"), meta)
+        _, info = mergers.HaDeSMossMultiModelMerger().merge(m, b, "DARE", 0.5, 0.75, 123, 0.25, 1.0, base_model=a)
+        meta = common.parse_info_meta(info)
+        self.assertEqual((meta["seed"], meta["weights"]), (123, [0.25, 1.0]))
+        self.assertEqual(meta["sources"]["model_1"]["layer_ratios"], ratios)
+        self.assertEqual(meta["sources"]["base_model"]["model_file"], "source_a.safetensors")
+
 
 class TestLoras(unittest.TestCase):
     @classmethod
@@ -341,6 +381,61 @@ class TestLoras(unittest.TestCase):
         resized = loras.HaDeSMossLoraResize().resize(self.model, "split.safetensors", 2, "resized", overwrite_existing=True)["result"][1]
         self.assertLess(common.parse_info_meta(resized)["energy_kept"], 1.0)
 
+    def test_factors_and_full_diff_on_same_weight_are_added(self):
+        key = "diffusion_model.layers.0.proj.o.weight"
+        prefix = key[:-len(".weight")]
+        diff = torch.full((DIM, DIM), 0.125)
+        safetensors.torch.save_file({f"{prefix}.diff": diff}, os.path.join(TMP, "full_diff.safetensors"))
+        path, info = loras.HaDeSMossLoraMerger().merge(self.model, "fused.safetensors", 1.0, "full_diff.safetensors", 0.5,
+                                                     64, "mixed_diff", overwrite_existing=True)["result"]
+        expected = self.core_delta("fused.safetensors", key) + diff * 0.5
+        torch.testing.assert_close(self.core_delta(os.path.basename(path), key), expected.to(torch.bfloat16).float())
+        with safetensors.safe_open(path, "pt") as f:
+            self.assertNotIn(f"{prefix}.lora_up.weight", f.keys())
+            self.assertIn(f"{prefix}.diff", f.keys())
+
+    def test_diff_only_merge_loads_and_reports_no_compression(self):
+        key = "diffusion_model.layers.0.proj.o.weight"
+        prefix = key[:-len(".weight")]
+        for name, value in (("diff_a", 0.125), ("diff_b", 0.25)):
+            safetensors.torch.save_file({f"{prefix}.diff": torch.full((DIM, DIM), value)}, os.path.join(TMP, name + ".safetensors"))
+        path, info = loras.HaDeSMossLoraMerger().merge(self.model, "diff_a.safetensors", 1.0, "diff_b.safetensors", 1.0,
+                                                     4, "diff_only", overwrite_existing=True)["result"]
+        torch.testing.assert_close(self.core_delta(os.path.basename(path), key), torch.full((DIM, DIM), 0.375))
+        self.assertIsNone(common.parse_info_meta(info)["energy_kept"])
+        self.assertEqual(telemetry.diagnose([common.parse_info_meta(info)]), [])
+
+    def test_source_alias_cannot_be_overwritten(self):
+        source = os.path.join(TMP, "alias_source.safetensors")
+        shutil.copyfile(os.path.join(TMP, "fused.safetensors"), source)
+        alias = os.path.join(TMP, "source_alias.safetensors")
+        if not os.path.exists(alias):
+            os.link(source, alias)
+        with open(source, "rb") as f:
+            before = f.read()
+        with self.assertRaisesRegex(ValueError, "overwrite.*source"):
+            loras.HaDeSMossLoraResize().resize(self.model, "alias_source.safetensors", 4, "source_alias", overwrite_existing=True)
+        with self.assertRaisesRegex(ValueError, "overwrite.*source"):
+            loras.HaDeSMossLoraMerger().merge(self.model, "alias_source.safetensors", 1.0, "split.safetensors", 1.0,
+                                             8, "source_alias", overwrite_existing=True)
+        with open(source, "rb") as f:
+            self.assertEqual(f.read(), before)
+
+    @unittest.skipUnless(os.name == "nt", "Windows case-insensitive file identity")
+    def test_source_different_case_cannot_be_overwritten(self):
+        shutil.copyfile(os.path.join(TMP, "fused.safetensors"), os.path.join(TMP, "case_source.safetensors"))
+        with self.assertRaisesRegex(ValueError, "overwrite.*source"):
+            loras.HaDeSMossLoraResize().resize(self.model, "case_source.safetensors", 4, "CASE_SOURCE", overwrite_existing=True)
+        with self.assertRaisesRegex(ValueError, "overwrite.*source"):
+            loras.HaDeSMossLoraMerger().merge(self.model, "case_source.safetensors", 1.0, "split.safetensors", 1.0,
+                                             8, "CASE_SOURCE", overwrite_existing=True)
+
+    def test_multi_lora_rejects_nonfinite_strengths(self):
+        for value in (float("nan"), float("inf"), float("-inf")):
+            for fields in ({"strength": value}, {"groups": {mergers.GROUPS[0]: value}}, {"groups": {"other_layers": value}}):
+                with self.subTest(fields=fields), self.assertRaisesRegex(ValueError, "finite"):
+                    loras.parse_lora_rows(json.dumps([{"name": "fused.safetensors", **fields}]))
+
     def test_extractor_recovers_low_rank_change(self):
         sd = {k: v.clone() for k, v in self.sd.items()}
         g = torch.Generator().manual_seed(6)
@@ -357,6 +452,61 @@ class TestLoras(unittest.TestCase):
 
 
 class TestSaverAndSampler(unittest.TestCase):
+    def test_fp8_to_int8_export_loads_with_requested_layout(self):
+        sd = tiny_state_dict(21)
+        key = "layers.0.proj.qkv.weight"
+        qt = QuantizedTensor.from_float(sd.pop(key), "TensorCoreFP8E4M3Layout", scale="recalculate")
+        sd.update(qt.state_dict(key))
+        sd[key[:-len(".weight")] + ".comfy_quant"] = saver._json_tensor({"format": "float8_e4m3fn"})
+        model = comfy.sd.load_diffusion_model_state_dict(sd)
+        self.assertIsInstance(comfy.utils.get_attr(model.model.diffusion_model, key), QuantizedTensor)
+        model.add_patches({"diffusion_model." + key: ("diff", (torch.full(qt.shape, 0.01),))})
+        expected = patched_weight(model, key)
+        path = saver.HaDeSMossModelSaver().save(model, "tests/fp8_to_int8", saver.PRECISIONS[1], True)["result"][1]
+        with safetensors.safe_open(path, "pt") as f:
+            self.assertEqual(f.get_slice(key).get_dtype(), "I8")
+            config = json.loads(bytes(f.get_tensor(key[:-len(".weight")] + ".comfy_quant").tolist()))
+            self.assertEqual(config, saver._INT8_QUANT_CONF)
+        reloaded = comfy.sd.load_diffusion_model(path)
+        actual = comfy.utils.get_attr(reloaded.model.diffusion_model, key).dequantize().float()
+        self.assertLess(rel_err(actual.cpu(), expected.cpu()), 0.03)
+
+    @unittest.skipUnless(os.environ.get("HADES_MOSS_TEST_CUDA") == "1", "opt-in CUDA export checks")
+    def test_quantized_exports_on_cuda(self):
+        self.assertTrue(torch.cuda.is_available(), "HADES_MOSS_TEST_CUDA=1 needs CUDA")
+        with patch.object(comfy.model_management, "get_torch_device", return_value=torch.device("cuda")):
+            self.test_fp8_to_int8_export_loads_with_requested_layout()
+            self.test_int8_to_int8_keeps_existing_quantized_weights()
+
+    def test_fp8_lazy_pieces_are_converted_to_int8(self):
+        state_dict = comfy.model_patcher.ModelPatcher.model_state_dict_for_saving
+        pieces = []
+
+        def lazy_state(model, dm, prefix):
+            sd = state_dict(model, dm, prefix)
+            for k, w in common.model_weights(model).items():
+                if not isinstance(w, QuantizedTensor):
+                    continue
+                caster = comfy.model_patcher.LazyCastingQuantizedParam(model, prefix + k)
+                for group_key in w.state_dict(k):
+                    if group_key in sd:
+                        sd[group_key] = comfy.model_patcher.LazyCastingParamPiece(caster, prefix + group_key, sd[group_key])
+                        pieces.append(group_key)
+            return sd
+
+        with patch.object(comfy.model_patcher.ModelPatcher, "model_state_dict_for_saving", lazy_state):
+            self.test_fp8_to_int8_export_loads_with_requested_layout()
+        self.assertTrue(pieces)
+
+    def test_int8_to_int8_keeps_existing_quantized_weights(self):
+        model = load_int8(tiny_state_dict(22))
+        before = model.model.diffusion_model.state_dict()
+        path = saver.HaDeSMossModelSaver().save(model, "tests/int8_copy", saver.PRECISIONS[1], False)["result"][1]
+        after = safetensors.torch.load_file(path)
+        for k in before:
+            if k.endswith(("proj.qkv.weight", "proj.o.weight", "proj.ffn_up_gate.weight", "proj.ffn_down.weight", "weight_scale", "comfy_quant")):
+                torch.testing.assert_close(before[k], after[k], rtol=0, atol=0)
+
     def test_int8_model_saved_as_bf16_holds_no_int8(self):
         q = load_int8(tiny_state_dict(7))
         for precision, dtype in (("bfloat16", "BF16"), ("float32", "F32")):
@@ -468,6 +618,19 @@ class TestSaverAndSampler(unittest.TestCase):
 
 
 class TestImageSaver(unittest.TestCase):
+    def test_disable_metadata_removes_all_png_text(self):
+        from PIL import Image
+        isaver = importlib.import_module(f"{PACK}.moss_image_saver_nodes")
+        meta = common.format_info("private", "prompt_enhancer", prompt="PRIVATE", negative="PRIVATE NEGATIVE")
+        for embed in (False, True):
+            with patch.object(isaver.args, "disable_metadata", True):
+                out = isaver.HaDeSMossImageSaver().save(torch.zeros(1, 8, 8, 3), "tests/private", False, embed,
+                                                       metadata=meta, prompt={"private": "value"}, extra_pnginfo={"workflow": {"private": True}})
+            item = out["ui"]["images"][0]
+            with Image.open(os.path.join(TMP, item["subfolder"], item["filename"])) as png:
+                self.assertEqual(png.text, {})
+            self.assertIn("PRIVATE", out["result"][0])
+
     def test_png_carries_a1111_parameters_and_hashes(self):
         from PIL import Image
         isaver = importlib.import_module(f"{PACK}.moss_image_saver_nodes")
@@ -739,6 +902,30 @@ class TestPromptEnhancer(unittest.TestCase):
 
 
 class TestMetadataReader(unittest.TestCase):
+    def test_recipe_dependencies_invalidate_reader(self):
+        folder_paths.folder_names_and_paths["diffusion_models"] = ([TMP], {".safetensors"})
+        leaf, root = "dependency_leaf.safetensors", "dependency_root.safetensors"
+        self.lora_file(os.path.join(TMP, leaf), 2, {})
+        self.lora_file(os.path.join(TMP, root), 2, {"hades/source_lora": leaf, "hades/target_rank": "2"})
+        reader = metadata.HaDeSMossMetadataReader
+        before = reader.IS_CHANGED(root, metadata.NONE)
+        self.lora_file(os.path.join(TMP, leaf), 3, {"changed": "yes"})
+        self.assertNotEqual(before, reader.IS_CHANGED(root, metadata.NONE))
+        self.assertEqual(reader.IS_CHANGED(root, metadata.NONE), reader.IS_CHANGED(root, metadata.NONE))
+        model = "dependency_model.safetensors"
+        source = {"node": "loader", "model_file": "missing_source.safetensors"}
+        merge = common.format_info("merge", "model_block_merger", layer_ratios=[0.5] * LAYERS,
+                                   part_ratios=dict.fromkeys(common.PARTS, 0.5), sources={"model1": source, "model2": source})
+        safetensors.torch.save_file(tiny_state_dict(23), os.path.join(TMP, model), metadata={"hades/recipe": merge})
+        before = reader.IS_CHANGED(metadata.NONE, model)
+        safetensors.torch.save_file(tiny_state_dict(24), os.path.join(TMP, "missing_source.safetensors"))
+        self.assertNotEqual(before, reader.IS_CHANGED(metadata.NONE, model))
+        report, data = reader().read(metadata.NONE, model)["result"]
+        operation = json.loads(data)["model"]["recipe"]["parts"][0]
+        self.assertEqual(operation["settings"]["layer_ratios"], [0.5] * LAYERS)
+        self.assertEqual(operation["parts"][0]["model"], "missing_source.safetensors")
+        self.assertIn("model_block_merger", report)
+
     @staticmethod
     def lora_file(path, rank, meta):
         sd = {}

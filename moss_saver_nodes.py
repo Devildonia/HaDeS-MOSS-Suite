@@ -74,9 +74,16 @@ class HaDeSMossModelSaver:
         quant_device = comfy.model_management.get_torch_device()
         int8 = precision.startswith("int8")
         dtype = torch.float32 if precision == "float32" else torch.bfloat16
-        # Layers stored quantized (an int8 / fp8 input model): kept as their weight and scale pieces for int8 output,
-        # dequantized (with their patches) for bfloat16 / float32 output, so those files hold no int8 layer.
+        # Preserve matching int8 ConvRot pieces; every other quantized layout is converted with its patches.
         quantized = {k[:-len(".weight")] for k, w in model_weights(model).items() if k.endswith(".weight") and isinstance(w, comfy.quant_ops.QuantizedTensor)}
+        preserved = set()
+        if int8:
+            for module in quantized:
+                conf_key = f"{module}.comfy_quant"
+                if _INT8_LAYER_LINEAR_RE.match(f"{module}.weight") and conf_key in lazy_sd:
+                    conf = json.loads(bytes(lazy_sd[conf_key].to("cpu").tolist()))
+                    if all(conf.get(k) == v for k, v in _INT8_QUANT_CONF.items()):
+                        preserved.add(module)
         stochastic = rounding == "stochastic" and dtype == torch.bfloat16 and not int8
         rounding_used = "stochastic" if stochastic else "none (float32)" if dtype == torch.float32 else "nearest"
         # float32 output: patched weights computed in float32 here; the core's lazy saving applies patches in the model's own
@@ -86,17 +93,31 @@ class HaDeSMossModelSaver:
         def baked(pk):
             w32 = key_patches_float(key_patches(model, pk), quant_device, pk)
             return (w32 if exact else stochastic_round_bf16(w32, comfy.utils.string_to_seed(pk))).cpu().contiguous()
+
+        def quantize(k, tensor):
+            qt = comfy.quant_ops.QuantizedTensor.from_float(tensor.to(quant_device, torch.bfloat16), "TensorWiseINT8Layout",
+                                                           is_weight=True, per_channel=True, convrot=True, convrot_groupsize=256)
+            return {**{qk: qv.cpu() for qk, qv in qt.state_dict(k).items()},
+                    f"{k[:-len('.weight')]}.comfy_quant": _json_tensor(_INT8_QUANT_CONF)}
+
         sd = {}
         for k, v in lazy_sd.items():
             module = k.rsplit(".", 1)[0]
             pk = f"diffusion_model.{k}"
-            if not int8 and (module in quantized or k.endswith("comfy_attention.config")):
+            if module in quantized - preserved:
                 if k == f"{module}.weight":
-                    if (stochastic or exact) and pk in model.patches:
+                    if int8 and _INT8_LAYER_LINEAR_RE.match(k):
+                        sd.update(quantize(k, key_patches_float(key_patches(model, pk), quant_device, pk)))
+                    elif (stochastic or exact) and pk in model.patches:
                         sd[k] = baked(pk)
                     else:
                         sd[k] = key_patches_weight(key_patches(model, pk), quant_device, pk).to(dtype).cpu().contiguous()
-                continue  # weight_scale / comfy_quant pieces and the int8 attention setting belong to the int8 layout
+                continue  # scales and quantization configuration must belong to the output layout
+            if k.endswith("comfy_attention.config"):
+                continue  # int8 output gets the Comfy-Org setting below; float output keeps no quantized attention
+            if module in preserved:
+                sd[k] = v.to("cpu").contiguous()
+                continue
             if (stochastic or exact) and pk in model.patches:
                 # the core's saving rounds bfloat16 to nearest (its stochastic_rounding() is stochastic for fp8 only)
                 sd[k] = baked(pk)
@@ -105,17 +126,14 @@ class HaDeSMossModelSaver:
             if isinstance(v, comfy.model_patcher.LazyCastingParamPiece) or not torch.is_floating_point(tensor):
                 sd[k] = tensor
             elif int8 and _INT8_LAYER_LINEAR_RE.match(k):
-                qt = comfy.quant_ops.QuantizedTensor.from_float(tensor.to(quant_device, torch.bfloat16), "TensorWiseINT8Layout",
-                                                                is_weight=True, per_channel=True, convrot=True, convrot_groupsize=256)
-                sd.update({qk: qv.cpu() for qk, qv in qt.state_dict(k).items()})
-                sd[f"{k[:-len('.weight')]}.comfy_quant"] = _json_tensor(_INT8_QUANT_CONF)
+                sd.update(quantize(k, tensor))
             else:
                 sd[k] = tensor.to(dtype)
 
         n_layers = count_layers(sd.keys())
         if int8:
             for i in range(n_layers):
-                sd.setdefault(f"layers.{i}.comfy_attention.config", _json_tensor(_INT8_ATTENTION_CONF))
+                sd[f"layers.{i}.comfy_attention.config"] = _json_tensor(_INT8_ATTENTION_CONF)
 
         metadata = None
         if include_metadata:

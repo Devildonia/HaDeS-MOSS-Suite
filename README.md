@@ -37,6 +37,7 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 - **fp16-fixed files:** some fp16 releases store the residual stream scaled down (measured: x 1/16 on `video_embedder`, the text embedder outputs and the modulation gates), which is the same model in another scale. The merger detects the scale and brings `model2` to `model1`'s before merging, and says so in `info`.
 - **Outputs:** `MODEL`, `info`.
 - **Memory:** the merge is a lazy patch computed when the model loads; no merged copy is kept in RAM.
+- **Recipe:** `info` keeps every layer / part ratio and the source recipes known to the Suite. Multi-Model Merger also records its weights and seed. Sources loaded outside the Suite are unidentified; file names are not guessed.
 
 ### `MOSS Multi-Model Merger` (`HaDeS/MOSS Mergers`)
 - **Class:** `HaDeSMossMultiModelMerger`
@@ -97,6 +98,7 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
   - **Recipe:** for LoRAs made with the Suite's Merger, Resize or Extractor, the chain of sources from their `hades/*` keys, followed into the source files still in `models/loras` (a source moved to another subfolder is found by its file name when only one LoRA has it), with the weight of each original file in the result. For models saved by the MOSS Model Saver with a `recipe`, that text, with the model of a MOSS Loader info and the LoRAs of a Multi-LoRA or LoRA Block Weight info in it followed into their own recipes. A source replaced since under the same name is read as it is now.
 - **Inputs:** `lora_name` and `model_name` (each can be `(none)`), optional `sha256` (hashes the files, cached while unchanged and shared with the MOSS Image Saver; seconds on a 10 GB model).
 - **Outputs:** `info` (text plus HADES_META with the recipe; into a Save Text node it keeps the recipe on disk), `metadata_json`.
+- Nested merger recipes are followed too. The reader refreshes when referenced source files change or become available.
 
 ### `MOSS Model Saver` (`HaDeS/MOSS Mergers`)
 - **Class:** `HaDeSMossModelSaver`
@@ -184,6 +186,7 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 - **Purpose:** saves PNG images with the generation settings written as A1111 `parameters`, the text Civitai and most image browsers read: prompt, `Negative prompt:` and one line with steps, sampler, schedule type, CFG, seed, size, model and model hash, LoRA hashes, denoise (below 1.0), shift, VAE and text encoder. Also ComfyUI's own `prompt` / `workflow` chunks, so the image loads back into ComfyUI, and the Suite's settings as JSON (`hades_moss`).
 - **Inputs:** `images`, `metadata` (Suite Telemetry's `json` output, which gathers the Loader, Latent, KSampler, Multi-LoRA and Prompt Enhancer infos; one info output connected directly also works), `filename_prefix` (`%seed%`, `%model%`, `%steps%`, `%cfg%`, `%sampler%`, `%width%`, `%height%` from the metadata, `%date:...%` as in the core Save Image), `hashes`, `embed_workflow`; optional `positive` / `negative` text when the prompt does not come from a Prompt Enhancer.
 - **Hashes:** SHA256 of the model (from the MOSS Loader) and of every LoRA (Multi-LoRA rows, LoRA Block Weight, the KSampler's turbo input), first 10 characters (AutoV2), in `Model hash`, `Lora hashes` and `Hashes`. The first save with a 10 GB model reads the whole file once; later saves in the same session reuse the hash while the file is unchanged. Nothing is looked up online. How Civitai reads these fields was not checked from here.
+- ComfyUI's `--disable-metadata` suppresses all embedded metadata. The `parameters` output remains available as text.
 - **Outputs:** `parameters` (the text written into the images). The node shows the saved images like the core Save Image, and a note when the prompt or the sampling settings are missing from the metadata.
 
 ## Interface
@@ -221,6 +224,14 @@ Every example was run end to end in ComfyUI 0.43.0 (muted nodes left out). `tool
 ```bash
 python custom_nodes/HaDeS-MOSS-Suite/tests/test_moss_suite.py
 ```
+
+Frontend setting tests (Node.js, no extra packages):
+
+```bash
+node --test custom_nodes/HaDeS-MOSS-Suite/tests/test_moss_widgets.mjs
+```
+
+Set `HADES_MOSS_TEST_CUDA=1` to include the CUDA quantized-export checks; the default run uses CPU. CI tests ComfyUI v0.43.0 on Linux and Windows, and upstream master on Linux. These checks use small synthetic weights; they do not measure image quality or full-model VRAM. Audit-fix evidence: [`docs/AUDIT_0.6.1.md`](docs/AUDIT_0.6.1.md).
 
 ## Tools
 

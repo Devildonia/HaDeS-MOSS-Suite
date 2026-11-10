@@ -8,13 +8,24 @@ on:
 
 jobs:
   test:
-    # Real ComfyUI (latest), this pack in custom_nodes, CPU: the suite against the core on a tiny synthetic MOSS-Image model
-    runs-on: ubuntu-latest
+    # Supported baseline plus upstream changes; Windows also checks case-insensitive source protection.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            comfy-ref: v0.43.0
+          - os: ubuntu-latest
+            comfy-ref: master
+          - os: windows-latest
+            comfy-ref: v0.43.0
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout ComfyUI
         uses: actions/checkout@v4
         with:
-          repository: comfyanonymous/ComfyUI
+          repository: Comfy-Org/ComfyUI
+          ref: ${{ matrix.comfy-ref }}
           path: ComfyUI
 
       - name: Checkout this pack into custom_nodes
@@ -31,7 +42,11 @@ jobs:
           node-version: "20"
 
       - name: Validate frontend JavaScript syntax
+        shell: bash
         run: for f in ComfyUI/custom_nodes/HaDeS-MOSS-Suite/web/*.js; do node --check "$f"; done
+
+      - name: Check frontend behavior
+        run: node --test ComfyUI/custom_nodes/HaDeS-MOSS-Suite/tests/test_moss_widgets.mjs
 
       - name: Install ComfyUI
         run: |

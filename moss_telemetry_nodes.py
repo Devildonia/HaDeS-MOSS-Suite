@@ -65,7 +65,7 @@ def diagnose(metas):
 
     for kind in ("lora_extractor", "lora_resize", "lora_merger"):
         for m in by_node.get(kind, []):
-            if m["energy_kept"] < 0.979:  # the lowest energy measured within the noise floor
+            if m["energy_kept"] is not None and m["energy_kept"] < 0.979:  # the lowest energy measured within the noise floor
                 out.append(("warning", f"{NODE_NAMES[kind]}: {m['energy_kept']:.1%} energy kept. Measured: 97.9-100% stayed within the "
                                        "noise floor of the source, 90.4-91.1% drifted visibly. Raise the rank to stay close."))
 
@@ -143,7 +143,7 @@ class HaDeSMossSuiteTelemetry:
         else:
             lines.append("No findings: the connected nodes are consistent with what was measured.")
         # the prompt texts (Prompt Enhancer) and file paths (Loader) ride in the json output for the MOSS Image Saver; the report stays short
-        hidden = {"node", "prompt", "negative", "model_file", "text_encoder_file"}
+        hidden = {"node", "prompt", "negative", "model_file", "text_encoder_file", "sources"}
         lines += ["", "## Settings", ""] + [f"- {NODE_NAMES[m['node']]}: " + ", ".join(f"{k}={v}" for k, v in m.items() if k not in hidden) for m in metas]
         summary = (f"{len(metas)} nodes | {counts['error']} errors, {counts['warning']} warnings, {counts['note']} notes"
                    + (f" | {findings[0][1][:80]}" if findings else ""))
