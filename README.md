@@ -111,6 +111,13 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 - **Measured** ([`tools/RESULTS.md`](tools/RESULTS.md), "Baking subtle LoRAs into bfloat16"): two LoRAs whose changes are smaller than a bfloat16 step, baked into a merge. Rounded to nearest the file kept about 80–85% of their effect (as the LoRAs loaded live, which round the same way); stochastic rounding kept all of it, and its renders sat as close to the float32 result as two stochastic files with different seeds sit to each other.
 - **Measured:** a live merge renders slightly differently from the same merge saved and reloaded (same subject and composition, small details change), in ComfyUI's own merger too; see [`tools/RESULTS.md`](tools/RESULTS.md).
 
+### `MOSS Control (color / depth)` (`HaDeS/MOSS Pipeline`)
+- **Class:** `HaDeSMossControl`
+- **Purpose:** color / depth control with a MOSS-Image control adapter loaded as a LoRA (e.g. `moss-color-depth-control`, trained on Base, which widens `video_embedder` to 384 input channels). Takes the Prompt Enhancer's positive and negative, resizes the maps in pixels to the latent before the VAE (the core node encodes them at their own size and the model then resizes the latents), and adds them as `concat_latent_image` in a start / end range.
+- **Inputs:** `positive`, `negative`, `vae`, `latent`; `color_mode`: `off (depth only)` (the adapter was trained depth-only 35% of the time, its file metadata: clothes and colors stay with the prompt), `flat regions` (a photo blurred and reduced to `colors` flat colors, so it guides palette and large areas without its texture), `as given` (a real segmentation map); `colors`, `blur`, `strength` (1.0 trained), `start_percent`, `end_percent`; optional `depth_map`, `color_map`.
+- **Outputs:** `positive`, `negative`, `maps` (what was encoded, to check), `info` (for Telemetry and the Image Saver).
+- **Note:** the adapter's strength in a LoRA loader scales only its LoRA layers: ComfyUI replaces the widened `video_embedder` at full strength whatever that value (a `set` patch), and at 0 the adapter is not applied at all, so the control conditioning then meets a 128-channel embedder. Use this node's `strength`. Not measured yet: quality on SFT against Base, and with the turbo LoRAs.
+
 ### `MOSS Latent` (`HaDeS/MOSS Pipeline`)
 - **Class:** `HaDeSMossLatent`
 - **Purpose:** empty MOSS-Image latent (128 channels, 16 px grid) from an aspect ratio (`1:1`, `4:3`, `3:2`, `16:9`, `21:9` and their portrait forms) and a size in megapixels (`1.0` = 1024×1024), or a custom width / height snapped to 16 px. Outputs `width` / `height` for layout prompts.
@@ -200,6 +207,7 @@ Every example loads the three files with the **MOSS Loader**, writes and encodes
 - **Layout Editor:** the Layout Editor's draft through the Layout Compiler into the sampler, with a note on how to edit the boxes; a Load Image is the background (pick your picture there); a second Prompt Enhancer in `layout` mode (writes a draft to IMPORT) comes muted.
 - **Turbo:** MOSS Turbo LoRA into the MOSS KSampler's `turbo` input, 4 steps at CFG 1 on SFT; ComfyUI offers to download the LoRA from Hugging Face.
 - **Turbo 8 steps + Upscale x2:** Turbo 8-steps v0.7 at 8 steps, then two groups to switch on or off from the group's right-click menu: a 2x upscale with RealESRGAN x2 (on; pixels only, about a second) and, on top of it, a MOSS pass at 2048 with the same turbo and seed at denoise 0.25 (off; adds hair, pores and fine texture the upscaler smooths, about 16 s). A note in the workflow explains both.
+- **Control (color, depth):** a depth map into MOSS Control with a color / depth control adapter in the Multi-LoRA (kept at 1.0), on the Prompt Enhancer's conditioning, with a preview of the encoded maps and the control in Telemetry. Load your own depth map and adapter; a note explains the color modes.
 - **LoRA Toolkit:** a LoRA through the Multi-LoRA into the sampler (add rows for more LoRAs; each row's group button holds its strength per group of layers); LoRA Merger, LoRA Resize and LoRA Extractor (with a finetune loader) come muted, since they write files. Pick your own LoRA in the Multi-LoRA's row.
 
 Every example was run end to end in ComfyUI 0.43.0 (muted nodes left out). `tools/make_examples.py` regenerates them from the node definitions of a running ComfyUI.

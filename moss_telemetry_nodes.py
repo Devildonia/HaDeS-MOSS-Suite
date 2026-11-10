@@ -7,7 +7,7 @@ NODE_NAMES = {
     "model_block_merger": "Model Block Merger", "multi_model_merger": "Multi-Model Merger", "model_saver": "Model Saver",
     "lora_extractor": "LoRA Extractor", "lora_block_weight": "LoRA Block Weight", "lora_merger": "LoRA Merger", "lora_resize": "LoRA Resize",
     "latent": "Latent", "layout": "Layout Compiler", "ksampler": "KSampler", "prompt_enhancer": "Prompt Enhancer",
-    "multi_lora": "Multi-LoRA", "layout_editor": "Layout Editor", "loader": "Loader", "metadata_reader": "Metadata Reader",
+    "multi_lora": "Multi-LoRA", "layout_editor": "Layout Editor", "loader": "Loader", "metadata_reader": "Metadata Reader", "control": "Control",
 }
 
 
@@ -92,6 +92,13 @@ def diagnose(metas):
                                             "seed per prompt: 1.25-1.5 brought back prompt details, 2.5 looked overdone (tools/RESULTS.md)."))
                     elif k["cfg"] < 1.0 - 1e-6:
                         out.append(("warning", f"Multi-LoRA: {t['name']} was trained at CFG 1; the KSampler runs CFG {k['cfg']:g}."))
+
+    for m in by_node.get("control", []):
+        if abs(m.get("strength", 1.0) - 1.0) > 1e-6:
+            out.append(("note", f"Control at strength {m['strength']:g}: 1.0 is the adapter's trained strength; other values are not measured."))
+        if m.get("color_mode") == "as given":
+            out.append(("note", "Control color_mode 'as given': the adapter reads the color map as flat region colors; a photo there "
+                                "makes it copy the photo's texture (use flat regions for a photo)."))
 
     for m in by_node.get("layout", []):
         for lines, w, h in m.get("multiline", []):

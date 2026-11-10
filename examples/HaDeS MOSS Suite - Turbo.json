@@ -95,7 +95,10 @@
    "widgets_values": [
     "HaDeS-MOSS-Turbo-v0.6.safetensors",
     1.0,
-    4
+    4,
+    1.0,
+    "euler",
+    "simple"
    ],
    "properties": {
     "Node name for S&R": "HaDeSMossTurbo",
@@ -207,7 +210,7 @@
    "type": "HaDeSMossLatent",
    "pos": [
     0,
-    620
+    710
    ],
    "size": [
     380,
@@ -385,7 +388,8 @@
     {
      "name": "metadata",
      "type": "STRING",
-     "link": 10
+     "link": 10,
+     "shape": 7
     },
     {
      "name": "positive",

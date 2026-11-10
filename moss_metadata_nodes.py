@@ -94,6 +94,9 @@ def lora_summary(path, tensors, start):
             kinds["LoHa"] += 1
         elif "lokr_w1" in k:
             kinds["LoKr"] += 1
+        elif k.endswith("video_embedder.weight") and len(tensors[k].get("shape") or []) == 2 and tensors[k]["shape"][1] > 128:
+            kinds[f"control adapter: video_embedder widened to {tensors[k]['shape'][1]} input channels (replaced at full strength, "
+                  "whatever the LoRA strength)"] += 1
     alphas = sorted({round(v, 4) for k, t in tensors.items() if k.endswith(".alpha") and (v := _scalar(path, start, t)) is not None})
     s.update(kinds=dict(kinds), rank_min=min(ranks) if ranks else None, rank_max=max(ranks) if ranks else None,
              alphas=alphas[:8] + (["..."] if len(alphas) > 8 else []))

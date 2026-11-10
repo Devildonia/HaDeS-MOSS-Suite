@@ -138,8 +138,6 @@ class HaDeSMossImageSaver:
         return {
             "required": {
                 "images": ("IMAGE",),
-                "metadata": ("STRING", {"forceInput": True, "tooltip": "Suite Telemetry's json output (it gathers the Loader, Latent, KSampler, "
-                                                                        "Multi-LoRA and Prompt Enhancer infos), or one info output connected directly."}),
                 "filename_prefix": ("STRING", {"default": "MOSS/%model%_%seed%",
                                                "tooltip": "Subfolder and name in ComfyUI/output. %seed%, %model%, %steps%, %cfg%, %sampler%, %width%, "
                                                           "%height% come from the metadata; %date:yyyy-MM-dd% as in the core Save Image."}),
@@ -151,6 +149,10 @@ class HaDeSMossImageSaver:
                                                                            "so the image loads back into ComfyUI."}),
             },
             "optional": {
+                "metadata": ("STRING", {"forceInput": True, "tooltip": "Suite Telemetry's json output (it gathers the Loader, Latent, KSampler, "
+                                                                        "Multi-LoRA and Prompt Enhancer infos), or one info output connected directly. "
+                                                                        "Without it the images are still saved, with the workflow and only the prompt "
+                                                                        "texts given here as parameters."}),
                 "positive": ("STRING", {"forceInput": True, "tooltip": "Prompt text when no Prompt Enhancer is in the pipeline (e.g. CLIPTextEncode's text)."}),
                 "negative": ("STRING", {"forceInput": True, "tooltip": "Negative prompt text when no Prompt Enhancer is in the pipeline."}),
             },
@@ -166,9 +168,11 @@ class HaDeSMossImageSaver:
     DESCRIPTION = ("Saves PNG images with the generation settings as A1111 parameters (prompt, negative prompt, steps, sampler, CFG, seed, "
                    "size, model and LoRAs with their hashes), read from Suite Telemetry, and ComfyUI's workflow.")
 
-    def save(self, images, metadata, filename_prefix, hashes, embed_workflow, positive=None, negative=None, prompt=None, extra_pnginfo=None):
-        metas = read_metas(metadata)
+    def save(self, images, filename_prefix, hashes, embed_workflow, metadata=None, positive=None, negative=None, prompt=None, extra_pnginfo=None):
+        metas = read_metas(metadata) if metadata else []
         parameters, notes = a1111_parameters(metas, positive, negative, hashes)
+        if not metadata:
+            notes.insert(0, "metadata not connected: saved without sampling settings (connect Suite Telemetry's json for them)")
         prefix = expand_tokens(filename_prefix, metas)
         out_dir = folder_paths.get_output_directory()
         full_folder, filename, counter, subfolder, _ = folder_paths.get_save_image_path(prefix, out_dir, images[0].shape[1], images[0].shape[0])

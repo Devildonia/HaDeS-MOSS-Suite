@@ -446,7 +446,8 @@
     {
      "name": "metadata",
      "type": "STRING",
-     "link": 11
+     "link": 11,
+     "shape": 7
     },
     {
      "name": "positive",
@@ -504,7 +505,8 @@
     true,
     "HaDeS",
     "",
-    "stochastic"
+    "stochastic",
+    ""
    ],
    "properties": {
     "Node name for S&R": "HaDeSMossModelSaver"

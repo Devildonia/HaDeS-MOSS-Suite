@@ -243,6 +243,22 @@ const INSTALLERS = {
         styleWidgets(node, { sliders: { temperature: [0, 1.5] }, dimmed: (name) => UNUSED[mode()]?.has(name) ?? false });
     },
     HaDeSMossLatent(node) {
+        // editing custom_width / custom_height (or linking them) means a custom size: switch the combo so the backend uses them
+        const aspectW = widget(node, "aspect_ratio");
+        const toCustom = () => { if (aspectW && aspectW.value !== "custom") { aspectW.value = "custom"; aspectW.callback?.(aspectW.value); node.setDirtyCanvas(true, true); } };
+        for (const name of ["custom_width", "custom_height"]) {
+            const w = widget(node, name);
+            if (!w) continue;
+            const orig = w.callback;
+            w.callback = function () { const r = orig?.apply(this, arguments); toCustom(); return r; };
+        }
+        const origConn = node.onConnectionsChange;
+        node.onConnectionsChange = function (type, slot, connected) {
+            const r = origConn?.apply(this, arguments);
+            const input = type === 1 ? this.inputs?.[slot] : null;  // 1 = input side
+            if (connected && input && ["custom_width", "custom_height"].includes(input.widget?.name ?? input.name)) toCustom();
+            return r;
+        };
         banner(node, {
             title: "MOSS LATENT",
             getStatusText: () => {
@@ -273,6 +289,7 @@ const GENERIC = {
     HaDeSMossSamplerMetadata: { title: "SAMPLER METADATA" },
     HaDeSMossTurbo: { title: "TURBO LORA", sliders: { strength: [0, 2], cfg: [1, 4] } },
     HaDeSMossSuiteTelemetry: { title: "SUITE TELEMETRY" },
+    HaDeSMossControl: { title: "CONTROL · COLOR / DEPTH", sliders: { strength: [0, 2], start_percent: [0, 1], end_percent: [0, 1], blur: [0, 32] } },
 };
 for (const [cls, { title, sliders = {} }] of Object.entries(GENERIC)) {
     INSTALLERS[cls] = (node) => {

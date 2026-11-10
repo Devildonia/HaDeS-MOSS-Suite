@@ -34,6 +34,7 @@ MODEL_FILES = {SFT: ("diffusion_models", f"{HF}/diffusion_models/{SFT}"), BASE: 
                TURBO_8STEPS: ("loras", f"{HF_TURBO}/{TURBO_8STEPS}"),
                UPSCALER: ("upscale_models", f"https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/{UPSCALER}")}
 LORA = "moss_lora.safetensors"
+CONTROL_ADAPTER = "moss-color-depth-control.safetensors"  # darask0/MOSS-Image-color-depth-control (Hugging Face), trained on Base
 
 
 def loader(unet=SFT):
@@ -207,6 +208,37 @@ EXAMPLES = {
         "_groups": [("1. Generate (Turbo 8 steps)", ["load", "turbo", "enh", "latent", "ks", "save", "tel", "report"], "#335533"),
                     ("2. Upscale x2 (model)", ["upmodel", "up", "save_up"], "#334466"),
                     ("3. Upscale x2 + MOSS pass (turn on to use)", ["enc", "ks2", "save_ref"], "#553355")],
+    },
+    "HaDeS MOSS Suite - Control (color, depth)": {
+        **loader(),
+        # the control adapter loads as a LoRA; ComfyUI replaces its widened video_embedder at full strength whatever this value,
+        # so keep it at 1.0 and set the control's strength on the MOSS Control node
+        "loras": ("HaDeSMossMultiLora", {"model": ("load", 0), "enabled": True,
+                                         "loras": json.dumps([{"name": CONTROL_ADAPTER, "on": True, "strength": 1.0}])}),
+        "enh": prompt("Photograph of a woman in a red raincoat walking through a narrow cobbled street at dusk, warm shop lights, light rain."),
+        "latent": latent(),
+        "depth": ("LoadImage", {"image": "depth_map.png"}),
+        "ctrl": ("HaDeSMossControl", {"positive": ("enh", 0), "negative": ("enh", 1), "vae": ("load", 2), "latent": ("latent", 0),
+                                      "depth_map": ("depth", 0), "color_mode": "off (depth only)", "colors": 8, "blur": 4.0,
+                                      "strength": 1.0, "start_percent": 0.0, "end_percent": 1.0}),
+        "maps": ("PreviewImage", {"images": ("ctrl", 2)}),
+        "ks": ksampler(("loras", 0), ("latent", 0), seed=("latent", 4), enh="ctrl"),
+        "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_control_%seed%",
+                                         "hashes": True, "embed_workflow": True}),
+        **telemetry(("load", 3), ("enh", 6), ("loras", 1), ("latent", 3), ("ctrl", 3), ("ks", 2)),
+        "note": ("Note", {"text": "HaDeS MOSS Suite - Control (color / depth)\n\n"
+                                  "1. Load a control adapter in the Multi-LoRA (e.g. moss-color-depth-control from\n"
+                                  "   darask0/MOSS-Image-color-depth-control, trained on MOSS-Image Base). Keep it at 1.0:\n"
+                                  "   ComfyUI replaces its widened video_embedder at full strength anyway.\n"
+                                  "2. Load a depth map (near is white), e.g. from Depth Anything (comfyui_controlnet_aux).\n"
+                                  "   MOSS Control resizes it in pixels to the latent before the VAE.\n"
+                                  "3. color_mode: off = depth only (clothes and colors from the prompt);\n"
+                                  "   flat regions = connect a photo to color_map, reduced to a few flat colors for the palette;\n"
+                                  "   as given = a real segmentation map (a photo there makes the adapter copy its texture).\n"
+                                  "4. strength 1.0 is the trained value; end_percent below 1.0 loosens the shapes at the end.\n\n"
+                                  "Not measured yet: the adapter on SFT (this example) against Base, and with the turbo LoRAs."}),
+        "_layout": {"note": (0, -560), "load": (0, 0), "loras": (0, 380), "enh": (450, 0), "latent": (950, 0), "depth": (950, 420),
+                    "ctrl": (1400, 0), "maps": (1400, 620), "ks": (1850, 0), "save": (2300, 0), "tel": (2300, 480), "report": (2750, 480)},
     },
     "HaDeS MOSS Suite - LoRA Toolkit": {
         **loader(),

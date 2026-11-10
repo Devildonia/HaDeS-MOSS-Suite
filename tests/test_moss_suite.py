@@ -39,6 +39,7 @@ telemetry = importlib.import_module(f"{PACK}.moss_telemetry_nodes")
 saver = importlib.import_module(f"{PACK}.moss_saver_nodes")
 enhancer = importlib.import_module(f"{PACK}.moss_enhancer_nodes")
 metadata = importlib.import_module(f"{PACK}.moss_metadata_nodes")
+control = importlib.import_module(f"{PACK}.moss_control_nodes")
 
 DIM, LAYERS = 256, 6  # 2 heads of 128; 256 keeps every linear a multiple of the ConvRot group size
 TMP = tempfile.mkdtemp(prefix="hades_moss_tests_")
@@ -152,6 +153,10 @@ class TestLatent(unittest.TestCase):
             self.assertEqual((w, h), size)
             self.assertEqual(tuple(latent["samples"].shape), (1, 128, h // 16, w // 16))
         self.assertEqual(node.generate("custom", 1.0, 1010, 600, 1)[1:3], (1008, 608))
+        # width / height linked from another node: used even with an aspect ratio picked, as the user expects
+        prompt = {"5": {"inputs": {"custom_width": ["3", 0], "custom_height": 768}}}
+        self.assertEqual(node.generate("1:1", 1.0, 1536, 768, 1, prompt=prompt, unique_id="5")[1:3], (1536, 768))
+        self.assertEqual(node.generate("1:1", 1.0, 1536, 768, 1, prompt={"5": {"inputs": {}}}, unique_id="5")[1:3], (1024, 1024))
 
     def test_seed_passes_through(self):
         out = pipeline.HaDeSMossLatent().generate("1:1", 1.0, 1024, 1024, 1, seed=123456789012)
@@ -476,7 +481,7 @@ class TestImageSaver(unittest.TestCase):
                  f("x", "ksampler", width=1024, height=1024, steps=25, cfg=2.5, flow_shift=5.0, sampler="er_sde", scheduler="simple",
                    seed=7, denoise=1.0, slg="off")]
         tel = telemetry.HaDeSMossSuiteTelemetry().audit("T", **{f"info_{i + 1}": s for i, s in enumerate(infos)})["result"][1]
-        out = isaver.HaDeSMossImageSaver().save(torch.rand(2, 64, 64, 3), tel, "tests/img_%seed%", True, True,
+        out = isaver.HaDeSMossImageSaver().save(torch.rand(2, 64, 64, 3), "tests/img_%seed%", True, True, metadata=tel,
                                                 prompt={"1": {}}, extra_pnginfo={"workflow": {"nodes": []}})
         params = out["result"][0]
         self.assertTrue(params.startswith("A red fox in snow.\nNegative prompt: blurry\nSteps: 25, Sampler: er_sde, Schedule type: simple, "
@@ -490,9 +495,46 @@ class TestImageSaver(unittest.TestCase):
         self.assertEqual(png.text["parameters"], params)
         self.assertEqual(json.loads(png.text["workflow"]), {"nodes": []})
         # one info connected directly instead of Telemetry
-        self.assertIn("Seed: 7", isaver.HaDeSMossImageSaver().save(torch.rand(1, 64, 64, 3), infos[3], "tests/img", False, False)["result"][0])
+        self.assertIn("Seed: 7", isaver.HaDeSMossImageSaver().save(torch.rand(1, 64, 64, 3), "tests/img", False, False, metadata=infos[3])["result"][0])
         with self.assertRaisesRegex(ValueError, "connect Suite Telemetry"):
-            isaver.HaDeSMossImageSaver().save(torch.rand(1, 64, 64, 3), "not metadata", "tests/img", False, False)
+            isaver.HaDeSMossImageSaver().save(torch.rand(1, 64, 64, 3), "tests/img", False, False, metadata="not metadata")
+        # no metadata connected: the image is still saved, with the prompt text given and a note
+        out = isaver.HaDeSMossImageSaver().save(torch.rand(1, 64, 64, 3), "tests/nometa", False, False, positive="A cat.")
+        self.assertEqual(len(out["ui"]["images"]), 1)
+        self.assertTrue(out["result"][0].startswith("A cat."))
+        self.assertIn("metadata not connected", out["ui"]["text"][0])
+
+
+class TestControl(unittest.TestCase):
+    class FakeVAE:
+        latent_channels = 128
+
+        def __init__(self):
+            self.sizes = []
+
+        def encode(self, img):
+            self.sizes.append(tuple(img.shape))
+            return torch.full((img.shape[0], 128, img.shape[1] // 16, img.shape[2] // 16), float(img.mean()))
+
+    def test_maps_resized_in_pixels_and_depth_only(self):
+        vae, latent = self.FakeVAE(), {"samples": torch.zeros(1, 128, 48, 32)}  # 512 x 768
+        cond = [[torch.zeros(1, 4, 8), {}]]
+        pos, neg, maps, info = control.HaDeSMossControl().apply(cond, cond, vae, latent, "off (depth only)", 8, 4.0, 1.0, 0.0, 1.0,
+                                                                 depth_map=torch.rand(1, 1536, 1024, 3), color_map=torch.rand(1, 1536, 1024, 3))
+        self.assertEqual(vae.sizes, [(1, 768, 512, 3)])  # only depth encoded, at the latent size
+        concat = pos[0][1]["concat_latent_image"]
+        self.assertEqual(tuple(concat.shape), (1, 256, 48, 32))
+        self.assertEqual(float(concat[:, :128].abs().max()), 0.0)  # color off is a zero latent
+        self.assertIn("concat_latent_image", neg[0][1])
+        self.assertEqual(common.parse_info_meta(info)["maps"], "depth")
+
+    def test_flat_regions_reduce_colors(self):
+        out = control.flat_regions(torch.rand(1, 64, 64, 3), 4, 2.0)
+        self.assertLessEqual(len(torch.unique(out.reshape(-1, 3), dim=0)), 4)
+
+    def test_needs_a_map(self):
+        with self.assertRaisesRegex(ValueError, "connect a depth_map"):
+            control.HaDeSMossControl().apply([], [], self.FakeVAE(), {"samples": torch.zeros(1, 128, 4, 4)}, "flat regions", 8, 4.0, 1.0, 0.0, 1.0)
 
 
 class TestCanvasCheck(unittest.TestCase):

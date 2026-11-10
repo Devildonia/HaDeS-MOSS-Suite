@@ -521,7 +521,8 @@
     {
      "name": "metadata",
      "type": "STRING",
-     "link": 13
+     "link": 13,
+     "shape": 7
     },
     {
      "name": "positive",

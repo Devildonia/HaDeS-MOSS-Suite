@@ -425,7 +425,8 @@
     {
      "name": "metadata",
      "type": "STRING",
-     "link": 10
+     "link": 10,
+     "shape": 7
     },
     {
      "name": "positive",
@@ -576,7 +577,9 @@
    "widgets_values": [
     32,
     "HaDeS_MOSS_Extracted_LoRA",
-    false
+    false,
+    "",
+    ""
    ],
    "properties": {
     "Node name for S&R": "HaDeSMossLoraExtractor"

@@ -7,6 +7,18 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-10
+
+MOSS Control (color / depth), and fixes for MOSS Latent and the MOSS Image Saver.
+
+### Added
+- **MOSS Control (color / depth):** color / depth control for a MOSS-Image control adapter loaded as a LoRA, on the Prompt Enhancer's conditioning: maps resized in pixels to the latent before the VAE, `color_mode` off (depth only) / flat regions (a photo reduced to flat colors) / as given, strength and step range, a `maps` preview and `info`. Suite Telemetry notes a strength other than 1.0 and `as given`; the Metadata Reader names a control adapter (widened `video_embedder`) and says it is applied at full strength whatever the LoRA strength.
+- **Example workflow "Control (color, depth)":** a depth map through MOSS Control with the adapter in the Multi-LoRA. The other examples gain the MOSS Turbo LoRA's cfg / sampler / scheduler widgets at their defaults (no change in output).
+
+### Fixed
+- **MOSS Latent:** `custom_width` / `custom_height` were ignored unless `aspect_ratio` was `custom`: editing them now switches it to `custom`, and when they are linked from another node they are used whatever the combo says.
+- **MOSS Image Saver:** without its `metadata` input connected the node did not run and no image was saved. `metadata` is optional now: the images are saved with the workflow and the prompt texts given, and a note says the sampling settings are missing.
+
 ## [0.5.0] - 2026-11-09
 
 The MOSS Metadata Reader, recipes stored in saved models and LoRAs, and a turbo input that can run above CFG 1.
