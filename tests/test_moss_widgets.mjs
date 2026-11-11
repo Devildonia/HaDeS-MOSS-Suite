@@ -87,3 +87,22 @@ test("measurement reports stay visible through standard / HaDeS widget toggles",
     assert.equal(report.hidden, false);
     assert.equal(report.options.read_only, true);
 });
+
+test("style switch keeps native output previews visible", () => {
+    const { context, node } = setup();
+    const target = node("HaDeSMossImageSaver");
+    target.widgets = [];
+    target.addCustomWidget = function (widget) { this.widgets.push(widget); return widget; };
+    context.applyNodeFrameStyle(target);
+    const banner = { name: "hades_banner_test", computeSize: () => [380, 28], draw() {} };
+    const preview = { name: "image", computeSize: () => [380, 180], draw() {} };
+    target.addCustomWidget(banner);
+    target.addCustomWidget(preview);
+    context.setNodeClassicUI(target, true, true);
+    assert.equal(banner.hidden, true);
+    assert.equal(preview.hidden, undefined);
+    assert.equal(preview.computeSize()[1], 180);
+    assert.equal(preview._isHadesCustom, undefined);
+    context.setNodeClassicUI(target, false, true);
+    assert.equal(preview.hidden, undefined);
+});

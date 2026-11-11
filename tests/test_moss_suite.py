@@ -667,6 +667,71 @@ class TestImageSaver(unittest.TestCase):
         self.assertTrue(out["result"][0].startswith("A cat."))
         self.assertIn("metadata not connected", out["ui"]["text"][0])
 
+    def test_primary_stage_keeps_full_pipeline_and_uses_only_selected_resources(self):
+        from PIL import Image
+        isaver = importlib.import_module(f"{PACK}.moss_image_saver_nodes")
+        f = common.format_info
+        files = {}
+        for name, value in (("base.safetensors", 1), ("refine.safetensors", 2),
+                            ("base_lora.safetensors", 3), ("refine_lora.safetensors", 4)):
+            path = os.path.join(TMP, name)
+            safetensors.torch.save_file({"x": torch.full((3,), value)}, path)
+            files[name] = path
+        def loader(name):
+            return f("x", "loader", model=name, model_file=name + ".safetensors", precision="bfloat16",
+                     vae="flux2-vae.safetensors", text_encoder="qwen.safetensors")
+        def stage(prompt, name, lora, seed, steps, cfg, size):
+            return [f("x", "prompt_enhancer", prompt=prompt, negative="blurry"), loader(name),
+                    f("x", "multi_lora", enabled=True, loras=[{"name": lora + ".safetensors", "strength": 1.0}], turbo=[]),
+                    f("x", "ksampler", width=size, height=size, steps=steps, cfg=cfg, flow_shift=5.0, sampler="euler",
+                      scheduler="simple", seed=seed, denoise=1.0, slg="off")]
+        base = stage("Base scene.", "base", "base_lora", 11, 8, 1.0, 1024)
+        refine = stage("Refined scene.", "refine", "refine_lora", 22, 12, 1.5, 1536)
+        audit = telemetry.HaDeSMossSuiteTelemetry().audit
+        full_json = audit("All", **{f"info_{i + 1}": item for i, item in enumerate(base + refine)})["result"][1]
+        refine_json = audit("Refine", **{f"info_{i + 1}": item for i, item in enumerate(refine)})["result"][1]
+        paths = lambda folder, name: files.get(name)
+        with patch.object(isaver.folder_paths, "get_full_path", side_effect=paths):
+            saved = isaver.HaDeSMossImageSaver().save(torch.rand(1, 8, 8, 3), "tests/%model%_%seed%_%steps%", True, True,
+                                                       metadata=full_json, primary_stage_metadata=refine_json,
+                                                       prompt={"1": {}}, extra_pnginfo={"workflow": {"nodes": []}})
+            legacy = isaver.HaDeSMossImageSaver().save(torch.rand(1, 8, 8, 3), "tests/legacy_%model%_%seed%", True, False,
+                                                        metadata=full_json)
+        params = saved["result"][0]
+        self.assertTrue(params.startswith("Refined scene.\nNegative prompt: blurry\nSteps: 12, Sampler: euler, Schedule type: simple, "
+                                          "CFG scale: 1.5, Seed: 22, Size: 1536x1536"), params)
+        self.assertIn(f"Model hash: {isaver.file_sha256(files['refine.safetensors'])[:10]}", params)
+        self.assertIn(f"refine_lora: {isaver.file_sha256(files['refine_lora.safetensors'])[:10]}", params)
+        self.assertNotIn("base_lora", params)
+        self.assertIn("refine_22_12_", saved["ui"]["images"][0]["filename"])
+        item = saved["ui"]["images"][0]
+        with Image.open(os.path.join(TMP, item["subfolder"], item["filename"])) as png:
+            self.assertEqual(json.loads(png.text["hades_moss"]), json.loads(full_json)["nodes"])
+            self.assertEqual(json.loads(png.text["hades_moss_primary_stage"]), json.loads(refine_json)["nodes"])
+            self.assertEqual(json.loads(png.text["workflow"]), {"nodes": []})
+        self.assertIn("Base scene.", legacy["result"][0])
+        self.assertIn("Seed: 11", legacy["result"][0])
+        self.assertIn("legacy_base_11_", legacy["ui"]["images"][0]["filename"])
+        item = legacy["ui"]["images"][0]
+        with Image.open(os.path.join(TMP, item["subfolder"], item["filename"])) as png:
+            self.assertNotIn("hades_moss_primary_stage", png.text)
+        with self.assertRaisesRegex(ValueError, "exactly one KSampler"):
+            isaver.HaDeSMossImageSaver().save(torch.rand(1, 8, 8, 3), "tests/invalid", False, False,
+                                              primary_stage_metadata=full_json)
+        sampler_only = refine[-1]
+        partial = isaver.HaDeSMossImageSaver().save(torch.rand(1, 8, 8, 3), "tests/partial_%seed%", False, False,
+                                                    metadata=full_json, primary_stage_metadata=sampler_only)
+        self.assertIn("Seed: 22", partial["result"][0])
+        self.assertNotIn("Model:", partial["result"][0])
+        self.assertNotIn("Lora hashes:", partial["result"][0])
+        self.assertIn("primary stage has no MOSS Loader info", partial["ui"]["text"][0])
+        with patch.object(isaver.args, "disable_metadata", True):
+            private = isaver.HaDeSMossImageSaver().save(torch.rand(1, 8, 8, 3), "tests/private_stage", False, False,
+                                                        metadata=full_json, primary_stage_metadata=refine_json)
+        item = private["ui"]["images"][0]
+        with Image.open(os.path.join(TMP, item["subfolder"], item["filename"])) as png:
+            self.assertEqual(png.text, {})
+
 
 class TestControl(unittest.TestCase):
     class FakeVAE:

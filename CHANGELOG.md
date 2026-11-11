@@ -5,12 +5,15 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [Unreleased]
+## [0.7.1] - 2026-11-11
 
 ### Added
+- **Image Saver stage metadata:** an optional `primary_stage_metadata` input takes a stage-specific Telemetry JSON. The selected stage supplies A1111 settings, model/LoRA hashes and filename tokens; the full pipeline remains in `hades_moss`, with the selected stage in a separate PNG chunk. Existing workflows retain their first-KSampler behavior.
+- **Model Card:** complete model card and sample manifest for `HaDeS_MOSS_v0.9.4_Turbo` under `tools/model_cards/`.
 - **Baked Turbo measurement:** `tools/moss_baked_turbo_eval.py` archives paired CFG / step sweeps, exact graphs, image metrics and blind comparison sheets on the experiment drive. First results are in `tools/RESULTS.md`.
 
 ### Fixed
+- **Interface:** standard ComfyUI widgets toggle keeps native output previews (such as core Save Image / Image Saver previews) visible.
 - **MOSS Loader:** model filename metadata no longer collides with the model patcher argument when recording a loader recipe. The collision prevented the loader from completing; a regression test covers the metadata contract.
 
 ## [0.7.0] - 2026-11-11

@@ -597,7 +597,10 @@ export function applyNodeFrameStyle(node) {
         node._hadesCustomWidgetHooked = true;
         const origAddCustomWidget = node.addCustomWidget;
         node.addCustomWidget = function (widget) {
-            if (widget) {
+            // Core output widgets (such as Save Image previews) may be added after
+            // this hook is installed. Only Suite-owned widgets belong to the
+            // decorative set hidden by the classic style switch.
+            if (widget?.name?.startsWith?.("hades_")) {
                 widget._isHadesCustom = true;
                 if (widget.draw) wrapVueWidgetDraw(widget);
                 if (!widget._origComputeSize) widget._origComputeSize = widget.computeSize;

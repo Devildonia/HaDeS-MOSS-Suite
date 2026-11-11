@@ -1,0 +1,75 @@
+{
+  "source_archive": "v094_vs_sft_v09_heldout_2026-11-11",
+  "model": "HaDeS_MOSS_v0.9.4_Turbo.safetensors",
+  "source_size": [
+    1152,
+    1536
+  ],
+  "preview_size": [
+    768,
+    1024
+  ],
+  "settings": {
+    "steps": 8,
+    "cfg": 1.0,
+    "sampler": "euler",
+    "scheduler": "simple",
+    "flow_shift": 5
+  },
+  "images": [
+    {
+      "scene": "watchmaker",
+      "seed": 2401,
+      "source_png": "watchmaker_2401_baked_v094.png",
+      "source_sha256": "44af009ffc85bac05fc86d9d1c1d556839c7cf461c03c92107266ba689f31fbc",
+      "preview_jpeg": "watchmaker.jpg",
+      "preview_sha256": "9f6ada7fce1b01b7b1b65eef3585b3fa057d16c4a3bfeb925d6441b7bd7ac2fb",
+      "preview_bytes": 248654
+    },
+    {
+      "scene": "climber",
+      "seed": 2403,
+      "source_png": "climber_2403_baked_v094.png",
+      "source_sha256": "72e2d776b84b255b6e84c9dc021a1bfc88ec8fc0005c4de0b1c8d83e749a883c",
+      "preview_jpeg": "climber.jpg",
+      "preview_sha256": "9d68fab7e5f71a60f7eec3c32b50b0dd9fbe96e582b9bc863e946a347d571923",
+      "preview_bytes": 268201
+    },
+    {
+      "scene": "flower_seller",
+      "seed": 2404,
+      "source_png": "flower_seller_2404_baked_v094.png",
+      "source_sha256": "e0af10b6b388c5a5cfae64ab4652643266ae05a494d3e071189b38899fbb7bff",
+      "preview_jpeg": "flower_seller.jpg",
+      "preview_sha256": "2d038be326f01c9e52effcb4f36f9e0fcd93cb4d1f87faca9729951c766322de",
+      "preview_bytes": 380922
+    },
+    {
+      "scene": "rainy_alley",
+      "seed": 2406,
+      "source_png": "rainy_alley_2406_baked_v094.png",
+      "source_sha256": "68ff73a33c98d889171968b1d8847f8f0bdf0b8cb7e6ed800d3541b3aecf523d",
+      "preview_jpeg": "rainy_alley.jpg",
+      "preview_sha256": "7de321563ad554d43a51e5795c824922196ad67d87a4b39913ebf6a9edf72725",
+      "preview_bytes": 432607
+    },
+    {
+      "scene": "citrus_still_life",
+      "seed": 2407,
+      "source_png": "citrus_still_life_2407_baked_v094.png",
+      "source_sha256": "b889b5444782f5da806bd563bdb138f438900c6a8567a3b53f5b781a5f8d71c9",
+      "preview_jpeg": "citrus_still_life.jpg",
+      "preview_sha256": "3a987aa031e19c79a5ea7ac9d4fd919f12ed68f80b08442c6daee4511e602d8f",
+      "preview_bytes": 180218
+    },
+    {
+      "scene": "observatory",
+      "seed": 2408,
+      "source_png": "observatory_2408_baked_v094.png",
+      "source_sha256": "4e794fa1325d47834bf9ab5d0cc1702a42bac8ba6e45368c0c27e3b491b58c56",
+      "preview_jpeg": "observatory.jpg",
+      "preview_sha256": "92bd6ea2e7994e5495ce75f00cfb176fb600c4d8a15d4e608a109782c7821616",
+      "preview_bytes": 424658
+    }
+  ]
+}

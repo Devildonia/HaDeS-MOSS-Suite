@@ -153,6 +153,10 @@ class HaDeSMossImageSaver:
                                                                         "Multi-LoRA and Prompt Enhancer infos), or one info output connected directly. "
                                                                         "Without it the images are still saved, with the workflow and only the prompt "
                                                                         "texts given here as parameters."}),
+                "primary_stage_metadata": ("STRING", {"forceInput": True, "tooltip": "Optional: json from a second Suite Telemetry connected only to the "
+                                                                                      "stage this image represents. Its one KSampler and relevant Loader, "
+                                                                                      "LoRA and prompt infos supply A1111 parameters and filename tokens; "
+                                                                                      "metadata still records the complete pipeline."}),
                 "positive": ("STRING", {"forceInput": True, "tooltip": "Prompt text when no Prompt Enhancer is in the pipeline (e.g. CLIPTextEncode's text)."}),
                 "negative": ("STRING", {"forceInput": True, "tooltip": "Negative prompt text when no Prompt Enhancer is in the pipeline."}),
             },
@@ -168,12 +172,23 @@ class HaDeSMossImageSaver:
     DESCRIPTION = ("Saves PNG images with the generation settings as A1111 parameters (prompt, negative prompt, steps, sampler, CFG, seed, "
                    "size, model and LoRAs with their hashes), read from Suite Telemetry, and ComfyUI's workflow.")
 
-    def save(self, images, filename_prefix, hashes, embed_workflow, metadata=None, positive=None, negative=None, prompt=None, extra_pnginfo=None):
+    def save(self, images, filename_prefix, hashes, embed_workflow, metadata=None, positive=None, negative=None, prompt=None,
+             extra_pnginfo=None, primary_stage_metadata=None):
         metas = read_metas(metadata) if metadata else []
-        parameters, notes = a1111_parameters(metas, positive, negative, hashes)
-        if not metadata:
+        primary = read_metas(primary_stage_metadata) if primary_stage_metadata else None
+        if primary is not None:
+            for node in ("ksampler", "loader", "prompt_enhancer"):
+                count = sum(m.get("node") == node for m in primary)
+                if (node == "ksampler" and count != 1) or (node != "ksampler" and count > 1):
+                    raise ValueError(f"HaDeS MOSS Image Saver: primary_stage_metadata needs exactly one KSampler and at most one "
+                                     f"Loader and Prompt Enhancer (found {count} {node} entries).")
+        selected = primary if primary is not None else metas
+        parameters, notes = a1111_parameters(selected, positive, negative, hashes)
+        if primary is not None and not first(primary, "loader"):
+            notes.append("primary stage has no MOSS Loader info: model and model hash are missing")
+        if not metadata and primary is None:
             notes.insert(0, "metadata not connected: saved without sampling settings (connect Suite Telemetry's json for them)")
-        prefix = expand_tokens(filename_prefix, metas)
+        prefix = expand_tokens(filename_prefix, selected)
         out_dir = folder_paths.get_output_directory()
         full_folder, filename, counter, subfolder, _ = folder_paths.get_save_image_path(prefix, out_dir, images[0].shape[1], images[0].shape[0])
         results = []
@@ -182,7 +197,9 @@ class HaDeSMossImageSaver:
             info = PngInfo()
             if not args.disable_metadata:
                 info.add_text("parameters", parameters)
-                info.add_text("hades_moss", json.dumps(metas, ensure_ascii=False))
+                info.add_text("hades_moss", json.dumps(metas if metadata else selected, ensure_ascii=False))
+                if primary is not None:
+                    info.add_text("hades_moss_primary_stage", json.dumps(primary, ensure_ascii=False))
             if embed_workflow and not args.disable_metadata:
                 if prompt is not None:
                     info.add_text("prompt", json.dumps(prompt))
