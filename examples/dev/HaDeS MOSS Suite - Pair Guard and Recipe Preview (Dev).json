@@ -1,0 +1,446 @@
+{
+ "id": "b1ef5e12-0e2b-5cc3-b1e8-725af4d18b50",
+ "revision": 0,
+ "last_node_id": 9,
+ "last_link_id": 7,
+ "nodes": [
+  {
+   "id": 1,
+   "type": "EmptyImage",
+   "pos": [
+    0,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    64,
+    64,
+    1,
+    3162192
+   ],
+   "properties": {
+    "Node name for S&R": "EmptyImage"
+   },
+   "outputs": [
+    {
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      1
+     ]
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "type": "EmptyImage",
+   "pos": [
+    0,
+    300
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 1,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    64,
+    64,
+    1,
+    11550800
+   ],
+   "properties": {
+    "Node name for S&R": "EmptyImage"
+   },
+   "outputs": [
+    {
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      2
+     ]
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "type": "PrimitiveStringMultiline",
+   "pos": [
+    350,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 2,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "UI stage validation\nHADES_META {\"node\":\"ksampler\",\"width\":64,\"height\":64,\"seed\":1200,\"steps\":8,\"cfg\":1.0,\"sampler\":\"euler\",\"scheduler\":\"simple\",\"flow_shift\":5.0,\"denoise\":1.0,\"slg\":\"off\"}"
+   ],
+   "properties": {
+    "Node name for S&R": "PrimitiveStringMultiline"
+   },
+   "outputs": [
+    {
+     "name": "STRING",
+     "type": "STRING",
+     "links": [
+      3
+     ]
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "type": "PrimitiveStringMultiline",
+   "pos": [
+    350,
+    400
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 3,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "UI stage validation\nHADES_META {\"node\":\"ksampler\",\"width\":64,\"height\":64,\"seed\":1200,\"steps\":8,\"cfg\":1.0,\"sampler\":\"euler\",\"scheduler\":\"simple\",\"flow_shift\":5.0,\"denoise\":1.0,\"slg\":\"off\"}"
+   ],
+   "properties": {
+    "Node name for S&R": "PrimitiveStringMultiline"
+   },
+   "outputs": [
+    {
+     "name": "STRING",
+     "type": "STRING",
+     "links": [
+      4
+     ]
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "type": "HaDeSMossPairGuard",
+   "pos": [
+    800,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 5,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "reference",
+     "type": "IMAGE",
+     "link": 1
+    },
+    {
+     "name": "candidate",
+     "type": "IMAGE",
+     "link": 2
+    },
+    {
+     "name": "reference_metadata",
+     "type": "STRING",
+     "link": 3,
+     "widget": {
+      "name": "reference_metadata"
+     },
+     "shape": 7
+    },
+    {
+     "name": "candidate_metadata",
+     "type": "STRING",
+     "link": 4,
+     "widget": {
+      "name": "candidate_metadata"
+     },
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    true,
+    false,
+    "",
+    ""
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossPairGuard"
+   },
+   "outputs": [
+    {
+     "name": "reference",
+     "type": "IMAGE",
+     "links": [
+      5
+     ]
+    },
+    {
+     "name": "candidate",
+     "type": "IMAGE",
+     "links": [
+      6
+     ]
+    },
+    {
+     "name": "report",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "checks_json",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "type": "HaDeSMossImageAudit",
+   "pos": [
+    1250,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 7,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "reference",
+     "type": "IMAGE",
+     "link": 5
+    },
+    {
+     "name": "candidate",
+     "type": "IMAGE",
+     "link": 6
+    },
+    {
+     "name": "region_mask",
+     "type": "MASK",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    2.0,
+    1.0,
+    "Base",
+    "Variant"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossImageAudit"
+   },
+   "outputs": [
+    {
+     "name": "difference_map",
+     "type": "IMAGE",
+     "links": []
+    },
+    {
+     "name": "report",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "metrics_json",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "type": "PrimitiveStringMultiline",
+   "pos": [
+    350,
+    850
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 4,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "Demo recipe: Base plus color LoRA at 0.6\nHADES_META {\"node\":\"multi_lora\",\"loras\":[{\"name\":\"color.safetensors\",\"strength\":0.6}],\"sources\":{\"model\":{\"node\":\"loader\",\"model_file\":\"base.safetensors\"}}}"
+   ],
+   "properties": {
+    "Node name for S&R": "PrimitiveStringMultiline"
+   },
+   "outputs": [
+    {
+     "name": "STRING",
+     "type": "STRING",
+     "links": [
+      7
+     ]
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "type": "HaDeSMossRecipePreview",
+   "pos": [
+    800,
+    850
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 6,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "recipe_info",
+     "type": "STRING",
+     "link": 7,
+     "widget": {
+      "name": "recipe_info"
+     }
+    },
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "",
+    true
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossRecipePreview"
+   },
+   "outputs": [
+    {
+     "name": "recipe",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "report",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "preview_json",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "type": "Note",
+   "pos": [
+    0,
+    1100
+   ],
+   "size": [
+    800,
+    520
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "widgets_values": [
+    "MODEL-FREE DEV EXAMPLE. Queue to run Pair Guard and Recipe Preview.\n\nPair Guard checks matching image geometry and declared sampler settings, then passes images to Image Audit. Change the candidate seed to see a clear failure. The synthetic metadata does not establish actual generation provenance.\n\nRecipe Preview shows the exact text that would feed Model Saver's recipe input. Its dummy file names are illustrative; no model is loaded or saved. Connect a real Suite info output and optionally its model to check an actual recipe."
+   ],
+   "properties": {}
+  }
+ ],
+ "links": [
+  [
+   1,
+   1,
+   0,
+   5,
+   0,
+   "IMAGE"
+  ],
+  [
+   2,
+   2,
+   0,
+   5,
+   1,
+   "IMAGE"
+  ],
+  [
+   3,
+   3,
+   0,
+   5,
+   2,
+   "STRING"
+  ],
+  [
+   4,
+   4,
+   0,
+   5,
+   3,
+   "STRING"
+  ],
+  [
+   5,
+   5,
+   0,
+   6,
+   0,
+   "IMAGE"
+  ],
+  [
+   6,
+   5,
+   1,
+   6,
+   1,
+   "IMAGE"
+  ],
+  [
+   7,
+   7,
+   0,
+   8,
+   0,
+   "STRING"
+  ]
+ ],
+ "groups": [],
+ "config": {},
+ "extra": {},
+ "version": 0.4
+}

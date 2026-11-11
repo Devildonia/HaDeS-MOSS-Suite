@@ -1352,6 +1352,12 @@ These are user-reported qualitative observations. No paired output files, exact 
 
 ## Dev Tools validation (2026-11-11)
 
+### Development example inventory (2026-11-11)
+
+The development examples now live together in `examples/dev/`: `HaDeS MOSS Suite - Dev Tools.json` (moved from the root of `examples/`) and `HaDeS MOSS Suite - Stage Metadata (Dev).json` (copied from `I:/HaDeS_MOSS/stage_metadata_validation/stage_metadata_ui_workflow.json`). The original `I:/HaDeS_MOSS` workflow and run records remain there as test evidence. An inventory of JSON files under `I:/HaDeS_MOSS` found no other ComfyUI editor workflow for these development examples. The API prompt in the stage validation folder is execution evidence, not a drag-and-drop editor example.
+
+`tools/make_examples.py` now directs both definitions to `examples/dev/`, so regeneration preserves this layout. Both archived examples parse as ComfyUI editor JSON and have valid link endpoints (10 nodes / 11 links and 10 nodes / 12 links respectively). The stage example's image values match its generator definition. This organization check did not rerun the frontend; the actual three-view execution and save/reload checks are recorded in the validation sections below and in the stage metadata validation section. No claim of new frontend coverage is made here.
+
 Implemented `MOSS Layout Regions` and `MOSS Image Audit` as V3 nodes, registered alongside the existing Suite nodes. These are image-space utilities, not further edit-LoRA measurements. No model generation or training was resumed. No new packages were installed.
 
 ### Numerical and geometry controls
@@ -1361,7 +1367,7 @@ Implemented `MOSS Layout Regions` and `MOSS Image Audit` as V3 nodes, registered
 
 ### Real ComfyUI example
 
-`examples/HaDeS MOSS Suite - Dev Tools.json` was built from the running server's `/object_info`, executed through the real queue and opened / run in the frontend. Validation used a separate ComfyUI 0.43.0 CPU instance with only this Suite enabled; the user's main ComfyUI session was not restarted or modified. All validation image temporaries and run records are under `I:/HaDeS_MOSS/dev_tools_validation`.
+`examples/dev/HaDeS MOSS Suite - Dev Tools.json` was built from the running server's `/object_info`, executed through the real queue and opened / run in the frontend. Validation used a separate ComfyUI 0.43.0 CPU instance with only this Suite enabled; the user's main ComfyUI session was not restarted or modified. All validation image temporaries and run records are under `I:/HaDeS_MOSS/dev_tools_validation`.
 
 The 256×256 reference is encoded RGB (48,64,80). A native masked composition substitutes RGB (176,64,80) in the Layout Editor box `[32,64,128,192]`. Expected union: 12,288 pixels, 18.75% of the canvas. Two API executions, including cached reuse, succeeded and exposed both node reports. Measured results:
 
@@ -1691,3 +1697,17 @@ An isolated CPU ComfyUI **0.43.0 / frontend 1.57.4** instance on port 8190 used 
 | Nodes 2.0 / Vue | Connections, editable filename field, execution, preview, zoom context and manual resize; saved workflow survived reload | Passed |
 
 The style-switch regression was found in the real frontend: the Suite's `addCustomWidget` hook had also registered ComfyUI's later native image preview as a decorative HaDeS widget, so switching to standard widgets hid it. The hook now tracks only Suite widgets named `hades_*`; a JS regression test guards the native preview. Python suite: **66 tests passed, 1 opt-in CUDA test skipped**. JS widget suite: **5 passed**. `git diff --check` reported no whitespace errors. No full diffusion run, genuine two-sampler image comparison or hash check on real model files was performed in this UI smoke test; the unit test exercises resource selection and hashes with controlled files. The isolated workflow and generated PNGs are retained under `I:/HaDeS_MOSS`; the user's active workflow and settings were untouched. No commit or push was made.
+
+## Pair Guard and Recipe Preview: development-node validation (2026-11-11)
+
+`MOSS Pair Guard` and `MOSS Recipe Preview` are V3 development nodes. Pair Guard checks matching RGB batch geometry and, when both stage metadata inputs are supplied, compares the declared KSampler controls. A different model or LoRA is permitted and reported; an unequal seed, prompt or other declared control stops the downstream comparison. Without metadata it reports geometry-only coverage, and `require_metadata` can make this an error. It does not prove that the info strings belong to the image tensors. Recipe Preview passes the trimmed text to Model Saver's `recipe` input, validates any Suite trailers, and optionally compares them with the model's attached recipe. It does not inspect weights or save a file. Its `include_metadata` switch is an advisory mirror of Model Saver's switch, not a live connection to it.
+
+The model-free editor workflow [`examples/dev/HaDeS MOSS Suite - Pair Guard and Recipe Preview (Dev).json`](../examples/dev/HaDeS%20MOSS%20Suite%20-%20Pair%20Guard%20and%20Recipe%20Preview%20(Dev).json) was generated from the actual `/object_info` of the isolated server (9 nodes, 7 links). The synthetic 64×64 images and declared seed 1200 passed through Pair Guard to Image Audit; the candidate seed changed to 1201 produced the expected `controls do not match: seed` error in the frontend, and restoring 1200 restored the pass. The separate Recipe Preview displayed its entire dummy recipe and confirmed that one `HADES_META` trailer would be passed. The strings name illustrative files; no model or LoRA was loaded, sampled or saved.
+
+| Frontend mode | Actual check | Result |
+|---|---|---|
+| Classic canvas, HaDeS widgets | Connected image/metadata sockets, editable source strings, queue execution and cached reports; both nodes enlarged manually and viewed at 54% zoom | Passed; reports remained within node bounds and were read-only. |
+| Classic canvas, standard ComfyUI widgets | Switched the Suite setting, executed the same graph, resized both nodes, checked text wrapping and reports | Passed; reports stayed visible after the style change. |
+| Nodes 2.0 / Vue | Executed graph, edited metadata seed and `include_metadata`, checked expected failure and updated advisory report, resized both nodes, then saved and reloaded the workflow | Passed; input values, sockets and sizes survived reload. Reports reappeared after executing the reloaded graph. |
+
+Validation ran on a separate **ComfyUI 0.43.0 / frontend 1.57.4** CPU instance with only this Suite enabled. Its API request/result, server object definitions and the frontend-saved workflow are under `I:/HaDeS_MOSS/pair_recipe_validation/`; the user's active ComfyUI workflow and settings were not changed. The reports have native read-only output widgets: legacy `readOnly` and Vue `options.read_only`, with reserved layout height, wrapping and internal scrolling. Cached successful results were checked. After a failed queue item, ComfyUI can still display the previous successful report while marking the node as errored; users should read the queue error for the failed attempt. The test did not run real diffusion, verify provenance against source images or write a model file. Python development-node tests: **20 passed**; core suite: **66 passed, 1 opt-in CUDA test skipped**; JS widget tests: **5 passed**. No commit or push was made.

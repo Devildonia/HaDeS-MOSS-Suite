@@ -1,4 +1,4 @@
-"""Builds the example workflows in examples/ (ComfyUI editor format) from compact graph definitions (dev tool, not a node).
+"""Builds the example workflows in examples/ and examples/dev/ (ComfyUI editor format) from compact graph definitions.
 
 Widget order, optional inputs and seed controls are read from a running ComfyUI's /object_info, so the files match the
 installed nodes. --run also queues every example (muted nodes left out) with the model names mapped to local files.
@@ -71,6 +71,11 @@ def telemetry(*infos):
             "report": ("PreviewAny", {"source": ("tel", 0)})}
 
 
+def synthetic_info(node, **fields):
+    """A model-free info trailer for exercising provenance wiring in a Dev example."""
+    return "UI stage validation\nHADES_META " + json.dumps({"node": node, **fields}, separators=(",", ":"))
+
+
 EXAMPLES = {
     "HaDeS MOSS Suite - Dev Tools": {
         "reference": ("EmptyImage", {"width": 256, "height": 256, "batch_size": 1, "color": 0x304050}),
@@ -94,6 +99,53 @@ EXAMPLES = {
             "White = inside, not semantic segmentation. Differences do not establish edit success or quality. Per-pair metrics are in metrics_json; report can feed Suite Telemetry. Preview images are temporary."}),
         "_layout": {"reference": (0, 0), "patch": (0, 230), "editor": (420, 0), "regions": (1020, 0), "candidate": (1460, 0),
                     "audit": (1900, 0), "mask_preview": (1020, 600), "candidate_preview": (1460, 350), "difference_preview": (1900, 650), "note": (0, 850)},
+    },
+    "HaDeS MOSS Suite - Stage Metadata (Dev)": {
+        "image": ("EmptyImage", {"width": 64, "height": 64, "batch_size": 1, "color": 0x3399ff}),
+        "base_loader": ("PrimitiveStringMultiline", {"value": synthetic_info("loader", model="base_ui", model_file="base_ui.safetensors",
+            precision="bfloat16", vae="flux2-vae.safetensors", text_encoder="qwen.safetensors")}),
+        "base_prompt": ("PrimitiveStringMultiline", {"value": synthetic_info("prompt_enhancer", prompt="Base scene.", negative="blurry")}),
+        "base_ks": ("PrimitiveStringMultiline", {"value": synthetic_info("ksampler", width=64, height=64, steps=8, cfg=1.0,
+            flow_shift=5.0, sampler="euler", scheduler="simple", seed=11, denoise=1.0, slg="off")}),
+        "refine_loader": ("PrimitiveStringMultiline", {"value": synthetic_info("loader", model="refine_ui", model_file="refine_ui.safetensors",
+            precision="bfloat16", vae="flux2-vae.safetensors", text_encoder="qwen.safetensors")}),
+        "refine_prompt": ("PrimitiveStringMultiline", {"value": synthetic_info("prompt_enhancer", prompt="Refine scene.", negative="blurry")}),
+        "refine_ks": ("PrimitiveStringMultiline", {"value": synthetic_info("ksampler", width=64, height=64, steps=12, cfg=1.0,
+            flow_shift=5.0, sampler="euler", scheduler="simple", seed=22, denoise=1.0, slg="off")}),
+        "full": ("HaDeSMossSuiteTelemetry", {"report_title": "Complete pipeline", "info_1": ("base_loader", 0),
+            "info_2": ("base_prompt", 0), "info_3": ("base_ks", 0), "info_4": ("refine_loader", 0),
+            "info_5": ("refine_prompt", 0), "info_6": ("refine_ks", 0)}),
+        "stage": ("HaDeSMossSuiteTelemetry", {"report_title": "Selected refine stage", "info_1": ("refine_loader", 0),
+            "info_2": ("refine_prompt", 0), "info_3": ("refine_ks", 0)}),
+        "saver": ("HaDeSMossImageSaver", {"images": ("image", 0), "filename_prefix": "stage_ui_%model%_%seed%_%steps%",
+            "hashes": False, "embed_workflow": True, "metadata": ("full", 1), "primary_stage_metadata": ("stage", 1)}),
+        "_layout": {"image": (0, 0), "base_loader": (0, 350), "base_prompt": (0, 750), "base_ks": (0, 1150),
+                    "refine_loader": (450, 350), "refine_prompt": (450, 750), "refine_ks": (450, 1150),
+                    "full": (900, 350), "stage": (900, 850), "saver": (1400, 350)},
+    },
+    "HaDeS MOSS Suite - Pair Guard and Recipe Preview (Dev)": {
+        "reference": ("EmptyImage", {"width": 64, "height": 64, "batch_size": 1, "color": 0x304050}),
+        "candidate": ("EmptyImage", {"width": 64, "height": 64, "batch_size": 1, "color": 0xB04050}),
+        "ref_info": ("PrimitiveStringMultiline", {"value": synthetic_info("ksampler", width=64, height=64, seed=1200,
+            steps=8, cfg=1.0, sampler="euler", scheduler="simple", flow_shift=5.0, denoise=1.0, slg="off")}),
+        "cand_info": ("PrimitiveStringMultiline", {"value": synthetic_info("ksampler", width=64, height=64, seed=1200,
+            steps=8, cfg=1.0, sampler="euler", scheduler="simple", flow_shift=5.0, denoise=1.0, slg="off")}),
+        "guard": ("HaDeSMossPairGuard", {"reference": ("reference", 0), "candidate": ("candidate", 0),
+            "reference_metadata": ("ref_info", 0), "candidate_metadata": ("cand_info", 0), "require_metadata": True,
+            "compare_prompt": False}),
+        "audit": ("HaDeSMossImageAudit", {"reference": ("guard", 0), "candidate": ("guard", 1),
+            "change_threshold": 2.0, "difference_gain": 1.0, "reference_label": "Base", "candidate_label": "Variant"}),
+        "recipe_info": ("PrimitiveStringMultiline", {"value": "Demo recipe: Base plus color LoRA at 0.6\nHADES_META "
+            + json.dumps({"node": "multi_lora", "loras": [{"name": "color.safetensors", "strength": 0.6}],
+                          "sources": {"model": {"node": "loader", "model_file": "base.safetensors"}}}, separators=(",", ":"))}),
+        "recipe": ("HaDeSMossRecipePreview", {"recipe_info": ("recipe_info", 0), "include_metadata": True}),
+        "note": ("Note", {"text": "MODEL-FREE DEV EXAMPLE. Queue to run Pair Guard and Recipe Preview.\n\n"
+            "Pair Guard checks matching image geometry and declared sampler settings, then passes images to Image Audit. "
+            "Change the candidate seed to see a clear failure. The synthetic metadata does not establish actual generation provenance.\n\n"
+            "Recipe Preview shows the exact text that would feed Model Saver's recipe input. Its dummy file names are illustrative; "
+            "no model is loaded or saved. Connect a real Suite info output and optionally its model to check an actual recipe."}),
+        "_layout": {"reference": (0, 0), "candidate": (0, 300), "ref_info": (350, 0), "cand_info": (350, 400),
+                    "guard": (800, 0), "audit": (1250, 0), "recipe_info": (350, 850), "recipe": (800, 850), "note": (0, 1100)},
     },
     "HaDeS MOSS Suite - Merge, Save and Telemetry": {
         **loader(),  # SFT, its text encoder and VAE
@@ -283,6 +335,9 @@ EXAMPLES = {
     },
 }
 
+DEV_EXAMPLE_TITLES = {"HaDeS MOSS Suite - Dev Tools", "HaDeS MOSS Suite - Stage Metadata (Dev)",
+                      "HaDeS MOSS Suite - Pair Guard and Recipe Preview (Dev)"}
+
 
 def fetch(server, path, data=None):
     req = urllib.request.Request(server + path, data=data, headers={"Content-Type": "application/json"} if data else {})
@@ -439,7 +494,9 @@ def main():
     object_info = fetch(args.server, "/object_info")
     os.makedirs(EXAMPLES_DIR, exist_ok=True)
     for title, graph in EXAMPLES.items():
-        path = os.path.join(EXAMPLES_DIR, f"{title}.json")
+        directory = os.path.join(EXAMPLES_DIR, "dev") if title in DEV_EXAMPLE_TITLES else EXAMPLES_DIR
+        os.makedirs(directory, exist_ok=True)
+        path = os.path.join(directory, f"{title}.json")
         with open(path, "w", encoding="utf-8") as f:
             json.dump(to_editor(graph, object_info), f, indent=1, ensure_ascii=False)
         print("wrote", path)

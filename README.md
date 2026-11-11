@@ -6,7 +6,7 @@ Claims about what layer groups do are measured with [`tools/moss_eval.py`](https
 
 **Turbo (0.2.0, Turbo 8-steps in 0.3.0):** few-step LoRAs we trained for MOSS-Image SFT, [HaDeS MOSS Turbo and Turbo Diverse](https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo) (4 steps at CFG 1, 3.4 MB each), joined by Turbo 8-steps v0.7 (8 steps), and a `turbo` input on `MOSS KSampler` that applies them with their settings. How they were trained and measured: [`tools/RESULTS.md`](tools/RESULTS.md), [`tools/moss_dmd_train.py`](https://github.com/Devildonia/HaDeS-MOSS-Suite/blob/main/tools/moss_dmd_train.py).
 
-**New in 0.4.0:** `MOSS Loader` (model, text encoder and VAE in one node), `MOSS Multi-LoRA` (any number of LoRAs, searchable picker, strength per layer group), `MOSS Prompt Enhancer` (writes a caption or a layout with MOSS-Image's own text encoder), `MOSS Layout Editor` (boxes edited on a canvas), a shared seed on `MOSS Latent` and stochastic rounding in `MOSS Model Saver`. **0.4.1:** `MOSS Image Saver` (PNG with A1111 metadata and hashes for Civitai). **0.5.0:** `MOSS Metadata Reader` and model / LoRA recipes. **0.6.0:** `MOSS Control (color / depth)`. **0.6.1:** edit mode in `MOSS Prompt Enhancer` for MOSS-Image edit LoRAs. **0.7.0:** Dev Tools (`MOSS Layout Regions`, `MOSS Image Audit`) and `tools/moss_edit_eval.py`. **0.7.1:** `MOSS Image Saver` multi-stage metadata (`primary_stage_metadata`) and native preview widget fix.
+**New in 0.4.0:** `MOSS Loader` (model, text encoder and VAE in one node), `MOSS Multi-LoRA` (any number of LoRAs, searchable picker, strength per layer group), `MOSS Prompt Enhancer` (writes a caption or a layout with MOSS-Image's own text encoder), `MOSS Layout Editor` (boxes edited on a canvas), a shared seed on `MOSS Latent` and stochastic rounding in `MOSS Model Saver`. **0.4.1:** `MOSS Image Saver` (PNG with A1111 metadata and hashes for Civitai). **0.5.0:** `MOSS Metadata Reader` and model / LoRA recipes. **0.6.0:** `MOSS Control (color / depth)`. **0.6.1:** edit mode in `MOSS Prompt Enhancer` for MOSS-Image edit LoRAs. **0.7.0:** Dev Tools (`MOSS Layout Regions`, `MOSS Image Audit`) and `tools/moss_edit_eval.py`. **0.7.1:** `MOSS Image Saver` multi-stage metadata (`primary_stage_metadata`) and native preview widget fix. **0.7.2:** Dev Tools additions (`MOSS Pair Guard`, `MOSS Recipe Preview`) and model-free `examples/dev/` organization.
 
 ## Installation
 
@@ -210,6 +210,20 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 
 The **Dev Tools** example runs without models: a native composition adds 128/255 to the red channel inside one box. Expected: 12,288 pixels (18.75%); inside MAE approximately 42.6667, outside MAE 0, global MAE 8. Float32 arithmetic can affect the last decimal places. Validation and limits are recorded in [`tools/RESULTS.md`](tools/RESULTS.md#dev-tools-validation-2026-11-11).
 
+### `MOSS Pair Guard` (`HaDeS/MOSS Dev Tools`)
+
+- **Purpose:** check that two RGB image batches have identical dimensions and pair counts before sending them to Image Audit. The node passes both images through without modifying pixels. It does not score quality or verify that metadata actually belongs to the connected images.
+- **Optional provenance check:** connect stage-specific Suite Telemetry `json` outputs to `reference_metadata` and `candidate_metadata`, or one MOSS KSampler `info` string per side. Each side must identify exactly one KSampler. Pair Guard compares the declared seed, steps, CFG, sampler, scheduler, flow shift, denoise, size and SLG; different model and LoRA names are allowed and reported. If both sides include Prompt Enhancer metadata, `compare_prompt` also checks the generated prompt and negative text. Missing fields appear as unverified; a field present on only one side fails. `require_metadata` makes absent metadata an error.
+- **Outputs:** unchanged `reference` and `candidate`, a read-only `report`, and versioned `checks_json`. Mismatched controls stop execution with a specific error. Use separate Telemetry branches for multi-stage workflows; do not feed the whole pipeline's two samplers to one side.
+
+### `MOSS Recipe Preview` (`HaDeS/MOSS Dev Tools`)
+
+- **Purpose:** inspect the exact nonempty text that will be passed to `MOSS Model Saver`'s `recipe` input and stored as `hades/recipe` when metadata is enabled. Connect a Loader, Multi-LoRA or merger `info` output to `recipe_info`, then connect Recipe Preview's `recipe` output to Model Saver. It makes no file and reads no model weights.
+- **Checks:** counts and validates Suite `HADES_META` trailers. An optional `model` socket compares the model patcher's attached Suite recipe with those trailers and warns about a stale branch; this is advisory and cannot prove which patches were applied. Set `include_metadata` to the Saver's value: if false, the report warns that `hades/recipe` will not be written. The node cannot inspect the Saver's actual setting unless you keep these switches in sync.
+- **Outputs:** trimmed `recipe` text, a read-only `report` showing that text and warnings, and versioned `preview_json`. Hand-written notes without a structured trailer are accepted, but the Metadata Reader cannot follow their source files.
+
+The **Pair Guard and Recipe Preview** example in `examples/dev/` is model-free. Synthetic KSampler metadata and a dummy recipe demonstrate successful checks, a deliberate seed mismatch, and a guarded Image Audit connection; the dummy file names are not provenance evidence.
+
 ## Interface
 
 The nodes draw their own moss-green rows on the canvas (the HaDeS Anima Suite widget library with its own palette), in the classic canvas and in Nodes 2.0:
@@ -223,9 +237,9 @@ The nodes draw their own moss-green rows on the canvas (the HaDeS Anima Suite wi
 
 ## Example workflows
 
-In [`examples/`](examples) (drag a file into ComfyUI). They use the official Comfy-Org file names and carry their download links, so ComfyUI offers to download missing models.
+In [`examples/`](examples) (drag a file into ComfyUI); model-free development examples are in [`examples/dev/`](examples/dev). Generation examples use the official Comfy-Org file names and carry their download links, so ComfyUI offers to download missing models.
 
-Every example loads the three files with the **MOSS Loader**, writes and encodes the prompts with the **Prompt Enhancer** (`as written`, the plain text encoder, unless said otherwise), shares the **MOSS Latent**'s seed with its samplers, ends in a **Suite Telemetry** report that reads the loader and the enhancer too, and saves through the **MOSS Image Saver** with A1111 metadata.
+Every generation example loads the three files with the **MOSS Loader**, writes and encodes the prompts with the **Prompt Enhancer** (`as written`, the plain text encoder, unless said otherwise), shares the **MOSS Latent**'s seed with its samplers, ends in a **Suite Telemetry** report that reads the loader and the enhancer too, and saves through the **MOSS Image Saver** with A1111 metadata.
 
 - **Merge, Save and Telemetry:** SFT with layers 24–35 from Base through the Block Merger, MOSS Latent and MOSS KSampler, telemetry report. Model Saver and a SLERP Multi-Model Merger come muted, ready to switch on.
 - **Prompt Enhancer:** a short idea written into a detailed prompt (`caption` mode) and encoded, with a text preview of what was written; the latent's seed drives both the writing and the sampler, so one seed reproduces the whole image. A Load Image comes muted, to have the prompt written from a picture. A note explains the modes.
@@ -235,7 +249,9 @@ Every example loads the three files with the **MOSS Loader**, writes and encodes
 - **Turbo 8 steps + Upscale x2:** Turbo 8-steps v0.7 at 8 steps, then two groups to switch on or off from the group's right-click menu: a 2x upscale with RealESRGAN x2 (on; pixels only, about a second) and, on top of it, a MOSS pass at 2048 with the same turbo and seed at denoise 0.25 (off; adds hair, pores and fine texture the upscaler smooths, about 16 s). A note in the workflow explains both.
 - **Control (color, depth):** a depth map into MOSS Control with a color / depth control adapter in the Multi-LoRA (kept at 1.0), on the Prompt Enhancer's conditioning, with a preview of the encoded maps and the control in Telemetry. Load your own depth map and adapter; a note explains the color modes.
 - **LoRA Toolkit:** a LoRA through the Multi-LoRA into the sampler (add rows for more LoRAs; each row's group button holds its strength per group of layers); LoRA Merger, LoRA Resize and LoRA Extractor (with a finetune loader) come muted, since they write files. Pick your own LoRA in the Multi-LoRA's row.
-- **Dev Tools:** Layout Editor → Layout Regions → native masked composition → Image Audit, with mask / candidate / difference previews and known numerical results. No model files are needed.
+- **Dev Tools** (`examples/dev/`): Layout Editor → Layout Regions → native masked composition → Image Audit, with mask / candidate / difference previews and known numerical results. No model files are needed.
+- **Pair Guard and Recipe Preview (Dev)** (`examples/dev/`): synthetic paired images and stage metadata → Pair Guard → Image Audit; a separate dummy recipe → Recipe Preview. No model is loaded or saved.
+- **Stage Metadata (Dev)** (`examples/dev/`): two synthetic sampling stages feed a full-pipeline Telemetry and a refine-only Telemetry. Image Saver uses the refine stage for A1111 parameters and filename tokens while preserving both stages in PNG metadata. It saves a 64×64 solid-color test PNG; no diffusion model is loaded. The model names in its synthetic info are placeholders.
 
 Every example was run end to end in ComfyUI 0.43.0 (muted nodes left out). `tools/make_examples.py` regenerates them from the node definitions of a running ComfyUI.
 

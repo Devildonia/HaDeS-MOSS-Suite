@@ -5,6 +5,13 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.7.2] - 2026-11-11
+
+### Added
+- **MOSS Pair Guard:** verifies that reference and candidate image batches have matching geometry and pair counts before running image audits. Optional stage-specific Telemetry inputs enforce matching sampling controls (seed, steps, CFG, sampler, scheduler, flow shift, denoise, size, SLG, prompt/negative) while allowing model/LoRA differences.
+- **MOSS Recipe Preview:** previews the exact recipe text that `MOSS Model Saver` will embed as `hades/recipe`, validates `HADES_META` trailers, and cross-checks with the model patcher's attached recipe.
+- **Dev examples organization:** model-free development workflows now reside under `examples/dev/` (`Dev Tools`, `Pair Guard and Recipe Preview`, `Stage Metadata`), keeping `examples/` dedicated to generation workflows; `tools/make_examples.py` updated accordingly.
+
 ## [0.7.1] - 2026-11-11
 
 ### Added

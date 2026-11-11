@@ -180,5 +180,82 @@ class TestRegistration(unittest.TestCase):
         self.assertIn("Layout Regions", result["result"][0])
 
 
+def stage(seed=11, model="base.safetensors", prompt="A cup"):
+    return json.dumps({"nodes": [
+        {"node": "loader", "model_file": model},
+        {"node": "prompt_enhancer", "prompt": prompt, "negative": "blurry"},
+        {"node": "ksampler", "seed": seed, "steps": 8, "cfg": 1.0, "sampler": "euler", "scheduler": "simple",
+         "flow_shift": 5.0, "denoise": 1.0, "width": 32, "height": 16, "slg": "off"}]})
+
+
+class TestPairGuard(unittest.TestCase):
+    def test_pass_through_and_allowed_model_difference(self):
+        a, b = torch.zeros(2, 16, 32, 3), torch.ones(2, 16, 32, 3)
+        out = dev.HaDeSMossPairGuard.execute(a, b, stage(model="base.safetensors"), stage(model="sft.safetensors"))
+        self.assertIs(out.args[0], a)
+        self.assertIs(out.args[1], b)
+        record = json.loads(out.args[3])
+        self.assertEqual(record["status"], "pass")
+        self.assertEqual(record["batch_pairs"], 2)
+        self.assertEqual(len(record["allowed_differences"]), 1)
+        self.assertIn("PASS", out.args[2])
+
+    def test_shape_metadata_and_prompt_mismatches_fail(self):
+        a = torch.zeros(1, 16, 32, 3)
+        with self.assertRaisesRegex(ValueError, "image shape mismatch"):
+            dev.HaDeSMossPairGuard.execute(a, torch.zeros(1, 32, 16, 3))
+        with self.assertRaisesRegex(ValueError, "one-sided"):
+            dev.HaDeSMossPairGuard.execute(a, a, stage(), None)
+        with self.assertRaisesRegex(ValueError, "seed"):
+            dev.HaDeSMossPairGuard.execute(a, a, stage(), stage(seed=12))
+        with self.assertRaisesRegex(ValueError, "prompt"):
+            dev.HaDeSMossPairGuard.execute(a, a, stage(), stage(prompt="A teapot"))
+        with self.assertRaisesRegex(ValueError, "image width"):
+            dev.HaDeSMossPairGuard.execute(a, a, stage().replace('"width": 32', '"width": 64'), stage())
+
+    def test_missing_metadata_is_explicit_and_multistage_rejected(self):
+        a = torch.zeros(1, 16, 32, 3)
+        record = json.loads(dev.HaDeSMossPairGuard.execute(a, a).args[3])
+        self.assertFalse(record["metadata_checked"])
+        self.assertTrue(record["unverified"])
+        with self.assertRaisesRegex(ValueError, "require_metadata"):
+            dev.HaDeSMossPairGuard.execute(a, a, require_metadata=True)
+        multi = json.loads(stage())
+        multi["nodes"].append(multi["nodes"][-1])
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            dev.HaDeSMossPairGuard.execute(a, a, json.dumps(multi), stage())
+        with self.assertRaisesRegex(ValueError, "invalid Suite trailer"):
+            dev.HaDeSMossPairGuard.execute(a, a, "HADES_META []", stage())
+
+
+class TestRecipePreview(unittest.TestCase):
+    def test_preserves_full_recipe_and_checks_attachment(self):
+        attachment = {"node": "multi_lora", "loras": [{"name": "turbo", "strength": 1.0}]}
+        source = common.format_info("Multi-LoRA | turbo", **attachment)
+
+        class Model:
+            def get_attachment(self, name):
+                self_name = name
+                assert self_name == "hades_moss_recipe"
+                return attachment
+
+        out = dev.HaDeSMossRecipePreview.execute(source, model=Model())
+        self.assertEqual(out.args[0], source)
+        self.assertTrue(json.loads(out.args[2])["model_attachment_match"])
+        self.assertIn("turbo", out.args[1])
+
+    def test_empty_malformed_and_metadata_off(self):
+        with self.assertRaisesRegex(ValueError, "empty"):
+            dev.HaDeSMossRecipePreview.execute(" ")
+        with self.assertRaisesRegex(ValueError, "malformed"):
+            dev.HaDeSMossRecipePreview.execute("notes\nHADES_META {broken")
+        with self.assertRaisesRegex(ValueError, "malformed"):
+            dev.HaDeSMossRecipePreview.execute("notes\nHADES_META []")
+        out = dev.HaDeSMossRecipePreview.execute("hand-written recipe", include_metadata=False)
+        record = json.loads(out.args[2])
+        self.assertFalse(record["will_embed_if_saver_matches"])
+        self.assertIn("No structured", out.args[1])
+
+
 if __name__ == "__main__":
     unittest.main(argv=TEST_ARGV, verbosity=2)
