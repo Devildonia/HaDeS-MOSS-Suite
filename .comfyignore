@@ -3,5 +3,7 @@ tests/
 .github/
 tools/*
 docs/
+AGENTS.md
+Agents.md
 # Measurements cited by the README and the node tooltips
 !tools/RESULTS.md

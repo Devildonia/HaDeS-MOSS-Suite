@@ -254,7 +254,7 @@ node --test custom_nodes/HaDeS-MOSS-Suite/tests/test_moss_widgets.mjs
 
 Dev Tools geometry / numerical / V3 schema checks (CPU, no model loading): `python custom_nodes/HaDeS-MOSS-Suite/tests/test_moss_dev_nodes.py`.
 
-Every new node also requires real frontend acceptance in classic HaDeS, classic standard widgets, and Nodes 2.0 / Vue. The Dev Tools were checked in all three on frontend 1.57.4; mode-switch fixes and execution evidence are in [`tools/RESULTS.md`](tools/RESULTS.md#three-view-frontend-acceptance-2026-11-11). Repository acceptance instructions: [`AGENTS.md`](AGENTS.md).
+Every new node also requires real frontend acceptance in classic HaDeS, classic standard widgets, and Nodes 2.0 / Vue. The Dev Tools were checked in all three on frontend 1.57.4; mode-switch fixes and execution evidence are in [`tools/RESULTS.md`](tools/RESULTS.md#three-view-frontend-acceptance-2026-11-11).
 
 Set `HADES_MOSS_TEST_CUDA=1` to include the CUDA quantized-export checks; the default run uses CPU. CI tests ComfyUI v0.43.0 on Linux and Windows, and upstream master on Linux. These checks use small synthetic weights; they do not measure image quality or full-model VRAM. Audit-fix evidence: [`docs/AUDIT_0.6.1.md`](docs/AUDIT_0.6.1.md).
 

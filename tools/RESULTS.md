@@ -1398,4 +1398,4 @@ Two frontend failures were found and fixed:
 
 The frontend test changed padding from 0 to 4 in Vue: union increased from 12,288 to 14,144 pixels, with global MAE approximately 9.208334 and outside MAE zero. Resetting padding to 0 through standard widgets restored global MAE approximately 8 and outside MAE zero. Difference gain was changed from 1 to 1.3 without changing numeric metrics. Cached runs and the final return to HaDeS widgets preserved the reports and measurements.
 
-Frontend regressions now total **4 passing tests**, including the style-switch case and Vue's read-only option. These mocked checks supplement, rather than replace, the real three-view exercise. This is not an exhaustive test across frontend releases. Future new nodes must undergo the same three-view acceptance, as recorded in the repository's `AGENTS.md`.
+Frontend regressions now total **4 passing tests**, including the style-switch case and Vue's read-only option. These mocked checks supplement, rather than replace, the real three-view exercise. This is not an exhaustive test across frontend releases. Future new nodes must undergo the same three-view acceptance.
