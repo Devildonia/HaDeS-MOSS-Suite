@@ -5,6 +5,14 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Baked Turbo measurement:** `tools/moss_baked_turbo_eval.py` archives paired CFG / step sweeps, exact graphs, image metrics and blind comparison sheets on the experiment drive. First results are in `tools/RESULTS.md`.
+
+### Fixed
+- **MOSS Loader:** model filename metadata no longer collides with the model patcher argument when recording a loader recipe. The collision prevented the loader from completing; a regression test covers the metadata contract.
+
 ## [0.7.0] - 2026-11-11
 
 ### Added

@@ -717,6 +717,17 @@ class TestCanvasCheck(unittest.TestCase):
 
 
 class TestLoader(unittest.TestCase):
+    def test_model_name_metadata_does_not_conflict_with_patcher(self):
+        class Patcher:
+            def set_attachments(self, key, value):
+                self.key, self.value = key, value
+
+        patcher = Patcher()
+        info = common.format_model_info("loader", "loader", patcher, model="m.safetensors", model_file="MOSS/m.safetensors")
+        self.assertEqual(patcher.key, "hades_moss_recipe")
+        self.assertEqual(patcher.value["model"], "m.safetensors")
+        self.assertEqual(common.parse_info_meta(info)["model_file"], "MOSS/m.safetensors")
+
     def test_precision_and_telemetry_note(self):
         loader = importlib.import_module(f"{PACK}.moss_loader_nodes")
         sd = tiny_state_dict(9)
