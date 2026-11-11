@@ -1,8 +1,8 @@
-from . import moss_control_nodes, moss_enhancer_nodes, moss_image_saver_nodes, moss_loader_nodes, moss_lora_nodes, moss_merger_nodes, moss_metadata_nodes, moss_pipeline_nodes, moss_sampler_nodes, moss_saver_nodes, moss_telemetry_nodes
+from . import moss_control_nodes, moss_dev_nodes, moss_enhancer_nodes, moss_image_saver_nodes, moss_loader_nodes, moss_lora_nodes, moss_merger_nodes, moss_metadata_nodes, moss_pipeline_nodes, moss_sampler_nodes, moss_saver_nodes, moss_telemetry_nodes
 
-__version__ = "0.6.1"
+__version__ = "0.7.0"
 
-_MODULES = (moss_loader_nodes, moss_merger_nodes, moss_saver_nodes, moss_lora_nodes, moss_metadata_nodes, moss_pipeline_nodes, moss_control_nodes, moss_enhancer_nodes, moss_sampler_nodes, moss_image_saver_nodes, moss_telemetry_nodes)
+_MODULES = (moss_loader_nodes, moss_merger_nodes, moss_saver_nodes, moss_lora_nodes, moss_metadata_nodes, moss_pipeline_nodes, moss_control_nodes, moss_enhancer_nodes, moss_sampler_nodes, moss_image_saver_nodes, moss_telemetry_nodes, moss_dev_nodes)
 NODE_CLASS_MAPPINGS = {k: v for m in _MODULES for k, v in m.NODE_CLASS_MAPPINGS.items()}
 NODE_DISPLAY_NAME_MAPPINGS = {k: v for m in _MODULES for k, v in m.NODE_DISPLAY_NAME_MAPPINGS.items()}
 WEB_DIRECTORY = "./web"

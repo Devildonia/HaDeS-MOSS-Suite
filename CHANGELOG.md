@@ -5,9 +5,14 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [Unreleased]
+## [0.7.0] - 2026-11-11
+
+### Added
+- **Dev Tools:** `MOSS Layout Regions` makes binary masks from selected layout boxes; `MOSS Image Audit` measures paired images globally and inside / outside a mask, with per-image JSON, color deltas and a difference map. No model loading or added dependencies. Includes a model-free example and geometry / numerical / frontend regressions.
+- **Edit-LoRA measurement tool:** `tools/moss_edit_eval.py` generates controlled references, compares full / keep-only / leave-out layer configurations through a running ComfyUI, and archives images, hashes, graphs, metrics and contact sheets on the experiment drive. Protocol and observations: `tools/RESULTS.md` (MOSS-edit layer ablation, 2026-11-10).
 
 ### Fixed
+- **Dev Tools interface:** reports remain visible with standard ComfyUI widgets and are read-only in Nodes 2.0 / Vue as well as the classic canvas. Both nodes were exercised in all three Suite views; acceptance evidence is in `tools/RESULTS.md`.
 - **LoRA export:** factors and full diffs on the same weight are added before saving; diff-only merges finish with compression energy marked as not applicable. Merger and Resize protect source files by filesystem identity, including Windows filename case and hard links.
 - **Image Saver:** ComfyUI's `--disable-metadata` now suppresses every embedded text chunk, including A1111 parameters and `hades_moss`.
 - **Model merges:** zero-weight models no longer amplify TIES / DARE-TIES. SLERP uses linear interpolation for zero-length and nearly antiparallel inputs. Recipe overrides and Multi-LoRA JSON reject non-finite strengths.

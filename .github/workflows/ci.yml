@@ -55,4 +55,7 @@ jobs:
           pip install -r ComfyUI/requirements.txt
 
       - name: Run tests
-        run: python ComfyUI/custom_nodes/HaDeS-MOSS-Suite/tests/test_moss_suite.py
+        run: |
+          python ComfyUI/custom_nodes/HaDeS-MOSS-Suite/tests/test_moss_suite.py
+          python ComfyUI/custom_nodes/HaDeS-MOSS-Suite/tests/test_moss_edit_eval.py
+          python ComfyUI/custom_nodes/HaDeS-MOSS-Suite/tests/test_moss_dev_nodes.py

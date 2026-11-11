@@ -1,5 +1,9 @@
 # Measurement results (2026-11-03)
 
+[MOSS-edit layer ablation (2026-11-10)](#moss-edit-layer-ablation-2026-11-10).
+
+## Original benchmark environment
+
 Measured with `tools/moss_eval.py` on an RTX 5090, ComfyUI 0.43.0 local API. 1024x1024, er_sde / simple / 25 steps / CFG 2.5,
 model shift 5.0, negative `nsfw, worst quality, bad anatomy, watermark, jpeg artifact` (the official ComfyUI templates),
 text encoder `mossImage_base_txt_int4` (w4a8 with codebook), VAE `flux2-vae`. Models: `mossImage_sft_bf16` and `mossImage_base_bf16`
@@ -1112,3 +1116,286 @@ hand test whose settings were not recorded looked overdone at CFG 1.2; it was no
 - Prompts heavy with texture words (an Andean weaver, a rustic still life) looked better at 1.0-1.2: at 1.5 a brick wall turned into
   a repeating grid. Dark knitwear showed faint green / purple vertical streaks at 1.5 on some prompts, gone lower.
 - Time: about 1.9x per image above CFG 1 (12 steps, int8 on an RTX 5090: about 3.1 s at CFG 1, 5.8 s at 2.0).
+
+## MOSS-edit layer ablation (2026-11-10)
+
+Status: initial group screen and selected second-seed contrast completed. Additional measurements and training are on hold pending the user's manual tests (2026-11-11 follow-up below). This document separates weight measurements, rendering observations and untested hypotheses. No training is started and no original model / LoRA is rewritten.
+
+### Question
+
+Can the local `MOSS/MOSS-edit.safetensors` retain useful editing behavior with fewer adapted layers, and subsequently with fewer LoRA directions? The Turbo result is a precedent to investigate, not an assumption about editing.
+
+The Turbo v0.7 file records layers **24–41**, rank **2**, 3,564,208 bytes. The edit file has **297,382,216 bytes**, 504 BF16 tensors, **252 adapted modules at rank 64** across layers **0–41**: separate q/k/v, o, ffn_up_gate and ffn_down. No adapted tensors lie outside those layers. Its embedded configuration names SFT and the contract `ref-prefix-only-t0__target-text-original-moss-v1`.
+
+### Storage and reproducibility
+
+All persistent images, reference images, contact sheets, spectra and exact API graphs are under:
+
+`I:\HaDeS_MOSS\moss_edit_2026-11-10`
+
+The repository holds the experiment script and this report. ComfyUI's native PreviewImage node produces a temporary PNG; the script downloads and verifies it, stores its bytes and record on I:, then deletes only that exact temporary from this checkout's temp directory. The native Load Image node rejects paths outside its configured directories, so the script stages the two references through the standard temporary-image upload endpoint and removes those temporary copies after a successful batch. It does not change ComfyUI's directories or bypass its path checks. No test images are uploaded into the persistent input folder.
+
+Each image has a JSON record with the graph, seed, settings, model identities / SHA256, reference identity, prompt id, cache messages, elapsed graph time and image SHA256. An existing image with a different fingerprint is rejected. Timings are whole-graph timings, not sampler-only benchmarks. `invocations.jsonl` records hardware, versions, arguments and the script hash. Run one experiment process at a time; it stops before submitting if unrelated work is queued, and never clears or interrupts the user's queue.
+
+Measured environment: Windows, RTX 5090 (32 GB), ComfyUI 0.43.0, Python 3.11.9, PyTorch 2.9.1+cu130, comfy-kitchen 0.2.40, launched with `--use-sage-attention`. Model SHA256 identities are in `model_identities.json`; the edit LoRA is `17a48b8c605dcffdedb92a2b887d18cf316505be90802717669fb6556098dcdf`. The exact graphs in the adjacent image records are replayable API prompts; they are not frontend workflow JSON.
+
+### Phase 0 — weight-space spectrum
+
+For each of the 252 modules, compute the singular values of `up @ down` through QR of its factors, without materializing the full weight delta. Report squared singular-value energy. This measures approximation of the weights, not instruction success or causal layer importance.
+
+Initial in-memory measurement on the original file:
+
+| Retained rank | Mean energy across modules | Worst module |
+|---|---:|---:|
+| 2 | 12.82% | 5.56% |
+| 4 | 19.65% | 10.79% |
+| 8 | 30.23% | 20.56% |
+| 16 | 46.91% | 36.69% |
+| 32 | 71.28% | 62.69% |
+| 48 | 88.40% | 83.52% |
+| 64 | 100% | 100% |
+
+Rank 2 is not a close weight-space approximation. This does not establish the minimum rank for editing and does not rule out layer pruning. q/k have a more concentrated spectrum than the FFNs; their functional tolerances remain unmeasured.
+
+### Phase 1 — controlled references and full-model controls
+
+Generate two original references with unmodified MOSS SFT: a red mug / blue book / plant still life, and a woman in a blue jacket in a park. Reference generation: 1024×1024, er_sde / simple, 25 steps, CFG 2.5, fixed seeds 32101 / 32102. Inspect references before interpreting edits.
+
+Four initial tasks: recolor the mug, remove the mug, recolor the jacket, and preserve the still life unchanged. Both fixed target captions and direct instructions are recorded in the script. Prompt style is a separate experimental variable. The calibration below selected **direct instructions** for the layer experiment; the script defaults to that style. Do not vary prompt style between a full render and its ablations.
+
+Initial editing settings: SFT BF16, `mossImage_base_txt_int4.safetensors`, FLUX.2 VAE, native Text Encode MOSS-Image Edit on both conditions, `edit_format=Moss-Image-Edit`, 1024 reference and output, empty target latent, denoise 1, strength 1, Euler / normal, 30 steps, CFG 4, model default shift 5, no SLG and no Turbo.
+
+Controls: ordinary full LoRA loader (`stock`), all group strengths 1 (`full`), no edit LoRA but the same reference conditioning (`none`). Check full-vs-stock image differences before attributing differences to layer removal. The no-LoRA control is not ordinary img2img.
+
+### Phase 2 — layer screening
+
+Keep native rank 64. For seven contiguous groups of six layers, render both keep-only (`in_XX_YY`) and leave-out (`out_XX_YY`). Also compare early 0–23 and late 24–41 as direct tests of transferring the Turbo observation. One seed is a screen, not a generalization claim. Validate promising combinations with another seed and held-out tasks before calling them sufficient.
+
+Metrics: output-to-reference pixel MAE, edited-region MAE, outside-region MAE, coarse face-region MAE for clothing, and full-LoRA-to-variant MAE / maximum difference. Regions are coarse, predeclared boxes, not segmentation masks. Inspect the reference to check their placement. Pixel distance alone cannot certify edit success; a failed edit that simply copies the reference can score well on preservation. Review contact sheets and full-resolution images for instruction success, identity, composition and artifacts.
+
+### Later phases — not yet run
+
+- Refine useful layer ranges and test their combinations, then split attention vs FFN if the first screen warrants it.
+- Test lower ranks only after layer selection. Keep rank and layer pruning separate initially.
+- Validate candidates with the HaDeS 8-step Turbo separately. Turbo settings change the experiment and require a separate output directory.
+- Consider a small edit-training or teacher-distillation experiment only after a reduced configuration is supported by actual edits. Existing DMD speed-training scripts do not by themselves establish an editing-training recipe.
+
+### Commands
+
+Run from the Suite repository with ComfyUI's Python:
+
+```powershell
+python -B tools/moss_edit_eval.py --mode spectra
+python -B tools/moss_edit_eval.py --mode prepare
+python -B tools/moss_edit_eval.py --mode run --prompt-style caption --configs stock --cases mug_blue jacket_red identity --seeds 1000
+python -B tools/moss_edit_eval.py --mode run --configs stock full none --seeds 1000
+python -B tools/moss_edit_eval.py --mode run --configs in_00_05 out_00_05 in_06_11 out_06_11 in_12_17 out_12_17 in_18_23 out_18_23 in_24_29 out_24_29 in_30_35 out_30_35 in_36_41 out_36_41 early_00_23 late_24_41 --seeds 1000
+python -B tools/moss_edit_eval.py --mode run --configs stock out_06_11 --seeds 1001
+python -B tools/moss_edit_eval.py --mode report --seeds 1000 1001
+```
+
+### Sources and interpretation
+
+- [Original training code and architecture](https://github.com/Chenkin-x/Moss-Image-Edit).
+- [Publisher training configuration](https://github.com/Chenkin-x/Moss-Image-Edit/blob/main/configs/train.json): rank / alpha 64, inference shift 5, validation 30 steps / CFG 4. The published config is context, not proof that every value describes the downloaded checkpoint's exact training run.
+- [Publisher ComfyUI guide](https://github.com/Chenkin-x/ComfyUI-Moss-Image-Edit/blob/main/README.en.md): SFT as starting point and Euler / normal / 30 / CFG 4. Its default reference limit differs from this experiment; here reference and output are both 1024 to isolate the layer study at matched sizes.
+
+Rendering observations and run counts follow below.
+
+### Calibration observations — seed 1000
+
+Both references were visually checked before the layer screen. The mug and book have separated silhouettes; the plant's outer leaves are partly cropped by the source framing. The portrait clearly shows the jacket and face. The region boxes are coarse and include some surroundings, not perfect object masks.
+
+The full edit LoRA made the requested color changes with either prompt style, but target captions reconstructed more of the scene. For the mug, book proportions and plant placement drifted; for the jacket, facial freckles and the park layout changed more. Direct instructions preserved the source composition substantially better in these two examples. The caption no-op control also reconstructed the still life (whole-image MAE 26.23 / 255).
+
+| Task | Caption: outside-region MAE | Instruction: outside-region MAE | Caption: face-box MAE | Instruction: face-box MAE |
+|---|---:|---:|---:|---:|
+| Mug recolor | 34.86 | 4.56 | — | — |
+| Jacket recolor | 38.69 | 12.10 | 30.36 | 9.42 |
+
+These are paired examples with the same reference, seed, model and sampler, not a broad prompt-style benchmark. They justify freezing direct instructions for this experiment. They do not establish that descriptions are always inferior or that face-box MAE measures semantic identity.
+
+### Full-model controls — direct instructions, seed 1000
+
+All four `stock` / `full` pairs have **maximum pixel difference 0**. The group-loading route is therefore an exact control on these renders. The no-edit-LoRA images keep the red mug for both recolor and removal instructions: reference conditioning alone does not perform those requested edits in this test.
+
+| Task | Full: outside-region MAE / 255 | No LoRA: outside-region MAE / 255 | No LoRA: distance to full / 255 |
+|---|---:|---:|---:|
+| Mug recolor | 4.56 | 14.15 | 22.06 |
+| Mug removal | 6.90 | 13.04 | 33.20 |
+| Jacket recolor | 12.10 | 20.66 | 70.58 |
+| Keep unchanged | 5.60 | 17.75 | 21.70 |
+
+The full LoRA does not preserve pixels perfectly even for the no-op task. Its own residual drift is recorded rather than counted as an effect of pruning. These 12 control images and the three caption calibration images are separate from the layer screen.
+
+### First layer observation — late 24–41 only
+
+With native rank 64 and the same direct instructions / seed 1000, keeping only layers 24–41 leaves the mug red in the recolor task. The jacket render recolors its collar but leaves most of the body blue / purple and alters facial texture. Thus the Turbo layer range is not sufficient for these two edit examples at these settings.
+
+| Task | Late-only distance to full / 255 | Late-only outside-region MAE / 255 |
+|---|---:|---:|
+| Mug recolor | 20.84 | 12.55 |
+| Mug removal | 25.60 | 12.61 |
+| Jacket recolor | 55.97 | 17.11 |
+| Keep unchanged | 8.63 | 11.72 |
+
+This establishes a failure of that specific subset on the observed tasks; it does not yet identify which omitted layers are necessary or establish that no smaller subset can work.
+
+### Complementary early range and task dependence
+
+Keeping only layers 0–23 also fails both mug instructions: the mug remains red and present. The jacket becomes purple / magenta with visible texture and shirt drift rather than the requested clean red recolor. Neither contiguous half tested so far is sufficient for these examples.
+
+Removing only layers 0–5 gives a different result: mug and jacket recoloring work on visual inspection, but mug removal fails and leaves a clearly visible red mug. Its distance to the full removal is 26.08 / 255, despite outside-region MAE of only 6.68 / 255. This is a concrete example of why low preservation error cannot certify successful editing. Layer requirements depend on the task; a color-only screen would miss this regression.
+
+Removing layers 24–29 causes explicit object-selection failures on this seed: recoloring produces both a red mug and a blue mug in place of the book, and removal deletes the book while leaving the red mug. These are visually observed instruction failures, not merely pixel drift. Removing layers 6–11, 12–17 or 18–23 also leaves a visible red mug in the removal task.
+
+### Implications for a future training experiment
+
+The current screen measures pruning an existing adapter at fixed strength, not the capacity of a newly trained small adapter. Failing a keep-only range does not prove that training on that range cannot learn editing. Likewise, a large weight-space SVD error does not establish a functional lower bound on rank.
+
+Before training, expand the held-out set beyond these two photographic references: another object deletion, replacement / insertion, spatial changes, and identity preservation under clothing edits. Keep a full-LoRA control for every reference / instruction / seed. If hard group removal remains unsuccessful, measure individual layers and partial group strengths before selecting a student architecture. Rank truncation requires its own full-vs-truncated render controls; the spectrum alone is insufficient.
+
+A future edit-training script needs paired reference / target conditioning with the published edit contract, reference-prefix handling and target-only training loss. The existing speed-distillation scripts are not an editing trainer. No training launch, training dataset, reduced checkpoint export or Turbo-edit compatibility claim is part of this measurement run.
+
+### Completed group screen — seed 1000
+
+All 19 configurations completed all four tasks: **76 instruction-style images**, including 12 controls and 64 ablations. All seven keep-only groups leave the mug red in the blue-mug task; none reproduces the full adapter's whole-jacket red recolor. Both larger contiguous subsets also fail those tasks. All seven leave-out groups fail mug removal: the mug remains, and removing 24–29 instead removes the book.
+
+Distances below are RGB pixel MAE against the full stock-loader output, on a 0–255 scale. They are not edit-quality scores. Smaller numbers can hide a categorical instruction failure.
+
+| Removed layers | Mug recolor | Mug removal | Jacket recolor | No-op |
+|---|---:|---:|---:|---:|
+| 0–5 | 5.74 | 26.08 | 6.74 | 5.79 |
+| 6–11 | 3.09 | 21.98 | 2.30 | 2.74 |
+| 12–17 | 3.48 | 22.53 | 5.62 | 2.21 |
+| 18–23 | 8.70 | 19.64 | 15.66 | 12.05 |
+| 24–29 | 39.02 | 41.68 | 37.08 | 14.65 |
+| 30–35 | 15.48 | 27.54 | 32.09 | 13.26 |
+| 36–41 | 15.32 | 31.97 | 38.89 | 14.80 |
+
+Visual interpretation: removing 0–5, 6–11 or 12–17 retains both requested color changes with comparatively small drift, but fails removal. Removing 18–23 keeps the color changes with noticeable shirt / texture drift. Removing 24–29 introduces object-selection errors and substantial portrait reconstruction; removing 30–35 changes the portrait and clothing details substantially; removing 36–41 produces a dark burgundy jacket rather than the full adapter's bright red. Keep-only and no-op images, and every unrounded metric, remain in the archived records and contact sheets.
+
+No tested reduction passes the three edit instructions on this seed. This does not prove all 42 layers individually necessary: these are group interventions at strength 0 / 1, on two references with fixed instructions. Finer pruning, different strengths, rank approximation and newly trained adapters remain open questions.
+
+The group node still reads the original adapter and excludes selected model patches. This experiment therefore measures functional ablation, not the disk size, peak VRAM or inference speed of an exported compact file. The base model remains unchanged. No memory or speed improvement is claimed from the graph timings.
+
+For the second-seed contrast, select `out_06_11`: it has the lowest unweighted mean distance to full across the four tasks (7.53 / 255). This is a selection criterion for further inspection, not acceptance. Re-render both `stock` and `out_06_11` on all four tasks at seed 1001; do not compare different seeds to each other.
+
+### Second-seed contrast and final inventory
+
+Seed 1001 confirms the selected variant's categorical failure: `stock` removes the mug and `out_06_11` leaves it red and present. Both still perform the two requested color changes, with differences in texture / jacket details. This is a repeat on the same references and instructions, not a held-out-scene validation.
+
+| Task | Without 6–11: distance to full, seed 1000 | Without 6–11: distance to full, seed 1001 |
+|---|---:|---:|
+| Mug recolor | 3.09 | 2.70 |
+| Mug removal | 21.98 | 21.23 |
+| Jacket recolor | 2.30 | 4.36 |
+| Keep unchanged | 2.74 | 2.92 |
+
+Final archive: **89 PNGs** = 2 SFT references + 3 caption calibration renders + 76 initial instruction renders + 8 second-seed renders. `metrics_instruction.json` and `.csv` contain all **84 instruction renders** after the final combined report. `metrics_caption.json` contains the three calibration renders. Eight instruction contact sheets cover four tasks and two seeds. Original model / LoRA files are untouched; native temporary reference copies were removed after successful batches. Total experiment directory at completion: 184,484,304 bytes, including records and sheets.
+
+Offline verification: four experiment tests pass, checking identical conditioning / sampling between ablations, complementary keep-only / leave-out strengths, non-square region coordinates and rejection of modified cached images. `git diff --check` passes. No production node changes, commits or pushes were made for this experiment.
+
+**Decision after the initial screen (superseded by the follow-up below):** no compact adapter is supported by this group screen. The full adapter remains the comparison baseline, not a guarantee of reliable general editing. The Turbo 24–41 shortcut does not transfer to the tested editing tasks. A promise of a sub-4 MB edit adapter or a decision to train one is not supported by these data.
+
+### Manual follow-up and publisher documentation (2026-11-11)
+
+**Current decision: wait for the user's further manual tests.** Do not launch more layer / rank measurements or training for now. Reconsider whether to resume or abandon compression after establishing whether the original adapter is useful enough for the intended edits. No additional renders were launched for this follow-up.
+
+#### User observations and supplied screenshots
+
+The user tested a different scene: a large red coffee mug with rising steam on a wooden table beside an open notebook and fountain pen. Source image: `H:/Comfy_UI_V61/ComfyUI/output/HaDeS/MOSS_LoWeR_v0.9_Turbo/HaDeS_MOSS_x2_refined 1200_00013_.png` (2304×3072). The user reports complete mug removal with only one tested seed; the total number of seeds was not supplied, so no success rate is calculated. Color changes are reported to work very well, consistent with the successful recolors in the controlled screen.
+
+Five supplied workflow screenshots show different failure modes: the mug remains while steam is removed; the handle or body is partially erased; the mug becomes translucent or leaves a floating rim / coffee surface. In the image the user identifies as the successful removal, the mug body is absent, but a dark handle-like remnant / shadow and a pale curved patch remain on the tabletop. Object disappearance and clean background reconstruction are therefore separate criteria. The examples demonstrate unreliable removal in this workflow; they do not establish that removal is impossible.
+
+The preceding direct instruction explicitly requested removal of the entire red mug, handle, coffee, steam and shadow, reconstruction of matching wood grain, and preservation of the notebook, pen and background. These screenshots alone do not establish the exact instruction and all active settings for every result. They are qualitative evidence, not additional rows in the 84-render controlled metric table. Attachment identifiers: `codex-clipboard-ffd19ef0-334d-4e95-8a75-8ae81a9e351c.png`, `codex-clipboard-665470f5-926c-4e65-a710-47d0fa27c036.png`, `codex-clipboard-c7c1a0bd-afc1-42ae-9e72-fef15d385f73.png`, `codex-clipboard-659debe8-2470-419d-bcd0-721aaf3ba5d9.png`, `codex-clipboard-db861aee-6d41-4962-bef5-13491e06a893.png`. These are chat attachments from temporary storage, not archived full-resolution output / workflow records in the experiment directory.
+
+The screenshots display a Base BF16 model selection, MOSS-edit and a HaDeS Turbo node. The initial controlled screen used SFT, 30 steps / CFG 4 and no Turbo. The new observations must not be pooled with that screen or attributed solely to the edit LoRA without matched settings. In particular, the screenshots do not isolate any effect of Turbo. In the original controlled still life, the full edit adapter removed the mug at both seeds 1000 and 1001; that success does not establish reliability on this new scene.
+
+The user also reports that caption mode omitted the mug at 1 MP and mentioned it at 2 MP. This is a reported resolution-dependent caption observation, not a controlled measurement of edit success or proof that the edit conditioning contains no mug information at 1 MP. Caption generation, reference encoding and target output resolution must be distinguished if testing resumes.
+
+The user's assessment that this LoRA is substantially inferior to a full editing model is recorded as a qualitative impression. The comparison model and matched settings / results have not been supplied, so this is not a measured cross-model ranking.
+
+#### What the publisher actually documents
+
+Checked on 2026-11-11: the [publisher's model card](https://huggingface.co/chinoll/Moss-Image-Edit/blob/main/README.md) presents a LoRA for text-guided color, clothing, lighting, season and style changes on MOSS Base or SFT. The card does not provide an explicit object-removal reliability guarantee, a removal benchmark or an exhaustive supported / unsupported operation list. This absence does not prove deletion is unsupported.
+
+The [author's project overview](https://github.com/Chenkin-x/Moss-Image-Edit/blob/main/README.en.md) additionally describes expression and scene changes and multiple references, with selected showcase outputs. Those examples are demonstrations, not a measured success rate across seeds.
+
+The [author's ComfyUI guide](https://github.com/Chenkin-x/ComfyUI-Moss-Image-Edit/blob/main/README.en.md) recommends starting with SFT and notes that the patch was trained against SFT; Base quality should be evaluated separately. Its starting settings are Euler / normal, 30 steps, CFG 4, strength 1 and denoise 1, with a 512-pixel reference long-edge limit and approximately 1 MP output. Reference and output resolution are separate controls. The guide does not establish quality for the Turbo combination shown here.
+
+#### Revised interpretation
+
+The initial screen establishes losses relative to the full adapter on its specific successful examples. It does not establish that the full adapter is a generally reliable object remover, or that removal alone is sufficient to judge its value. The manual examples expose a limitation in the tested workflow before any compression. Recoloring remains a demonstrated strength on the controlled examples and a positive user observation; reliable general object deletion remains unestablished. First decide the useful task scope of the original adapter from the user's pending tests, then decide whether further compression measurements are worth pursuing.
+
+### Other published editing adapters and the full-model premise (2026-11-11)
+
+Documentation search only; no downloads, installations or generations. Chinoll is **not the only publicly available MOSS editing LoRA**. The following are distinct projects, not an exhaustive registry:
+
+| Project | Publisher's description / relevance |
+|---|---|
+| [akhaliq/MOSS-Image-Edit-HQ](https://huggingface.co/akhaliq/MOSS-Image-Edit-HQ) | SFT editing LoRA; the card recommends armV5, approximately 496 MB. Its training history explicitly includes removal data. The author reports v6 regressions and quality loss with an 8-step speed adapter. A candidate for evaluation, not evidence of consistent removal on our scene. |
+| [thearkorbit/moss-image-edit-lora-poc](https://huggingface.co/thearkorbit/moss-image-edit-lora-poc) | General editing proof of concept. The author reports only one successful edit among six displayed test examples and says most edits still copy the source. Not established as a reliable removal alternative. |
+| [pleiades7/MOSS-Image-CharRef-PoC](https://huggingface.co/pleiades7/MOSS-Image-CharRef-PoC) | Early Base adapter for transferring an anime character into new scenes / poses. Specialized reference generation, not a documented general object remover. |
+
+HQ publishes native ai-toolkit weights and a separate converted plugin-format file. Its native instructions specify `edit_format=ai-toolkit`, unlike chinoll's `Moss-Image-Edit`. File format and reference conditioning must match; do not assume an arbitrary file swap preserves the experiment. The card mixes older instructions with newer recommendations, so identify the exact checkpoint and integration path before any future test. No Suite compatibility has been verified here.
+
+The [official MOSS repository's model list](https://github.com/OpenMOSS/MOSS-Image#models) lists Base (text-to-image) and SFT (fine-tuned from Base). The reviewed official releases and community cards do not establish an available official full MOSS instruction-edit checkpoint or any cross-seed object-removal guarantee. Thus there is no verified full MOSS editor against which to assert that chinoll is inferior. Loading the complete Base / SFT generator is not equivalent to loading a separately trained editing model; our full-LoRA control means all adapter layers enabled, not a full edit fine-tune.
+
+No reviewed source establishes reliable removal across seeds and scenes for these alternative adapters. Including removal in training and showing selected successful edits are not sufficient to establish that reliability. The identity of any other full editing model the user intends to compare remains unspecified. The hold on additional measurements / training remains in effect.
+
+### Preliminary user comparison: HQ armV5 and armV7s1 (2026-11-11)
+
+After manual testing, the user reports that HQ is more reliable than the previously tested chinoll adapter, but still has limitations. In the user's initial comparison, **armV5 has better visual quality**, while **armV7s1 produces excessively saturated outputs**. Further user tests are pending.
+
+These are user-reported qualitative observations. No paired output files, exact settings, seeds or trial counts were supplied for this comparison; no success rate, objective quality ranking or cause of the saturation is established. Do not infer that armV7s1 improves editing from its version number. Treat armV5 as the provisional comparison baseline and armV7s1 as experimental, pending matched comparisons. No new automated measurements or training were launched.
+
+## Dev Tools validation (2026-11-11)
+
+Implemented `MOSS Layout Regions` and `MOSS Image Audit` as V3 nodes, registered alongside the existing Suite nodes. These are image-space utilities, not further edit-LoRA measurements. No model generation or training was resumed. No new packages were installed.
+
+### Numerical and geometry controls
+
+- `tests/test_moss_dev_nodes.py`: 15 CPU tests cover fractional coordinates (including the compiler's nine-decimal normalization), overlapping-box union, duplicate selections, canvas clipping, invalid selections / coordinate contracts, exact identity, an independently calculated RGB change, signed luma / saturation, strict change thresholds, gain-independent metrics, shared / paired masks, empty regions as null, explicit batch pairing, dimension mismatch and invalid values. Also checks both V3 schemas through the legacy pack registry and Telemetry ingestion.
+- Existing Suite checks: 64 tests run successfully, one opt-in CUDA test skipped. Frontend checks: 3 tests pass, including report layout space, text wrapping and non-serialization. JavaScript syntax and `git diff --check` pass. No claim of CUDA / ROCm / MPS numerical validation for the new nodes.
+
+### Real ComfyUI example
+
+`examples/HaDeS MOSS Suite - Dev Tools.json` was built from the running server's `/object_info`, executed through the real queue and opened / run in the frontend. Validation used a separate ComfyUI 0.43.0 CPU instance with only this Suite enabled; the user's main ComfyUI session was not restarted or modified. All validation image temporaries and run records are under `I:/HaDeS_MOSS/dev_tools_validation`.
+
+The 256×256 reference is encoded RGB (48,64,80). A native masked composition substitutes RGB (176,64,80) in the Layout Editor box `[32,64,128,192]`. Expected union: 12,288 pixels, 18.75% of the canvas. Two API executions, including cached reuse, succeeded and exposed both node reports. Measured results:
+
+| Measurement | Result |
+|---|---:|
+| Global RGB MAE / 255 | 8.0000004731 |
+| Inside RGB MAE / 255 | 42.6666691899 |
+| Outside RGB MAE / 255 | 0 |
+| Global changed pixels | 18.75% |
+| Inside changed pixels | 100% |
+
+The last decimal places reflect float32 image arithmetic. Exact graph, histories, output metrics and region record are archived as `api_run.json`, `metrics.json` and `regions.json`. This is a correctness control, not a general performance benchmark.
+
+### Frontend sizing correction
+
+The first report widget used a CSS-only minimum height that the node layout did not reserve, allowing its text area to extend beyond the node. The correction declares its minimum height through the native widget layout, allows wrapping of long lines and internal scrolling, and excludes measured report text from serialized workflow widgets. Both reports were visually checked at 85% canvas zoom; Layout Regions was enlarged and reduced, and Image Audit enlarged, without text leaving their node bodies. At low canvas zoom the frontend can hide DOM text widgets; this is separate from overflow. Layout Regions is an output node too, so its report is available when ComfyUI reuses a cached result.
+
+Limitations: matching-size normalized RGB inputs only; explicit alpha / color-profile handling must happen before comparison. Masks are binarized at 0.5. Boxes are not segmentation, luma is measured on encoded RGB, and no metric certifies edit success, semantic identity or visual quality. Analysis is per pair on CPU, with the full difference-image batch retained as an output. Large-image throughput and peak RAM were not benchmarked. Nodes 2.0 was initially untested; the follow-up below closes that frontend validation gap.
+
+### Three-view frontend acceptance (2026-11-11)
+
+Both Dev Tools nodes were exercised in ComfyUI 0.43.0 / frontend 1.57.4 in three configurations: classic canvas with HaDeS widgets, classic canvas with standard ComfyUI widgets, and Nodes 2.0 / Vue with HaDeS widgets. The separate CPU test instance used the existing model-free Dev Tools workflow; no model or adapter was loaded and the user's main session was unchanged. Test settings were restored to classic canvas / HaDeS widgets after the comparison. All six successful frontend-submitted executions, including their exact graphs, cached-node messages and both reports, are archived in `I:/HaDeS_MOSS/dev_tools_validation/three_views.json`; mode annotations correspond to the observed setting changes.
+
+Two frontend failures were found and fixed:
+
+- The HaDeS widget hook classified the native report widget as decorative, so switching to standard widgets hid the reports. `addMeasurementReport` now excludes just this output widget from the decorative-widget collection; banners and replacement input widgets still follow the style setting.
+- Setting `inputEl.readOnly` protected only the classic textarea. Vue creates its own textarea and needs `options.read_only`; both are now set. Actual DOM inspection confirmed read-only report text in Vue and the classic canvas.
+
+| View | Execution / reports | Controls and sizing |
+|---|---|---|
+| Classic + HaDeS | Both reports, mask / candidate / difference previews and cached execution verified | Controls restored after style switching; reports remain within node bodies. Prior classic resize checks supplemented by this style-switch test. |
+| Classic + standard widgets | Both reports visible and read-only after the fix; queue execution succeeds | Edited padding through the native numeric input; enlarged both nodes without report overflow. |
+| Nodes 2.0 / Vue | Both reports visible and read-only; queue execution and previews succeed | Edited padding and difference gain through HaDeS controls; enlarged both nodes and reduced Image Audit; internal report scrolling keeps longer output contained. |
+
+The frontend test changed padding from 0 to 4 in Vue: union increased from 12,288 to 14,144 pixels, with global MAE approximately 9.208334 and outside MAE zero. Resetting padding to 0 through standard widgets restored global MAE approximately 8 and outside MAE zero. Difference gain was changed from 1 to 1.3 without changing numeric metrics. Cached runs and the final return to HaDeS widgets preserved the reports and measurements.
+
+Frontend regressions now total **4 passing tests**, including the style-switch case and Vue's read-only option. These mocked checks supplement, rather than replace, the real three-view exercise. This is not an exhaustive test across frontend releases. Future new nodes must undergo the same three-view acceptance, as recorded in the repository's `AGENTS.md`.

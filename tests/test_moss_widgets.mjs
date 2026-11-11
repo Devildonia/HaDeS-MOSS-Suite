@@ -39,3 +39,51 @@ test("global switch leaves other HaDeS suites untouched", () => {
     context.setGlobalClassicUI(false);
     assert.equal(other.flags.classic_ui, true);
 });
+
+test("dev reports reserve layout height, wrap text and do not serialize measured output", () => {
+    const report = { inputEl: { style: {} }, options: {} };
+    let oldCalls = 0, repaints = 0;
+    const node = { onExecuted() { oldCalls++; }, setDirtyCanvas() { repaints++; } };
+    const context = vm.createContext({ app: {}, ComfyWidgets: { STRING: () => ({ widget: report }) } });
+    const source = readFileSync(new URL("../web/moss_dev_tools.js", import.meta.url), "utf8")
+        .replace(/^import .*;\r?\n/gm, "").replace(/^export /gm, "");
+    vm.runInContext(source, context);
+    context.addMeasurementReport(node);
+    assert.equal(report.options.getMinHeight(), 180);
+    assert.equal(report.inputEl.style.minHeight, "0");
+    assert.equal(report.inputEl.style.overflowWrap, "anywhere");
+    assert.equal(report.inputEl.style.overflow, "auto");
+    assert.equal(report.inputEl.readOnly, true);
+    assert.equal(report.options.read_only, true);
+    assert.equal(report.options.serialize, false);
+    assert.equal(report.serializeValue(), undefined);
+    node.onExecuted({ text: ["first", "second"] });
+    assert.equal(report.value, "first\nsecond");
+    node.onExecuted({});
+    assert.equal(report.value, "");
+    assert.equal(oldCalls, 2);
+    assert.equal(repaints, 2);
+});
+
+test("measurement reports stay visible through standard / HaDeS widget toggles", () => {
+    const { context, node } = setup();
+    const report = { name: "measurement_report", inputEl: { style: {} }, options: {}, _isHadesCustom: true,
+        hidden: false, computeSize: () => [380, 180] };
+    const banner = { computeSize: () => [380, 28], draw() {} };
+    const target = node("HaDeSMossImageAudit");
+    target._hadesCustomWidgets = [banner, report];
+    target.widgets = [report];
+    context.ComfyWidgets = { STRING: () => ({ widget: report }) };
+    const source = readFileSync(new URL("../web/moss_dev_tools.js", import.meta.url), "utf8")
+        .replace(/^import .*;\r?\n/gm, "").replace(/^export /gm, "");
+    vm.runInContext(source, context);
+    context.addMeasurementReport(target);
+    context.setNodeClassicUI(target, true, true);
+    assert.equal(banner.hidden, true);
+    assert.equal(report.hidden, false);
+    assert.equal(report.computeSize()[1], 180);
+    context.setNodeClassicUI(target, false, true);
+    assert.equal(banner.hidden, false);
+    assert.equal(report.hidden, false);
+    assert.equal(report.options.read_only, true);
+});

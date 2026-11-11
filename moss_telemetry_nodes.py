@@ -8,6 +8,7 @@ NODE_NAMES = {
     "lora_extractor": "LoRA Extractor", "lora_block_weight": "LoRA Block Weight", "lora_merger": "LoRA Merger", "lora_resize": "LoRA Resize",
     "latent": "Latent", "layout": "Layout Compiler", "ksampler": "KSampler", "prompt_enhancer": "Prompt Enhancer",
     "multi_lora": "Multi-LoRA", "layout_editor": "Layout Editor", "loader": "Loader", "metadata_reader": "Metadata Reader", "control": "Control",
+    "layout_regions": "Layout Regions", "image_audit": "Image Audit",
 }
 
 

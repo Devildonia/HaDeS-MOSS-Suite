@@ -15,6 +15,7 @@ import {
 import { createMultiLoraWidget, multiLoraStatus } from "./moss_multilora.js";
 import { createLayoutEditorWidget, layoutEditorStatus } from "./moss_layout_editor.js";
 import { api } from "../../scripts/api.js";
+import { addMeasurementReport } from "./moss_dev_tools.js";
 
 // =============================================================================
 // HADES MOSS SUITE UI
@@ -300,6 +301,14 @@ for (const [cls, { title, sliders = {} }] of Object.entries(GENERIC)) {
     INSTALLERS[cls] = (node) => {
         banner(node, { title });
         styleWidgets(node, { sliders });
+    };
+}
+
+for (const [cls, title] of Object.entries({ HaDeSMossLayoutRegions: "LAYOUT REGIONS · DEV TOOLS", HaDeSMossImageAudit: "IMAGE AUDIT · DEV TOOLS" })) {
+    INSTALLERS[cls] = (node) => {
+        banner(node, { title });
+        styleWidgets(node, { sliders: { difference_gain: [0, 16], change_threshold: [0, 32] } });
+        addMeasurementReport(node);
     };
 }
 

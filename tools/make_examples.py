@@ -72,6 +72,29 @@ def telemetry(*infos):
 
 
 EXAMPLES = {
+    "HaDeS MOSS Suite - Dev Tools": {
+        "reference": ("EmptyImage", {"width": 256, "height": 256, "batch_size": 1, "color": 0x304050}),
+        "patch": ("EmptyImage", {"width": 256, "height": 256, "batch_size": 1, "color": 0xB04050}),
+        "editor": ("HaDeSMossLayoutEditor", {"draft": json.dumps({"width": 256, "height": 256, "bbox_coord_space": "abs", "bbox_format": "xyxy",
+            "summary": {"caption": "Known red-channel change in one rectangle"},
+            "items": [{"label": "object", "caption": "test region", "bbox": [32, 64, 128, 192]}]}), "image": ("reference", 0)}),
+        "regions": ("HaDeSMossLayoutRegions", {"draft": ("editor", 0), "selection": "1", "padding": 0}),
+        "candidate": ("ImageCompositeMasked", {"destination": ("reference", 0), "source": ("patch", 0), "x": 0, "y": 0,
+                                                 "resize_source": False, "mask": ("regions", 0)}),
+        "audit": ("HaDeSMossImageAudit", {"reference": ("reference", 0), "candidate": ("candidate", 0), "region_mask": ("regions", 0),
+            "change_threshold": 2.0, "difference_gain": 1.0, "reference_label": "RGB 48,64,80", "candidate_label": "red +128 inside region"}),
+        "mask_preview": ("PreviewImage", {"images": ("regions", 1)}),
+        "candidate_preview": ("PreviewImage", {"images": ("candidate", 0)}),
+        "difference_preview": ("PreviewImage", {"images": ("audit", 0)}),
+        "note": ("Note", {"text": "DEV TOOLS — no models required. Queue this workflow to verify the nodes.\n\n"
+            "Layout Editor -> Layout Regions produces the selected box mask. Native composition changes only its red channel by 128/255.\n\n"
+            "Expected (float32 tolerance): region 12,288 pixels (18.75%); inside MAE about 42.6667/255, outside MAE 0; global MAE 8/255 and changed 18.75%.\n\n"
+            "Move the box or change padding and rerun: measurements follow the actual union. No automatic resizing or alignment.\n\n"
+            "For real experiments replace the two Image Audit inputs with matched-size reference/candidate images. Put the reference in the Layout Editor background and match its canvas. Select boxes by 1-based draft order.\n\n"
+            "White = inside, not semantic segmentation. Differences do not establish edit success or quality. Per-pair metrics are in metrics_json; report can feed Suite Telemetry. Preview images are temporary."}),
+        "_layout": {"reference": (0, 0), "patch": (0, 230), "editor": (420, 0), "regions": (1020, 0), "candidate": (1460, 0),
+                    "audit": (1900, 0), "mask_preview": (1020, 600), "candidate_preview": (1460, 350), "difference_preview": (1900, 650), "note": (0, 850)},
+    },
     "HaDeS MOSS Suite - Merge, Save and Telemetry": {
         **loader(),  # SFT, its text encoder and VAE
         "base": ("UNETLoader", {"unet_name": BASE, "weight_dtype": "default"}),

@@ -6,7 +6,7 @@ Claims about what layer groups do are measured with [`tools/moss_eval.py`](https
 
 **Turbo (0.2.0, Turbo 8-steps in 0.3.0):** few-step LoRAs we trained for MOSS-Image SFT, [HaDeS MOSS Turbo and Turbo Diverse](https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo) (4 steps at CFG 1, 3.4 MB each), joined by Turbo 8-steps v0.7 (8 steps), and a `turbo` input on `MOSS KSampler` that applies them with their settings. How they were trained and measured: [`tools/RESULTS.md`](tools/RESULTS.md), [`tools/moss_dmd_train.py`](https://github.com/Devildonia/HaDeS-MOSS-Suite/blob/main/tools/moss_dmd_train.py).
 
-**New in 0.4.0:** `MOSS Loader` (model, text encoder and VAE in one node), `MOSS Multi-LoRA` (any number of LoRAs, searchable picker, strength per layer group), `MOSS Prompt Enhancer` (writes a caption or a layout with MOSS-Image's own text encoder), `MOSS Layout Editor` (boxes edited on a canvas), a shared seed on `MOSS Latent` and stochastic rounding in `MOSS Model Saver`. **0.4.1:** `MOSS Image Saver` (PNG with A1111 metadata and hashes for Civitai). **0.5.0:** `MOSS Metadata Reader` and model / LoRA recipes. **0.6.0:** `MOSS Control (color / depth)`. **0.6.1:** edit mode in `MOSS Prompt Enhancer` for MOSS-Image edit LoRAs.
+**New in 0.4.0:** `MOSS Loader` (model, text encoder and VAE in one node), `MOSS Multi-LoRA` (any number of LoRAs, searchable picker, strength per layer group), `MOSS Prompt Enhancer` (writes a caption or a layout with MOSS-Image's own text encoder), `MOSS Layout Editor` (boxes edited on a canvas), a shared seed on `MOSS Latent` and stochastic rounding in `MOSS Model Saver`. **0.4.1:** `MOSS Image Saver` (PNG with A1111 metadata and hashes for Civitai). **0.5.0:** `MOSS Metadata Reader` and model / LoRA recipes. **0.6.0:** `MOSS Control (color / depth)`. **0.6.1:** edit mode in `MOSS Prompt Enhancer` for MOSS-Image edit LoRAs. **0.7.0:** Dev Tools (`MOSS Layout Regions`, `MOSS Image Audit`) and `tools/moss_edit_eval.py`.
 
 ## Installation
 
@@ -189,6 +189,26 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 - ComfyUI's `--disable-metadata` suppresses all embedded metadata. The `parameters` output remains available as text.
 - **Outputs:** `parameters` (the text written into the images). The node shows the saved images like the core Save Image, and a note when the prompt or the sampling settings are missing from the metadata.
 
+### `MOSS Layout Regions` (`HaDeS/MOSS Dev Tools`)
+
+- **Class:** `HaDeSMossLayoutRegions` (V3 schema).
+- **Purpose:** rasterizes selected boxes from a Layout Editor / Prompt Enhancer layout draft into a binary mask. It does not segment objects or run a model.
+- **Inputs:** `draft`, `selection` (1-based draft order: `1`, `1,3` or `2-4`), `padding` (non-negative pixels around each box, clipped to the canvas). Duplicate selections count once; multiple boxes form a union. Check the selection after reordering boxes.
+- **Outputs:** `mask` (white inside, black outside), `preview` (RGB mask), `regions_json` (selected descriptions, original / rasterized coordinates, dimensions, union area), `info` (also accepted by Suite Telemetry). The report appears on the node, including after cached runs.
+- **Geometry:** exactly the draft's canvas, no automatic resizing. Fractional starts round down and ends up, matching the Layout Compiler's nine-decimal normalization; end edges are exclusive. A box includes background around an object. Use native mask tools on a copy if you need feathering for composition.
+
+### `MOSS Image Audit` (`HaDeS/MOSS Dev Tools`)
+
+- **Class:** `HaDeSMossImageAudit` (V3 schema).
+- **Inputs:** `reference`, `candidate`, optional `region_mask`, `change_threshold` (default 2 on a 0–255 scale), `difference_gain` (default 4, display only), `reference_label`, `candidate_label`.
+- **Outputs:** `difference_map` = `clamp(abs(candidate-reference) × gain, 0, 1)`, `report` (readable plus HADES_META for Telemetry), `metrics_json` (versioned, per-pair results and definitions). The node displays a read-only report with wrapping / scrolling; resizing and zoom do not alter measurements. It writes no image or report files itself.
+- **Metrics:** RGB absolute mean / maximum error on a 0–255 scale, percentage of pixels whose maximum channel difference × 255 is **strictly greater** than the threshold, candidate-minus-reference encoded-RGB luma (`0.2126 R + 0.7152 G + 0.0722 B`, not physical linear-light luminance), and mean HSV saturation change on a 0–1 scale (black has saturation zero). Color deltas are signed. Inputs are interpreted as encoded sRGB; no color-profile conversion is performed.
+- **Regions:** mask values `>= 0.5` are inside; lower values are outside. No fractional weighting. Metrics are computed globally and for both regions; an empty region is JSON `null`, not zero. Without a mask only global metrics are reported. These are differences, not edit success, identity or quality scores.
+- **Pairing:** RGB float images in `[0,1]`, identical `[batch,height,width,3]` shapes. No resizing, alignment, image broadcasting or alpha handling. A single mask may be shared across all pairs, or supply one mask per pair; spatial dimensions must match. Every pair retains its own results. Analysis runs on CPU one pair at a time; the difference-image batch remains in CPU memory.
+- **Use:** connect reference and candidate outputs to Image Audit; connect Layout Editor `draft` → Layout Regions `draft`, then Regions `mask` → Audit `region_mask`. Match the layout canvas to the images. Connect `difference_map` to Preview Image / Compare Images and save `metrics_json` with your normal text-saving tool if needed. Models, LoRAs and generation settings must be controlled separately; these nodes do not infer their provenance.
+
+The **Dev Tools** example runs without models: a native composition adds 128/255 to the red channel inside one box. Expected: 12,288 pixels (18.75%); inside MAE approximately 42.6667, outside MAE 0, global MAE 8. Float32 arithmetic can affect the last decimal places. Validation and limits are recorded in [`tools/RESULTS.md`](tools/RESULTS.md#dev-tools-validation-2026-11-11).
+
 ## Interface
 
 The nodes draw their own moss-green rows on the canvas (the HaDeS Anima Suite widget library with its own palette), in the classic canvas and in Nodes 2.0:
@@ -214,6 +234,7 @@ Every example loads the three files with the **MOSS Loader**, writes and encodes
 - **Turbo 8 steps + Upscale x2:** Turbo 8-steps v0.7 at 8 steps, then two groups to switch on or off from the group's right-click menu: a 2x upscale with RealESRGAN x2 (on; pixels only, about a second) and, on top of it, a MOSS pass at 2048 with the same turbo and seed at denoise 0.25 (off; adds hair, pores and fine texture the upscaler smooths, about 16 s). A note in the workflow explains both.
 - **Control (color, depth):** a depth map into MOSS Control with a color / depth control adapter in the Multi-LoRA (kept at 1.0), on the Prompt Enhancer's conditioning, with a preview of the encoded maps and the control in Telemetry. Load your own depth map and adapter; a note explains the color modes.
 - **LoRA Toolkit:** a LoRA through the Multi-LoRA into the sampler (add rows for more LoRAs; each row's group button holds its strength per group of layers); LoRA Merger, LoRA Resize and LoRA Extractor (with a finetune loader) come muted, since they write files. Pick your own LoRA in the Multi-LoRA's row.
+- **Dev Tools:** Layout Editor → Layout Regions → native masked composition → Image Audit, with mask / candidate / difference previews and known numerical results. No model files are needed.
 
 Every example was run end to end in ComfyUI 0.43.0 (muted nodes left out). `tools/make_examples.py` regenerates them from the node definitions of a running ComfyUI.
 
@@ -231,10 +252,15 @@ Frontend setting tests (Node.js, no extra packages):
 node --test custom_nodes/HaDeS-MOSS-Suite/tests/test_moss_widgets.mjs
 ```
 
+Dev Tools geometry / numerical / V3 schema checks (CPU, no model loading): `python custom_nodes/HaDeS-MOSS-Suite/tests/test_moss_dev_nodes.py`.
+
+Every new node also requires real frontend acceptance in classic HaDeS, classic standard widgets, and Nodes 2.0 / Vue. The Dev Tools were checked in all three on frontend 1.57.4; mode-switch fixes and execution evidence are in [`tools/RESULTS.md`](tools/RESULTS.md#three-view-frontend-acceptance-2026-11-11). Repository acceptance instructions: [`AGENTS.md`](AGENTS.md).
+
 Set `HADES_MOSS_TEST_CUDA=1` to include the CUDA quantized-export checks; the default run uses CPU. CI tests ComfyUI v0.43.0 on Linux and Windows, and upstream master on Linux. These checks use small synthetic weights; they do not measure image quality or full-model VRAM. Audit-fix evidence: [`docs/AUDIT_0.6.1.md`](docs/AUDIT_0.6.1.md).
 
 ## Tools
 
+- `tools/moss_edit_eval.py --mode spectra | prepare | run | report`: controlled-reference MOSS-edit layer ablations against a running ComfyUI. Persistent images and exact run records default to `I:/HaDeS_MOSS/moss_edit_2026-11-10`; protocol and measured results: [`tools/RESULTS.md`](tools/RESULTS.md#moss-edit-layer-ablation-2026-11-10).
 - `tools/moss_eval.py --mode bias | compare`: ethnic bias on neutral and explicit prompts, SFT vs Base on photo, illustration, text and layout prompts, with stock nodes only.
 - `tools/moss_eval.py --mode groups`: which layer groups carry the SFT → Base change (needs this suite installed).
 - `tools/moss_eval.py --mode lora --lora <name> --lora-model <file>`: which layer groups carry a LoRA's effect.
