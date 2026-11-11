@@ -159,7 +159,8 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 - **Class:** `HaDeSMossKSampler`
 - **Purpose:** KSampler with the official ComfyUI MOSS-Image template settings as defaults (25 steps, CFG 2.5, `er_sde` / `simple`, the model's shift 5.0), an optional flow shift, optional skip-layer guidance and optional decode. With the same settings it renders the same image as the stock graph (`KSampler`, `ModelSamplingAuraFlow`, `SkipLayerGuidanceDiTSimple`, `VAEDecode`).
 - **Inputs:** `model`, `positive`, `negative`, `latent_image`, `seed`, `steps`, `cfg`, `sampler_name`, `scheduler`, `denoise`, `flow_shift` (`0` keeps the model's 5.0), `slg` (`off`, `block 22, first half (Base template)`, `block 22, all steps`); optional `vae`, optional `turbo` (from `MOSS Turbo LoRA`: applies the LoRA and samples with SLG off and the turbo node's steps, CFG, sampler and scheduler, whatever those widgets say).
-- **Outputs:** `latent`, `image` (when a VAE is connected), `info` (the settings actually used).
+- **`denoise_mode`** (optional): `steps / denoise (core)` is the stock schedule: ComfyUI builds `int(steps / denoise)` steps and runs the last ones, so at few steps denoise moves in jumps (at 4 steps 0.7 and 0.8 give the same image, 0.9 starts from pure noise and ignores the input). `exact` makes denoise a point on the model's noise-time axis and runs every step from there with the scheduler's spacing: continuous at any step count, the same as core at denoise 1 (with shift 5, exact 0.89 starts at sigma 0.976). `info` records the start sigma either way. The exact mode's images are not measured yet; an independent study on the akhaliq 4-step LoRA ([lilting.ch](https://lilting.ch/en/articles/moss-image-4step-i2i-anima-m1-max), core mode plus manual sigmas) found sign text appearing from sigma 0.95 and an illustration turning photographic between 0.97 and 0.98.
+- **Outputs:** `latent`, `image` (when a VAE is connected), `info` (the settings actually used, start sigma included).
 - **Measured** ([`tools/RESULTS.md`](tools/RESULTS.md)): shift 5.0 is clean from 768 to 2048 px; SLG on block 22 did not change text accuracy on SFT or Base (blocks 24 / 26 made the only errors, on Base), so it is off by default; with euler, 25 steps render nearly the 60-step image with any scheduler and euler / beta does so at 15.
 
 ### `MOSS Turbo LoRA` (`HaDeS/MOSS Samplers`)
@@ -178,8 +179,8 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 - **Class:** `HaDeSMossSuiteTelemetry`
 - **Purpose:** reads the `info` outputs of up to 8 HaDeS MOSS nodes (their `HADES_META` trailer) and checks the pipeline against what was measured:
   - **error:** with a layout in the pipeline (Layout Editor, Layout Compiler or the Prompt Enhancer in `layout` mode), a latent or KSampler on another canvas (a layout prompt places its boxes on its own canvas); without a layout, different latent and KSampler sizes (img2img, an upscale pass) are not compared;
-  - **warning:** quantized models in a merge, TIES / DARE with a quantized model, LoRAs extracted / resized / merged below 97.9% energy (the lowest measured that stayed within the noise floor), a few-step LoRA in Multi-LoRA sampled at other steps than its file's metadata gives or below CFG 1, or stacked with the KSampler's turbo input;
-  - **note:** an int8 model from the MOSS Loader (with its measured speed and VRAM) or one loaded with a `weight_dtype` conversion, KSampler size outside 768²–2048², shift other than 5.0, SLG on, turbo LoRA at a strength other than 1.0, at a step count other than 4 or 8, at denoise below 1.0, above CFG 1 (with what was measured there) or with a sampler other than euler / er_sde (simple), a few-step LoRA in Multi-LoRA above CFG 1, fp16-fixed residual scale normalized, multi-line layout text with its box proportions.
+  - **warning:** quantized models in a merge, TIES / DARE with a quantized model, a LoRA extracted below 95.9% energy (the lowest measured that stayed close to its finetune), KSampler denoise below 1 that runs the full schedule from pure noise (at few steps, e.g. 0.9 at 4 steps: the input is ignored), a few-step LoRA in Multi-LoRA sampled at other steps than its file's metadata gives or below CFG 1, or stacked with the KSampler's turbo input;
+  - **note:** an int8 model from the MOSS Loader (with its measured speed and VRAM) or one loaded with a `weight_dtype` conversion, KSampler size outside 768²–2048², shift other than 5.0, SLG on, turbo LoRA at a strength other than 1.0, at a step count other than 4 or 8, at denoise below 1.0, above CFG 1 (with what was measured there) or with a sampler other than euler / er_sde (simple), a few-step LoRA in Multi-LoRA above CFG 1, fp16-fixed residual scale normalized, multi-line layout text with its box proportions, a LoRA resized / merged below 97.9% energy (with both measurements: a style LoRA drifted at about 90%, few-step LoRAs held at rank 2), a core-mode denoise whose step rounding gives the same image across a range of values.
 - **Outputs:** `report` (Markdown), `json` (every node's settings, for the MOSS Image Saver), `summary` (one line), `info` (the counts of nodes read and findings).
 
 ### `MOSS Image Saver` (`HaDeS/MOSS Pipeline`)
@@ -193,41 +194,21 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 
 ### Dev Tools (git repository only)
 
-The four `HaDeS/MOSS Dev Tools` nodes below, their UI (`web/moss_dev_tools.js`) and the `examples/dev/` workflows are for measurements: they are in the GitHub repository and not in the Comfy Registry package. Clone the repository to get them; the Suite works the same without them.
+Two measurement nodes in `HaDeS/MOSS Dev Tools`, with their UI (`web/moss_dev_tools.js`) and the `examples/dev/` workflows. They are in the GitHub repository, not in the Comfy Registry package; the Suite works the same without them.
 
 ### `MOSS Layout Regions` (`HaDeS/MOSS Dev Tools`)
-
-- **Class:** `HaDeSMossLayoutRegions` (V3 schema).
-- **Purpose:** rasterizes selected boxes from a Layout Editor / Prompt Enhancer layout draft into a binary mask. It does not segment objects or run a model.
-- **Inputs:** `draft`, `selection` (1-based draft order: `1`, `1,3` or `2-4`), `padding` (non-negative pixels around each box, clipped to the canvas). Duplicate selections count once; multiple boxes form a union. Check the selection after reordering boxes.
-- **Outputs:** `mask` (white inside, black outside), `preview` (RGB mask), `regions_json` (selected descriptions, original / rasterized coordinates, dimensions, union area), `info` (also accepted by Suite Telemetry). The report appears on the node, including after cached runs.
-- **Geometry:** exactly the draft's canvas, no automatic resizing. Fractional starts round down and ends up, matching the Layout Compiler's nine-decimal normalization; end edges are exclusive. A box includes background around an object. Use native mask tools on a copy if you need feathering for composition.
+- **Class:** `HaDeSMossLayoutRegions`
+- **Purpose:** a mask from selected boxes of a layout draft, to measure an edit inside and outside a region. Boxes, not object outlines.
+- **Inputs:** `draft`, `selection` (draft order from 1: `1`, `1,3`, `2-4`), `padding` (pixels around each box, clipped to the canvas).
+- **Outputs:** `mask`, `preview`, `regions_json` (the boxes as rasterized), `info`. The mask has the draft's canvas size; partial pixels at a box edge count as inside, as the Layout Compiler places them.
 
 ### `MOSS Image Audit` (`HaDeS/MOSS Dev Tools`)
+- **Class:** `HaDeSMossImageAudit`
+- **Purpose:** pixel differences between a reference and a candidate, globally and inside / outside an optional `region_mask`: mean and maximum absolute error (0–255), share of pixels changed above `change_threshold`, luma change and HSV saturation change. Differences, not a quality or edit-success score.
+- **Inputs:** `reference`, `candidate` (same size and batch; nothing is resized or aligned), `region_mask` (inside at 0.5 and above), `change_threshold` (default 2 / 255), `difference_gain` (display only), labels.
+- **Outputs:** `difference_map`, `report` (with `info` trailer), `metrics_json` (per pair, an empty region as `null`).
 
-- **Class:** `HaDeSMossImageAudit` (V3 schema).
-- **Inputs:** `reference`, `candidate`, optional `region_mask`, `change_threshold` (default 2 on a 0–255 scale), `difference_gain` (default 4, display only), `reference_label`, `candidate_label`.
-- **Outputs:** `difference_map` = `clamp(abs(candidate-reference) × gain, 0, 1)`, `report` (readable plus HADES_META for Telemetry), `metrics_json` (versioned, per-pair results and definitions). The node displays a read-only report with wrapping / scrolling; resizing and zoom do not alter measurements. It writes no image or report files itself.
-- **Metrics:** RGB absolute mean / maximum error on a 0–255 scale, percentage of pixels whose maximum channel difference × 255 is **strictly greater** than the threshold, candidate-minus-reference encoded-RGB luma (`0.2126 R + 0.7152 G + 0.0722 B`, not physical linear-light luminance), and mean HSV saturation change on a 0–1 scale (black has saturation zero). Color deltas are signed. Inputs are interpreted as encoded sRGB; no color-profile conversion is performed.
-- **Regions:** mask values `>= 0.5` are inside; lower values are outside. No fractional weighting. Metrics are computed globally and for both regions; an empty region is JSON `null`, not zero. Without a mask only global metrics are reported. These are differences, not edit success, identity or quality scores.
-- **Pairing:** RGB float images in `[0,1]`, identical `[batch,height,width,3]` shapes. No resizing, alignment, image broadcasting or alpha handling. A single mask may be shared across all pairs, or supply one mask per pair; spatial dimensions must match. Every pair retains its own results. Analysis runs on CPU one pair at a time; the difference-image batch remains in CPU memory.
-- **Use:** connect reference and candidate outputs to Image Audit; connect Layout Editor `draft` → Layout Regions `draft`, then Regions `mask` → Audit `region_mask`. Match the layout canvas to the images. Connect `difference_map` to Preview Image / Compare Images and save `metrics_json` with your normal text-saving tool if needed. Models, LoRAs and generation settings must be controlled separately; these nodes do not infer their provenance.
-
-The **Dev Tools** example runs without models: a native composition adds 128/255 to the red channel inside one box. Expected: 12,288 pixels (18.75%); inside MAE approximately 42.6667, outside MAE 0, global MAE 8. Float32 arithmetic can affect the last decimal places. Validation and limits are recorded in [`tools/RESULTS.md`](tools/RESULTS.md#dev-tools-validation-2026-11-11).
-
-### `MOSS Pair Guard` (`HaDeS/MOSS Dev Tools`)
-
-- **Purpose:** check that two RGB image batches have identical dimensions and pair counts before sending them to Image Audit. The node passes both images through without modifying pixels. It does not score quality or verify that metadata actually belongs to the connected images.
-- **Optional provenance check:** connect stage-specific Suite Telemetry `json` outputs to `reference_metadata` and `candidate_metadata`, or one MOSS KSampler `info` string per side. Each side must identify exactly one KSampler. Pair Guard compares the declared seed, steps, CFG, sampler, scheduler, flow shift, denoise, size and SLG; different model and LoRA names are allowed and reported. If both sides include Prompt Enhancer metadata, `compare_prompt` also checks the generated prompt and negative text. Missing fields appear as unverified; a field present on only one side fails. `require_metadata` makes absent metadata an error.
-- **Outputs:** unchanged `reference` and `candidate`, a read-only `report` (with HADES_META for Telemetry), and versioned `checks_json`. Mismatched controls stop execution with a specific error. Use separate Telemetry branches for multi-stage workflows; do not feed the whole pipeline's two samplers to one side.
-
-### `MOSS Recipe Preview` (`HaDeS/MOSS Dev Tools`)
-
-- **Purpose:** inspect the exact nonempty text that will be passed to `MOSS Model Saver`'s `recipe` input and stored as `hades/recipe` when metadata is enabled. Connect a Loader, Multi-LoRA or merger `info` output to `recipe_info`, then connect Recipe Preview's `recipe` output to Model Saver. It makes no file and reads no model weights.
-- **Checks:** counts and validates Suite `HADES_META` trailers. An optional `model` socket compares the model patcher's attached Suite recipe with those trailers and warns about a stale branch; this is advisory and cannot prove which patches were applied. Set `include_metadata` to the Saver's value: if false, the report warns that `hades/recipe` will not be written. The node cannot inspect the Saver's actual setting unless you keep these switches in sync.
-- **Outputs:** trimmed `recipe` text, a read-only `report` showing that text and warnings (its own HADES_META last, for Telemetry), and versioned `preview_json`. Hand-written notes without a structured trailer are accepted, but the Metadata Reader cannot follow their source files.
-
-The **Pair Guard and Recipe Preview** example in `examples/dev/` is model-free. Synthetic KSampler metadata and a dummy recipe demonstrate successful checks, a deliberate seed mismatch, and a guarded Image Audit connection; the dummy file names are not provenance evidence.
+The **Dev Tools** example needs no model: a composition adds 128 / 255 to the red channel inside one box, so Image Audit reads 12,288 pixels changed (18.75%), inside MAE about 42.67, outside 0, global 8 ([`tools/RESULTS.md`](tools/RESULTS.md#dev-tools-validation-2026-11-11)). To check that two saved images are a fair A / B pair before comparing them, use `tools/moss_pair_check.py` (below).
 
 ## Interface
 
@@ -255,7 +236,6 @@ Every generation example loads the three files with the **MOSS Loader**, writes 
 - **Control (color, depth):** a depth map into MOSS Control with a color / depth control adapter in the Multi-LoRA (kept at 1.0), on the Prompt Enhancer's conditioning, with a preview of the encoded maps and the control in Telemetry. Load your own depth map and adapter; a note explains the color modes.
 - **LoRA Toolkit:** a LoRA through the Multi-LoRA into the sampler (add rows for more LoRAs; each row's group button holds its strength per group of layers); LoRA Merger, LoRA Resize and LoRA Extractor (with a finetune loader) come muted, since they write files. Pick your own LoRA in the Multi-LoRA's row.
 - **Dev Tools** (`examples/dev/`): Layout Editor → Layout Regions → native masked composition → Image Audit, with mask / candidate / difference previews and known numerical results. No model files are needed.
-- **Pair Guard and Recipe Preview (Dev)** (`examples/dev/`): synthetic paired images and stage metadata → Pair Guard → Image Audit; a separate dummy recipe → Recipe Preview. No model is loaded or saved.
 - **Stage Metadata (Dev)** (`examples/dev/`): two synthetic sampling stages feed a full-pipeline Telemetry and a refine-only Telemetry. Image Saver uses the refine stage for A1111 parameters and filename tokens while preserving both stages in PNG metadata. It saves a 64×64 solid-color test PNG; no diffusion model is loaded. The model names in its synthetic info are placeholders.
 
 Every example was run end to end in ComfyUI 0.43.0 (muted nodes left out). `tools/make_examples.py` regenerates them from the node definitions of a running ComfyUI.
@@ -274,7 +254,7 @@ Frontend setting tests (Node.js, no extra packages):
 node --test custom_nodes/HaDeS-MOSS-Suite/tests/test_moss_widgets.mjs
 ```
 
-Dev Tools geometry / numerical / V3 schema checks (CPU, no model loading): `python custom_nodes/HaDeS-MOSS-Suite/tests/test_moss_dev_nodes.py`.
+Dev Tools and tool checks (CPU, no model loading): `python custom_nodes/HaDeS-MOSS-Suite/tests/test_moss_dev_nodes.py`, `tests/test_moss_pair_check.py`, `tests/test_moss_edit_eval.py`.
 
 Every new node also requires real frontend acceptance in classic HaDeS, classic standard widgets, and Nodes 2.0 / Vue. The Dev Tools were checked in all three on frontend 1.57.4; mode-switch fixes and execution evidence are in [`tools/RESULTS.md`](tools/RESULTS.md#three-view-frontend-acceptance-2026-11-11).
 
@@ -282,6 +262,7 @@ Set `HADES_MOSS_TEST_CUDA=1` to include the CUDA quantized-export checks; the de
 
 ## Tools
 
+- `tools/moss_pair_check.py reference.png candidate.png [--no-prompt]`: checks that two images saved by the MOSS Image Saver (or two Telemetry json files) are a fair A / B pair: same size and the same seed, steps, CFG, sampler, scheduler, shift, denoise, SLG and prompt. A different model or LoRA is listed, not rejected. Exit code 1 when a setting differs.
 - `tools/moss_edit_eval.py --mode spectra | prepare | run | report`: controlled-reference MOSS-edit layer ablations against a running ComfyUI. Persistent images and exact run records go to `--out`; protocol and measured results: [`tools/RESULTS.md`](tools/RESULTS.md#moss-edit-layer-ablation-2026-11-10).
 - `tools/moss_eval.py --mode bias | compare`: ethnic bias on neutral and explicit prompts, SFT vs Base on photo, illustration, text and layout prompts, with stock nodes only.
 - `tools/moss_eval.py --mode groups`: which layer groups carry the SFT → Base change (needs this suite installed).

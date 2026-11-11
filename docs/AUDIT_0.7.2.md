@@ -32,3 +32,7 @@ Scope: the whole repository at `53d1789` (0.7.2) before a Comfy Registry release
 
 - The measurement scripts in `tools/` keep their local default output folders. They are repository-only developer tools and take `--out`.
 - No image-quality or speed claims are added or changed.
+
+## Follow-up the same day
+
+Pair Guard and Recipe Preview were then removed (the pair check moved to `tools/moss_pair_check.py`), so Telemetry names 22 nodes; the test that ties trailers to `NODE_NAMES` still holds. Two independent articles on lilting.ch replicated the layer 24–41 and rank-2 results on an M1 Max and showed the core's step rounding of denoise at 4 steps. That led to a Telemetry denoise warning and note, a KSampler `denoise_mode` and a narrower LoRA energy rule (see the CHANGELOG).

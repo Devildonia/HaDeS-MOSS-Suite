@@ -1439,64 +1439,26 @@ Non-blind inspection of all eight labelled sheets found no universal visual winn
 
 Eight larger, randomly ordered sheets with only letters A–H are in `blind/`. The key is separate in `blind_key.json`; the archived `blind_ratings.csv` is the **empty scoring template**, preserved unchanged. The maintainer rated the sheets independently before the key was opened; the decoded results appear below. This first screen has four prompts and two seeds each, both selected partly from successful prior renders; no held-out prompt set or 1024×1024 check has been run. Do not infer population failure rates or a global optimum from it. Compare at most two candidates with 8/CFG 1 on new prompts/seeds and separately check 1024×1024.
 
-An assistant review is saved separately in `assistant_ratings.csv`: one first and one second preference per sheet, recorded by A–H letter before consulting the key. It is **not strictly blind** because the assistant had seen labelled technical contact sheets beforehand. The maintainer's archived blank template remains untouched. The setting mapping was opened only after the maintainer supplied their ratings.
+AI-model reviews (GPT, Gemini and the assistant that ran the experiment) of these sheets are in [AI-model reviews](#ai-model-reviews-qualitative-not-measurements); they are not counted here.
 
-### Maintainer preference decoded and compared (2026-11-11)
+### Maintainer preference decoded (2026-11-11)
 
 The maintainer supplied `blind_ratings.csv`, preserved as `<archive>/baked_turbo_v094_2026-11-11/user_ratings.csv` (SHA-256 `54236468fb2181dc83925045b9016234a730be938f2b49b1d2921ec5d74ea11d`). Its 64 scene/seed/letter keys match the archived template exactly, with no missing or duplicate rows. Nine rows contain a letter in `preference_rank_1_best`: one choice on seven sheets and **two choices on trawler portrait / seed 1200**. The two marks on that sheet are treated as tied favorites, not an inferred first/second ranking. `prompt_errors`, `artifacts` and `notes` are blank throughout; blank fields do **not** establish that the images have no defects. The file contains no overall ranking among configurations.
 
-| Scene / seed | Maintainer favorite(s) (decoded) | Assistant first (decoded) | Assistant second (decoded) | Favorite in assistant top two? |
-|---|---|---|---|---|
-| Airlock / original | D = 12 / 1.2 | A = 8 / 1.2 | D = 12 / 1.2 | Yes, second |
-| Airlock / 1200 | A = 12 / 1.0 | A = 12 / 1.0 | B = 12 / 1.2 | Yes, first |
-| Trawler portrait / original | E = 8 / 2.0 | B = 8 / 1.0 | C = 8 / 1.2 | No |
-| Trawler portrait / 1200 | C = 8 / 1.5; G = 12 / 1.5 (tie) | F = 16 / 1.0 | E = 12 / 1.0 | No |
-| Ceramic texture / original | F = 8 / 2.0 | G = 12 / 1.0 | H = 12 / 1.2 | No |
-| Ceramic texture / 1200 | C = 12 / 1.2 | B = 16 / 1.0 | A = 12 / 1.5 | No |
-| Comic text / original | C = 8 / 1.2 | D = 8 / 1.5 | H = 8 / 2.0 | No |
-| Comic text / 1200 | F = 8 / 2.0 | D = 12 / 1.5 | F = 8 / 2.0 | Yes, second |
+| Scene / seed | Maintainer favorite(s) (decoded) |
+|---|---|
+| Airlock / original | D = 12 / 1.2 |
+| Airlock / 1200 | A = 12 / 1.0 |
+| Trawler portrait / original | E = 8 / 2.0 |
+| Trawler portrait / 1200 | C = 8 / 1.5; G = 12 / 1.5 (tie) |
+| Ceramic texture / original | F = 8 / 2.0 |
+| Ceramic texture / 1200 | C = 12 / 1.2 |
+| Comic text / original | C = 8 / 1.2 |
+| Comic text / 1200 | F = 8 / 2.0 |
 
-The same first choice occurs on **1/8 sheets**; at least one maintainer favorite appears in the assistant's top two on **3/8**. These are two subjective reviews, not independent blind raters: the assistant had previously seen labelled sheets. The divergence is useful for selecting further tests, not evidence that either reviewer is wrong. The maintainer selected **8 / CFG 2 on 3/8 sheets** and **12 / CFG 1.2 on 2/8**; the other four marks are one each for 12/1.0, 8/1.5, 12/1.5 and 8/1.2. No sheet selected 8/CFG 1, though it remains the technical reference setting, and no sheet selected 16/CFG 1.
+The maintainer selected **8 / CFG 2 on 3/8 sheets** and **12 / CFG 1.2 on 2/8**; the other four marks are one each for 12/1.0, 8/1.5, 12/1.5 and 8/1.2. No sheet selected 8/CFG 1, though it remains the technical reference setting, and no sheet selected 16/CFG 1. One reviewer and eight sheets: a direction for the next test, not a preferred default.
 
 This preference result does not overturn the measured CFG tradeoff: at 8 steps, CFG 2 produced higher saturation, lower luma, more near-clipped pixels and roughly 1.8× the median execution time of CFG 1 in this session. Those changes may still be desirable for particular scenes. **Next controlled comparison:** retain 8/CFG 1 as baseline and test **8/CFG 2** (most maintainer picks) and **12/CFG 1.2** (second most) on held-out prompts/seeds, including a separate 1024×1024 check. Specify prompt fidelity, visible defects and preference per image before aggregating; this first rating file records preferences only. No held-out run or default change is claimed here.
-
-### Third reviewer: Gemini's sheet preferences (2026-11-11)
-
-The maintainer supplied a screenshot of Gemini's eight A–H choices, archived as `<archive>/baked_turbo_v094_2026-11-11/gemini_blind_rating.png` (SHA-256 `ea98c0b2384ae91472790fb0b40a50f454b0b3c20b107ce73e6d14a49e2f3708`). The screenshot describes a review of lighting quality, texture realism and overall sharpness. The maintainer calls it blind; the screenshot alone cannot verify what other context Gemini saw. It records one favorite per sheet, with no numerical scores or systematic prompt-accuracy / artifact fields. The reasons below are brief summaries of the screenshot, not independently verified image properties.
-
-| Scene / seed | Gemini letter = steps / CFG | Stated reason (summary) | Same image as maintainer favorite? | In assistant top two? |
-|---|---|---|---|---|
-| Airlock / original | C = 8 / 1.5 | Volumetric light and atmosphere | No | No |
-| Airlock / 1200 | C = 8 / 1.0 | Floor grilles and panel definition | No | No |
-| Trawler portrait / original | C = 8 / 1.2 | Raincoat texture and water reflections | No | Yes, second |
-| Trawler portrait / 1200 | E = 12 / 1.0 | Facial light and sea background | No (maintainer tied C/G) | Yes, second |
-| Ceramic texture / original | C = 8 / 1.0 | Gloss and water marks on green enamel | No | No |
-| Ceramic texture / 1200 | E = 12 / 1.0 | Fabric and clay nuances | No | No |
-| Comic text / original | E = 8 / 1.0 | Typography composition and brick contrast | No | No |
-| Comic text / 1200 | B = 12 / 1.0 | Table light and hand sharpness | No | No |
-
-Decoded counts: **8/CFG 1: 3**, **12/CFG 1: 3**, **8/CFG 1.2: 1**, **8/CFG 1.5: 1**. Thus Gemini chose CFG 1 on **6/8 sheets** and CFG 2 on none. There is **0/8 exact image agreement** with the maintainer's favorites (including the tied sheet), **0/8 first-choice agreement** with the assistant and **2/8** Gemini choices in the assistant's top two. This is substantial reviewer disagreement under different, incompletely specified criteria; it is not a quality or reliability rate for any setting. Do not pool these choices as interchangeable votes or infer a universally preferred CFG.
-
-Gemini's preference for CFG 1 reinforces its role as the held-out **reference**, while the maintainer's three 8/CFG 2 selections still justify testing that more saturated option as a challenger. The earlier shortlist of 8/CFG 2 and 12/CFG 1.2 remains **provisional and maintainer-led**, not a consensus across reviewers. The held-out review should require separate scores for prompt fidelity, artifacts and overall preference under the same criteria for every reviewer before deciding whether extra steps or CFG are useful. No additional generation or default change was made for this third review.
-
-### Fourth reviewer: separate GPT sheet preferences (2026-11-11)
-
-The maintainer also supplied a screenshot of another GPT review, archived as `<archive>/baked_turbo_v094_2026-11-11/gpt_blind_rating.png` (SHA-256 `9348e17619efc05bbee8d92670413a84afc5656ef303c7df13d6ebaf093dab52`). This is **a separate review** from the assistant's earlier `assistant_ratings.csv`. The screenshot says its choices were made without knowing the setting-to-letter key and lists composition, lighting, visual coherence, detail and text legibility as criteria. The screenshot does not independently establish the reviewer's full context or whether every criterion was applied consistently.
-
-| Scene / seed | Separate GPT letter = steps / CFG | Same image as maintainer favorite? | Same as Gemini? | In assistant top two? |
-|---|---|---|---|---|
-| Airlock / original | H = 12 / 1.5 | No | No | No |
-| Airlock / 1200 | C = 8 / 1.0 | No | Yes | No |
-| Trawler portrait / original | C = 8 / 1.2 | No | Yes | Yes, second |
-| Trawler portrait / 1200 | C = 8 / 1.5 | Yes, tied favorite | No | No |
-| Ceramic texture / original | H = 12 / 1.2 | No | No | Yes, second |
-| Ceramic texture / 1200 | C = 12 / 1.2 | Yes | No | No |
-| Comic text / original | D = 8 / 1.5 | No | No | Yes, first |
-| Comic text / 1200 | E = 8 / 1.5 | No | No | No |
-
-Decoded counts: **8/CFG 1.5: 3**, **12/CFG 1.2: 2**, and one each for **8/CFG 1**, **8/CFG 1.2** and **12/CFG 1.5**. Thus this reviewer chose CFG 1.2–1.5 on **7/8 sheets** and CFG 2 on none. Exact image agreement is **2/8 with the maintainer** (counting the tied favorite), **2/8 with Gemini**, and **1/8 with the earlier assistant's first choices**; three choices occur in the earlier assistant's top two. The screenshot also warns against selecting a visually striking comic image if it distorts the title text. That is a stated evaluation concern, not a verified defect count from this vote.
-
-The four reviews favor different images and were not collected with a common scoring rubric: the maintainer chose 8/CFG 2 most often; Gemini chose CFG 1 on six sheets; this GPT favored moderate CFG; and the earlier assistant review was not fully blind. Their disagreement is evidence that the first screen cannot determine one global best setting by preference alone. Keep 8/CFG 1 as a reproducible reference and retain 8/CFG 2 and 12/CFG 1.2 only as **test candidates**, not recommended defaults. A held-out round with shared scoring criteria and explicit text / artifact checks remains the next measurement; no new generation or model change was made for this review.
 
 ### Loader issue found during validation
 
@@ -1510,26 +1472,28 @@ The eight existing baked-model images at **8 steps / CFG 1** from the preceding 
 
 All three arms use the **same resolved positive and negative text, seed, 1152×1536 latent, Qwen3.5 int8 ConvRot text encoder, FLUX.2 VAE, Euler/simple, flow shift 5, denoise 1, SLG off, 8 steps and CFG 1**. The baked arm has no live LoRA. The reproducible runner is `tools/moss_v094_vs_v09_eval.py`; its output is `<archive>/v094_vs_sft_base_v09_2026-11-11`. It queued the 16 missing images through the running local ComfyUI 0.43.0 instance, checking for an empty queue before each submission and leaving the user's open workflow untouched. All 16 runs succeeded. The eight baked reference PNGs were read and hash-checked, never regenerated or rewritten. A graph comparison verified that the 16 new requests match their corresponding reference in text-encoding inputs, latent, sampler parameters, VAE and preview path; model file and live LoRA are the intended differences. `metrics.csv` has all 24 image records, and each new PNG has a JSON sidecar with its exact graph, prompt ID, timing, hash and numerical metrics.
 
-Eight three-image sheets with randomized A/B/C positions are in `blind/`. The mapping is separate in `blind_key.json`; the blank `blind_ratings.csv` remains available for additional reviewers. The assistant's eight first and second choices were saved in `assistant_blind_ratings.csv` (SHA-256 `ca03c3959839ff4b49f3bdf17caa1313441a96b152e63228c1c3eeb0339a08fe`) **before** opening this comparison's key. The assistant had seen the baked images in an earlier screen, so its review is not perfectly blind. The maintainer then submitted eight A/B/C choices without the mapping. The decoded results are below; future reviewers should avoid this section, `blind_key.json`, the variant-named PNGs and `metrics.csv` until they have voted.
+Eight three-image sheets with randomized A/B/C positions are in `blind/`. The mapping is separate in `blind_key.json`; the blank `blind_ratings.csv` remains available for additional reviewers. The maintainer submitted eight A/B/C choices without the mapping; future reviewers should avoid the decoded section, `blind_key.json`, the variant-named PNGs and `metrics.csv` until they have voted.
 
 Numerical luma, saturation, near-clipping and run times are measured, but they do not establish which arm makes the better image. The 8/CFG 1 baked references came from an earlier run, so direct timing ratios also contain session and cache effects. Four source prompts were selected from successful baked renders and include the literal text `HaDeS MOSS v0.9.4`; this is a small, selected sample, not an unbiased quality benchmark. The Base plus v0.9 LoRA arm is a compatibility/quality test, not evidence that the LoRA was trained specifically on Base. Any conclusion from this screen is limited to these prompts, seeds, resolution and settings. No default or model artifact has been changed.
 
-### Decoded maintainer and assistant preferences
+AI-model reviews (GPT, Gemini and the assistant that ran the experiment) of these sheets are in [AI-model reviews](#ai-model-reviews-qualitative-not-measurements); they are not counted here.
 
-The maintainer's eight choices were transcribed from chat into `user_blind_ratings.csv` (SHA-256 `9358445ac3bddc6a9bb5e92459b336be8b7e2685ef271ea24f826374e6de3ecd`), without altering the blank template. There was one unambiguous choice per sheet. The assistant file also records a second choice per sheet; no second choices or defect scores were provided by the maintainer.
+### Decoded maintainer preferences
 
-| Scene / seed | A / B / C mapping | Maintainer first | Assistant first | Assistant second |
-|---|---|---|---|---|
-| Airlock / original | Base / baked / SFT | C = SFT | C = SFT | A = Base |
-| Airlock / 1200 | Baked / Base / SFT | C = SFT | C = SFT | A = baked |
-| Trawler portrait / original | Base / baked / SFT | B = baked | C = SFT | A = Base |
-| Trawler portrait / 1200 | Base / SFT / baked | C = baked | A = Base | C = baked |
-| Ceramic texture / original | SFT / baked / Base | B = baked | A = SFT | C = Base |
-| Ceramic texture / 1200 | SFT / Base / baked | A = SFT | A = SFT | C = baked |
-| Comic text / original | Base / baked / SFT | C = SFT | C = SFT | B = baked |
-| Comic text / 1200 | Base / SFT / baked | B = SFT | B = SFT | A = Base |
+The maintainer's eight choices were transcribed from chat into `user_blind_ratings.csv` (SHA-256 `9358445ac3bddc6a9bb5e92459b336be8b7e2685ef271ea24f826374e6de3ecd`), without altering the blank template. There was one unambiguous choice per sheet.
 
-**Maintainer:** SFT + v0.9 first on **5/8**, baked v0.9.4 first on **3/8**, Base + v0.9 first on **0/8**. By scene, both airlock and both comic sheets favor SFT; both trawler portraits favor baked; ceramic splits one each. **Assistant:** SFT first on **7/8**, Base first on **1/8**, baked first on **0/8**. The two reviews agree on the exact first image on **5/8 sheets**; the maintainer's favorite appears in the assistant's top two on **6/8**. No ranking beyond first/second was recorded, and these tallies are preferences, not image-quality measurements or prompt-accuracy success rates.
+| Scene / seed | A / B / C mapping | Maintainer first |
+|---|---|---|
+| Airlock / original | Base / baked / SFT | C = SFT |
+| Airlock / 1200 | Baked / Base / SFT | C = SFT |
+| Trawler portrait / original | Base / baked / SFT | B = baked |
+| Trawler portrait / 1200 | Base / SFT / baked | C = baked |
+| Ceramic texture / original | SFT / baked / Base | B = baked |
+| Ceramic texture / 1200 | SFT / Base / baked | A = SFT |
+| Comic text / original | Base / baked / SFT | C = SFT |
+| Comic text / 1200 | Base / SFT / baked | B = SFT |
+
+**Maintainer:** SFT + v0.9 first on **5/8**, baked v0.9.4 first on **3/8**, Base + v0.9 first on **0/8**. By scene, both airlock and both comic sheets favor SFT; both trawler portraits favor baked; ceramic splits one each. Preferences, not image-quality measurements or prompt-accuracy rates.
 
 | Variant | Images | Median seconds | Mean luma / 255 | Mean HSV saturation / 255 | Mean near-clip pixels |
 |---|---:|---:|---:|---:|---:|
@@ -1537,32 +1501,7 @@ The maintainer's eight choices were transcribed from chat into `user_blind_ratin
 | SFT + Turbo v0.9 | 8 | 4.89 | 93.5 | 98.5 | 2.7% |
 | Base + Turbo v0.9 | 8 | 4.64 | 91.9 | 94.3 | 5.6% |
 
-These image metrics describe tonal appearance, **not better quality**; the timing medians are from the same ComfyUI installation but the baked renders were collected earlier and cache state differs. The preference evidence does **not** support claiming that baked v0.9.4 generally makes a better image than SFT + v0.9 at these settings. It does show a possible portrait preference for baked v0.9.4 in the maintainer's review, based on only two seeds of one prompt. Both assessors saw the same selected images, and the assistant had previous exposure to baked outputs, so their votes are not independent samples. No extrapolation to other prompts, resolutions, CFG values or step counts is justified. A new prompt set with text and artifact scoring would be needed before changing defaults or making a broad model-quality claim.
-
-### Additional blind-sheet reviews: GPT-text and Gemini
-
-The maintainer supplied two screenshots with one A/B/C choice per sheet, in order **GPT-text** and **Gemini**. The originals are archived as `gpt_text_blind_rating.png` (SHA-256 `c2c5115046f7b01dd745d1120b56cda383090738065e1674112c2f65176d4fac`) and `gemini_blind_rating.png` (SHA-256 `14b2793d376e802399450bc8427b29b09612015f70d0589ec1dccad3550b9a9f`) in the comparison archive. Their letters were transcribed to `additional_blind_ratings.csv` (SHA-256 `f61dc99e3dea8f6f2fbaf02c638e011d7ad5b7c8a4b4cfe77cfb37470fe6bbb5`). The screenshots describe qualitative judgments; neither provides standardized prompt-accuracy or artifact scores. The exact context supplied to either reviewer cannot be verified from the screenshots alone.
-
-| Scene / seed | Maintainer | Assistant | GPT-text | Gemini | Sheet result |
-|---|---|---|---|---|---|
-| Airlock / original | SFT | SFT | baked | Base | SFT plurality 2/4 |
-| Airlock / 1200 | SFT | SFT | baked | SFT | SFT 3/4 |
-| Trawler portrait / original | baked | SFT | baked | baked | Baked 3/4 |
-| Trawler portrait / 1200 | baked | Base | baked | baked | Baked 3/4 |
-| Ceramic texture / original | baked | SFT | baked | baked | Baked 3/4 |
-| Ceramic texture / 1200 | SFT | SFT | baked | SFT | SFT 3/4 |
-| Comic text / original | SFT | SFT | SFT | SFT | SFT 4/4 |
-| Comic text / 1200 | SFT | SFT | SFT | SFT | SFT 4/4 |
-
-| Reviewer | Baked v0.9.4 | SFT + v0.9 | Base + v0.9 |
-|---|---:|---:|---:|
-| Maintainer | 3 | 5 | 0 |
-| Assistant | 0 | 7 | 1 |
-| GPT-text | 6 | 2 | 0 |
-| Gemini | 3 | 4 | 1 |
-| **Descriptive total** | **12** | **18** | **2** |
-
-The maintainer and Gemini agree on **7/8 exact images**; GPT-text and the maintainer agree on **5/8**. Seven sheets have at least a 3/4 majority; the original-seed airlock has only a 2/4 plurality. Both comic sheets are unanimous for SFT + v0.9. The baked model wins 3/4 votes on both trawler sheets and the original-seed ceramic sheet. These are preferences among the **same eight triplets**, not 32 independent image tests; the assistant also had previous exposure to baked images. The reviewers used different qualitative criteria, and the screenshots cannot establish consistent blinding or scorer calibration. The added votes strengthen the scene-dependent observation, **not a universal quality ranking**. The conclusion remains limited to four selected prompts, two seeds each, 1152×1536, 8 steps and CFG 1. No additional rendering or model/default change was made for this tally.
+These image metrics describe tonal appearance, **not better quality**; the baked renders were collected earlier, so cache state differs. The vote does **not** support claiming that baked v0.9.4 generally makes a better image than SFT + v0.9 at these settings; it shows a possible portrait preference for baked v0.9.4, from two seeds of one prompt. A new prompt set with text and artifact scoring is needed before changing defaults or making a broad model-quality claim.
 
 ## Held-out v0.9.4 versus SFT + Turbo v0.9: eight new scenes (2026-11-11)
 
@@ -1574,26 +1513,26 @@ The two arms are `HaDeS_MOSS_v0.9.4_Turbo.safetensors` with no live LoRA, and `m
 
 The archive is `<archive>/v094_vs_sft_v09_heldout_2026-11-11`. The local ComfyUI 0.43.0 queue produced **16/16 successful images** without altering the user's open workflow. Every new image has a JSON sidecar with exact graph, prompt ID, timing, hash and metrics; `metrics.csv` holds all 16 measurements. A post-run check confirmed the eight graph pairs match in text-encoding inputs, VAE, latent, sampler settings and preview path; checkpoint and LoRA application are the intended differences. The eight sheets are in `blind/*.jpg`; each also has full-resolution `blind/<scene>_A.png` and `_B.png` copies re-encoded with **no embedded graph metadata**. All 16 full-resolution copies were checked for empty PNG metadata. `blind/prompts.md` gives the prompt text and rating instructions, and `blind/ratings.csv` is an untouched form with 16 rows. The A/B mapping is separate in `blind_key.json` at the archive root.
 
-The assistant reviewed the eight blind sheets and full-resolution person images, then saved one overall preference per scene and a **separate face-texture-detail preference** for the four person scenes in `assistant_blind_ratings.csv` (SHA-256 `8e71057497d749f52424cbfe04bfa52846d8b491f4d5ad787feb08bd8019a0fb`). This file was sealed **before opening the A/B key**. The assistant had seen baked-model images from earlier experiments, so the review is not perfectly blind. The maintainer subsequently supplied eight independent A/B choices, after which the key was opened. The decoded results are below; additional reviewers should avoid the key, variant-named PNGs, `metrics.csv` and the decoded section until they have voted.
+The maintainer supplied eight A/B choices before the key was opened. AI-model reviews (GPT, Gemini and the assistant that ran the experiment) of these sheets are in [AI-model reviews](#ai-model-reviews-qualitative-not-measurements); they are not counted here.
 
 For the person hypothesis, score **overall preference** separately from skin/face detail, hand anatomy, clothing texture and prompt fidelity. More visible texture alone does not establish greater realism or a better image. The four prompts per group provide only a first check of scene dependence; one seed per prompt, one resolution and one CFG/step setting cannot estimate a general model advantage. No defaults, model artifacts or frontend nodes were changed, and no commit or push was made.
 
-### Decoded maintainer and assistant review
+### Decoded maintainer review
 
 The maintainer's chat choices were recorded as `user_blind_ratings.csv` (SHA-256 `edcbdef4cfa0ead3492f927f16b7e6e186bec9bf2409936ee3670fe1f0778e84`), preserving the blank form. The user's “watch A” was assigned to `watch_macro`; `watchmaker B` was separately specified. No user rationale or numerical detail scores were supplied, so only overall preferences can be attributed to the maintainer.
 
-| Scene | Group | A / B | Maintainer overall | Assistant overall | Assistant face-texture detail |
-|---|---|---|---|---|---|
-| Watchmaker | Person | SFT / baked | B = baked | A = SFT | B = baked |
-| Trumpeter | Person | SFT / baked | B = baked | A = SFT | B = baked |
-| Climber | Person | SFT / baked | B = baked | A = SFT | B = baked |
-| Flower seller | Person | Baked / SFT | B = SFT | B = SFT | A = baked |
-| Pocket-watch macro | No person | SFT / baked | A = SFT | A = SFT | — |
-| Rainy alley | No person | SFT / baked | B = baked | A = SFT | — |
-| Citrus still life | No person | Baked / SFT | B = SFT | B = SFT | — |
-| Lunar observatory | No person | Baked / SFT | A = baked | B = SFT | — |
+| Scene | Group | A / B | Maintainer overall |
+|---|---|---|---|
+| Watchmaker | Person | SFT / baked | B = baked |
+| Trumpeter | Person | SFT / baked | B = baked |
+| Climber | Person | SFT / baked | B = baked |
+| Flower seller | Person | Baked / SFT | B = SFT |
+| Pocket-watch macro | No person | SFT / baked | A = SFT |
+| Rainy alley | No person | SFT / baked | B = baked |
+| Citrus still life | No person | Baked / SFT | B = SFT |
+| Lunar observatory | No person | Baked / SFT | A = baked |
 
-The maintainer prefers **baked v0.9.4 on 5/8** overall: **3/4 person** scenes and **2/4 nonperson** scenes. The assistant prefers **SFT + v0.9 on 8/8** overall, but marks baked v0.9.4 as having **more visible facial texture on 4/4 person scenes**. Exact overall agreement is **3/8**. This separation supports the narrower observation that baked v0.9.4 can make faces appear more detailed in these examples; it does **not** establish that the extra texture is anatomically faithful, less noisy, or a better portrait. The assistant's notes, sealed before decoding, favor SFT overall for a more age-appropriate watchmaker, a more coherent trumpet, a more natural climber, and a more natural flower-seller portrait despite the baked image's stronger facial/hand texture. These are subjective judgments; the maintainer's later explanation of the trumpeter vote is recorded below.
+The maintainer prefers **baked v0.9.4 on 5/8** overall: **3/4 person** scenes and **2/4 nonperson** scenes. One seed per prompt and one reviewer: a hypothesis about people, not a portrait advantage.
 
 | Variant | Images | Median seconds | Mean luma / 255 | Mean HSV saturation / 255 | Mean near-clip pixels |
 |---|---:|---:|---:|---:|---:|
@@ -1602,31 +1541,7 @@ The maintainer prefers **baked v0.9.4 on 5/8** overall: **3/4 person** scenes an
 
 Baked v0.9.4 has higher mean HSV saturation in **all eight pairs** and more near-clipped pixels in **seven of eight**. These are appearance measurements, not detail or quality scores; higher saturation and contrast can make texture look stronger without adding faithful structure. The execution times are session-specific, and baked was submitted first in every pair, so this is not a controlled speed comparison. A pixel difference or generic sharpness metric would also be confounded by different compositions and face sizes. The previous selected-prompt screen favored SFT in the maintainer's vote (5/8), whereas these new prompts favor baked (5/8): the direction changes with the test set. Do not infer a global winner from either eight-image screen. Further work on the person hypothesis should separately score facial texture **and** facial realism/anatomy on more prompts and seeds before changing a default or making a broad quality claim.
 
-### Additional reviews of the held-out pairs: GPT and Gemini
-
-The maintainer supplied separate screenshots of **GPT, then Gemini**, each with one A/B choice and qualitative explanation per scene. The originals are archived in this experiment as `gpt_blind_rating.png` (SHA-256 `0ad2e421816d049d7f284a2026aca86478d9b11297191bad61f75d724bfb44c9`) and `gemini_blind_rating.png` (SHA-256 `e938968c50dc7774c1ac15d13f803b22fd56f642858e6c3922b18f65ee33fc2b`). Their letters were transcribed to `additional_blind_ratings.csv` (SHA-256 `12633065a14b969ab9e2cbd54db9741b5e422941536189bdcb9329ae94c10191`). The screenshots state or imply blind selection; they do not establish each reviewer's entire context, nor a shared numerical rubric.
-
-| Scene | Maintainer | Assistant overall | GPT | Gemini | Per-sheet result |
-|---|---|---|---|---|---|
-| Watchmaker | Baked | SFT | Baked | Baked | Baked 3/4 |
-| Trumpeter | Baked | SFT | SFT | SFT | SFT 3/4 |
-| Climber | Baked | SFT | Baked | Baked | Baked 3/4 |
-| Flower seller | SFT | SFT | Baked | Baked | Tie 2/2 |
-| Pocket-watch macro | SFT | SFT | SFT | SFT | SFT 4/4 |
-| Rainy alley | Baked | SFT | Baked | Baked | Baked 3/4 |
-| Citrus still life | SFT | SFT | SFT | Baked | SFT 3/4 |
-| Lunar observatory | Baked | SFT | Baked | SFT | Tie 2/2 |
-
-| Reviewer | Baked v0.9.4 | SFT + v0.9 | Baked person scenes | Baked nonperson scenes |
-|---|---:|---:|---:|---:|
-| Maintainer | 5/8 | 3/8 | 3/4 | 2/4 |
-| Assistant overall | 0/8 | 8/8 | 0/4 | 0/4 |
-| GPT | 5/8 | 3/8 | 3/4 | 2/4 |
-| Gemini | 5/8 | 3/8 | 3/4 | 2/4 |
-
-GPT and Gemini agree on **6/8 exact images** and on **all four person scenes**. In their descriptions, both favor the baked watchmaker and climber for visible face/gear texture, but the SFT trumpeter for more coherent pose and instrument. They also favor the baked flower seller, while the maintainer and assistant prefer SFT overall there. This fits the assistant's earlier **4/4 baked face-texture** assessment while showing that texture and whole-image quality can lead to different votes. The pocket-watch macro is the only unanimous sheet; flower seller and observatory are tied. Across the three newly supplied reviewers, baked receives **15/24 preferences**; adding the assistant's eight SFT preferences yields **15 baked versus 17 SFT**. These totals are descriptive only: the same eight image pairs were judged repeatedly, reviewers' criteria differ, and AI judgments may be correlated. The three supplied reviews each prefer baked on **3/4 people** versus **2/4 nonperson** scenes, which strengthens the *scene-dependent preference hypothesis* but does not establish a population-level portrait advantage or prove physically faithful facial detail. No new rendering or default change was made for these added votes.
-
-**Maintainer's later trumpeter note:** one of the hands in **A (SFT + v0.9)** looks strange to them, and that defect influenced their choice of **B (baked v0.9.4)**. The assistant's sealed note favored A for the trumpet's structure but did not establish that A's hands are anatomically correct; GPT and Gemini also favored A for pose/instrument coherence. The votes therefore reflect different weighting of visible defects within the same pair. The user's observation is a qualitative judgment, not a counted hand-anatomy failure rate. It does not change any vote or the experiment's controls.
+**Maintainer's trumpeter note:** one of the hands in **A (SFT + v0.9)** looks strange to them, and that defect decided their vote for **B (baked v0.9.4)**. A qualitative judgment, not a counted hand-anatomy failure rate.
 
 ## Quick practical comparison: baked v0.9.4 versus SFT + Turbo v0.7 (2026-11-11)
 
@@ -1636,33 +1551,24 @@ To make a short, directly paired test, `tools/moss_v094_vs_v07_eval.py` reuses t
 
 The eight randomized A/B sheets and 16 full-resolution A/B copies are under `blind/`. All blind PNGs were re-encoded and checked to contain **no graph metadata**. The folder also contains `prompts.md` and an untouched `ratings.csv`; the mapping is separate in `blind_key.json` at the archive root. Because the baked images were already shown in the preceding experiment, returning reviewers can recognize them: **the rating is only partially blind**, even with A/B labels. Do not open `blind_key.json`, variant-named PNGs or `metrics.csv` before rating if preserving the remaining blinding matters.
 
-The assistant recorded one overall preference per scene and a separate face-texture-detail choice for each person scene in `assistant_partial_blind_ratings.csv` (SHA-256 `646c8b586f42902075b30a1f3f6dd1ee03c42523c1bd16e534ae1f6bfe6476ab`) before opening the new key. The assistant also recognizes images from the prior round. After the maintainer and two additional reviewers supplied choices, the key was opened and results were decoded below. A fresh-scene validation would be needed if this quick screen suggests a surprising result; the older LoRA and familiar images limit what one vote can establish. No commit or push was made.
+AI-model reviews (GPT, Gemini and the assistant that ran the experiment) of these sheets are in [AI-model reviews](#ai-model-reviews-qualitative-not-measurements); they are not counted here.
 
-### Decoded votes and interpretation
+### Decoded maintainer votes
 
-The maintainer's A/B choices were transcribed from chat to `user_blind_ratings.csv` (SHA-256 `3f224bd29ae071c7293967d5d0400541b1c6c6a5937a40ab2990968795ad7465`). Their “watch B” refers to `watch_macro`; `watchmaker B` was separately specified. GPT and Gemini screenshots were archived as `gpt_blind_rating.png` (SHA-256 `442c1a70ebd2c5fa1fe96754505063dea4067817ca1cd39d52982f95872b0c2f`) and `gemini_blind_rating.png` (SHA-256 `ee8fcc51be099c33c9dcb85c45f822dc794358cdb3e03c17ead0d2795135a45`); their letters are in `additional_blind_ratings.csv` (SHA-256 `76e42f7cffef084f77416c50231aa008ba4477d0cd519ef472c34b29606aa941`). The screenshots provide qualitative reasons but cannot establish whether the reviewers recognized images from the earlier round.
+The maintainer's A/B choices were transcribed from chat to `user_blind_ratings.csv` (SHA-256 `3f224bd29ae071c7293967d5d0400541b1c6c6a5937a40ab2990968795ad7465`). Their “watch B” refers to `watch_macro`; `watchmaker B` was separately specified.
 
-| Scene | A / B mapping | Maintainer | GPT | Gemini | Assistant overall | Assistant face texture |
-|---|---|---|---|---|---|---|
-| Watchmaker | SFT v0.7 / baked | Baked | SFT v0.7 | Baked | SFT v0.7 | Baked |
-| Trumpeter | SFT v0.7 / baked | Baked | SFT v0.7 | SFT v0.7 | SFT v0.7 | Baked |
-| Climber | Baked / SFT v0.7 | Baked | Baked | Baked | SFT v0.7 | Baked |
-| Flower seller | Baked / SFT v0.7 | SFT v0.7 | Baked | Baked | SFT v0.7 | Baked |
-| Pocket-watch macro | Baked / SFT v0.7 | SFT v0.7 | SFT v0.7 | SFT v0.7 | SFT v0.7 | — |
-| Rainy alley | SFT v0.7 / baked | Baked | Baked | Baked | Baked | — |
-| Citrus still life | Baked / SFT v0.7 | Baked | Baked | Baked | SFT v0.7 | — |
-| Lunar observatory | SFT v0.7 / baked | Baked | Baked | SFT v0.7 | SFT v0.7 | — |
+| Scene | A / B mapping | Maintainer |
+|---|---|---|
+| Watchmaker | SFT v0.7 / baked | Baked |
+| Trumpeter | SFT v0.7 / baked | Baked |
+| Climber | Baked / SFT v0.7 | Baked |
+| Flower seller | Baked / SFT v0.7 | SFT v0.7 |
+| Pocket-watch macro | Baked / SFT v0.7 | SFT v0.7 |
+| Rainy alley | SFT v0.7 / baked | Baked |
+| Citrus still life | Baked / SFT v0.7 | Baked |
+| Lunar observatory | SFT v0.7 / baked | Baked |
 
-| Reviewer | Baked v0.9.4 first | SFT + v0.7 first |
-|---|---:|---:|
-| Maintainer | **6/8** | 2/8 |
-| GPT | **5/8** | 3/8 |
-| Gemini | **5/8** | 3/8 |
-| Assistant overall | 1/8 | **7/8** |
-
-Rainy alley is unanimous for baked v0.9.4; pocket-watch macro is unanimous for SFT + v0.7. Citrus and climber give baked a 3/4 majority, and trumpeter gives SFT a 3/4 majority. Watchmaker, flower seller and observatory split 2/2. Three reviewers individually favor baked on these familiar pairs, while the assistant favors SFT; **17 versus 15** total votes across all four reviewers would be a misleading headline because the same eight pairs are repeatedly judged under different criteria. In the immediately preceding v0.9 comparison on these same prompts, maintainer/GPT/Gemini each selected baked 5/8; replacing v0.9 with v0.7 did not produce a decisive separation in their short preference tallies. It is not a direct blind head-to-head between the two LoRAs.
-
-The maintainer reports that **trumpeter A (SFT + v0.7)** appears to have six fingers on one hand, which drove their vote for B. At full resolution, the finger arrangement looks ambiguous to the assistant; an exact count of six is **not independently verified** here. GPT and Gemini favored A for pose/instrument coherence, illustrating different defect weighting. The assistant's sealed face-texture choices favored baked on all four person scenes again, but its overall choices favored SFT on all four. The results support baked v0.9.4 as a competitive practical alternative to the documented v0.7 pipeline, with a preference advantage for the maintainer in this short screen. They do not establish model-wide superiority or the claimed long-run consistency of SFT + v0.9. For that question, use a larger predefined prompt/seed series with explicit defect counts rather than reusing recognized images.
+The maintainer prefers **baked v0.9.4 on 6/8** against SFT + v0.7 (5/8 against SFT + v0.9 on the same prompts in the previous round). They report that **trumpeter A (SFT + v0.7)** appears to have six fingers on one hand, which decided that vote; the count is not independently verified. The result supports baked v0.9.4 as a competitive practical alternative to the documented v0.7 pipeline in this short, partially blind screen. It does not establish model-wide superiority or a long-run consistency advantage; that needs a larger predefined prompt / seed series with explicit defect counts.
 
 | Variant | Images | Median seconds | Mean luma / 255 | Mean HSV saturation / 255 | Mean near-clip pixels |
 |---|---:|---:|---:|---:|---:|
@@ -1702,6 +1608,8 @@ The style-switch regression was found in the real frontend: the Suite's `addCust
 
 ## Pair Guard and Recipe Preview: development-node validation (2026-11-11)
 
+*Both nodes were removed later the same day: the pair check became `tools/moss_pair_check.py` (for saved images), and Recipe Preview repeated what the `info` outputs and the Metadata Reader show. The record below is kept as it was.*
+
 `MOSS Pair Guard` and `MOSS Recipe Preview` are V3 development nodes. Pair Guard checks matching RGB batch geometry and, when both stage metadata inputs are supplied, compares the declared KSampler controls. A different model or LoRA is permitted and reported; an unequal seed, prompt or other declared control stops the downstream comparison. Without metadata it reports geometry-only coverage, and `require_metadata` can make this an error. It does not prove that the info strings belong to the image tensors. Recipe Preview passes the trimmed text to Model Saver's `recipe` input, validates any Suite trailers, and optionally compares them with the model's attached recipe. It does not inspect weights or save a file. Its `include_metadata` switch is an advisory mirror of Model Saver's switch, not a live connection to it.
 
 The model-free editor workflow [`examples/dev/HaDeS MOSS Suite - Pair Guard and Recipe Preview (Dev).json`](../examples/dev/HaDeS%20MOSS%20Suite%20-%20Pair%20Guard%20and%20Recipe%20Preview%20(Dev).json) was generated from the actual `/object_info` of the isolated server (9 nodes, 7 links). The synthetic 64×64 images and declared seed 1200 passed through Pair Guard to Image Audit; the candidate seed changed to 1201 produced the expected `controls do not match: seed` error in the frontend, and restoring 1200 restored the pass. The separate Recipe Preview displayed its entire dummy recipe and confirmed that one `HADES_META` trailer would be passed. The strings name illustrative files; no model or LoRA was loaded, sampled or saved.
@@ -1713,3 +1621,152 @@ The model-free editor workflow [`examples/dev/HaDeS MOSS Suite - Pair Guard and 
 | Nodes 2.0 / Vue | Executed graph, edited metadata seed and `include_metadata`, checked expected failure and updated advisory report, resized both nodes, then saved and reloaded the workflow | Passed; input values, sockets and sizes survived reload. Reports reappeared after executing the reloaded graph. |
 
 Validation ran on a separate **ComfyUI 0.43.0 / frontend 1.57.4** CPU instance with only this Suite enabled. Its API request/result, server object definitions and the frontend-saved workflow are under `<archive>/pair_recipe_validation/`; the user's active ComfyUI workflow and settings were not changed. The reports have native read-only output widgets: legacy `readOnly` and Vue `options.read_only`, with reserved layout height, wrapping and internal scrolling. Cached successful results were checked. After a failed queue item, ComfyUI can still display the previous successful report while marking the node as errored; users should read the queue error for the failed attempt. The test did not run real diffusion, verify provenance against source images or write a model file. Python development-node tests: **20 passed**; core suite: **66 passed, 1 opt-in CUDA test skipped**; JS widget tests: **5 passed**. No commit or push was made.
+
+## AI-model reviews (qualitative, not measurements)
+
+Preferences given by AI models on the blind sheets of the four 2026-11-11 experiments above: GPT and Gemini (screenshots supplied by the maintainer) and the assistant that ran the experiments (sealed before each key was opened, but it had seen earlier images, so never fully blind). They are kept for the record, with their tables as decoded. They are **impressions, not measurements**: the criteria differ and are not verifiable from screenshots, AI judgments may be correlated, and the same pairs were judged repeatedly. No conclusion, default or model card in this repository relies on them.
+
+### CFG / step screen of baked v0.9.4
+
+An assistant review is saved separately in `assistant_ratings.csv`: one first and one second preference per sheet, recorded by A–H letter before consulting the key. It is **not strictly blind** because the assistant had seen labelled technical contact sheets beforehand. The maintainer's archived blank template remains untouched. The setting mapping was opened only after the maintainer supplied their ratings.
+
+| Scene / seed | Maintainer favorite(s) | Assistant first | Assistant second |
+|---|---|---|---|
+| Airlock / original | D = 12 / 1.2 | A = 8 / 1.2 | D = 12 / 1.2 |
+| Airlock / 1200 | A = 12 / 1.0 | A = 12 / 1.0 | B = 12 / 1.2 |
+| Trawler portrait / original | E = 8 / 2.0 | B = 8 / 1.0 | C = 8 / 1.2 |
+| Trawler portrait / 1200 | C = 8 / 1.5; G = 12 / 1.5 (tie) | F = 16 / 1.0 | E = 12 / 1.0 |
+| Ceramic texture / original | F = 8 / 2.0 | G = 12 / 1.0 | H = 12 / 1.2 |
+| Ceramic texture / 1200 | C = 12 / 1.2 | B = 16 / 1.0 | A = 12 / 1.5 |
+| Comic text / original | C = 8 / 1.2 | D = 8 / 1.5 | H = 8 / 2.0 |
+| Comic text / 1200 | F = 8 / 2.0 | D = 12 / 1.5 | F = 8 / 2.0 |
+
+#### Third reviewer: Gemini's sheet preferences (2026-11-11)
+
+The maintainer supplied a screenshot of Gemini's eight A–H choices, archived as `<archive>/baked_turbo_v094_2026-11-11/gemini_blind_rating.png` (SHA-256 `ea98c0b2384ae91472790fb0b40a50f454b0b3c20b107ce73e6d14a49e2f3708`). The screenshot describes a review of lighting quality, texture realism and overall sharpness. The maintainer calls it blind; the screenshot alone cannot verify what other context Gemini saw. It records one favorite per sheet, with no numerical scores or systematic prompt-accuracy / artifact fields. The reasons below are brief summaries of the screenshot, not independently verified image properties.
+
+| Scene / seed | Gemini letter = steps / CFG | Stated reason (summary) | Same image as maintainer favorite? | In assistant top two? |
+|---|---|---|---|---|
+| Airlock / original | C = 8 / 1.5 | Volumetric light and atmosphere | No | No |
+| Airlock / 1200 | C = 8 / 1.0 | Floor grilles and panel definition | No | No |
+| Trawler portrait / original | C = 8 / 1.2 | Raincoat texture and water reflections | No | Yes, second |
+| Trawler portrait / 1200 | E = 12 / 1.0 | Facial light and sea background | No (maintainer tied C/G) | Yes, second |
+| Ceramic texture / original | C = 8 / 1.0 | Gloss and water marks on green enamel | No | No |
+| Ceramic texture / 1200 | E = 12 / 1.0 | Fabric and clay nuances | No | No |
+| Comic text / original | E = 8 / 1.0 | Typography composition and brick contrast | No | No |
+| Comic text / 1200 | B = 12 / 1.0 | Table light and hand sharpness | No | No |
+
+Decoded counts: **8/CFG 1: 3**, **12/CFG 1: 3**, **8/CFG 1.2: 1**, **8/CFG 1.5: 1**. Thus Gemini chose CFG 1 on **6/8 sheets** and CFG 2 on none. There is **0/8 exact image agreement** with the maintainer's favorites (including the tied sheet), **0/8 first-choice agreement** with the assistant and **2/8** Gemini choices in the assistant's top two. This is substantial reviewer disagreement under different, incompletely specified criteria; it is not a quality or reliability rate for any setting. Do not pool these choices as interchangeable votes or infer a universally preferred CFG.
+
+Gemini's preference for CFG 1 reinforces its role as the held-out **reference**, while the maintainer's three 8/CFG 2 selections still justify testing that more saturated option as a challenger. The earlier shortlist of 8/CFG 2 and 12/CFG 1.2 remains **provisional and maintainer-led**, not a consensus across reviewers. The held-out review should require separate scores for prompt fidelity, artifacts and overall preference under the same criteria for every reviewer before deciding whether extra steps or CFG are useful. No additional generation or default change was made for this third review.
+
+#### Fourth reviewer: separate GPT sheet preferences (2026-11-11)
+
+The maintainer also supplied a screenshot of another GPT review, archived as `<archive>/baked_turbo_v094_2026-11-11/gpt_blind_rating.png` (SHA-256 `9348e17619efc05bbee8d92670413a84afc5656ef303c7df13d6ebaf093dab52`). This is **a separate review** from the assistant's earlier `assistant_ratings.csv`. The screenshot says its choices were made without knowing the setting-to-letter key and lists composition, lighting, visual coherence, detail and text legibility as criteria. The screenshot does not independently establish the reviewer's full context or whether every criterion was applied consistently.
+
+| Scene / seed | Separate GPT letter = steps / CFG | Same image as maintainer favorite? | Same as Gemini? | In assistant top two? |
+|---|---|---|---|---|
+| Airlock / original | H = 12 / 1.5 | No | No | No |
+| Airlock / 1200 | C = 8 / 1.0 | No | Yes | No |
+| Trawler portrait / original | C = 8 / 1.2 | No | Yes | Yes, second |
+| Trawler portrait / 1200 | C = 8 / 1.5 | Yes, tied favorite | No | No |
+| Ceramic texture / original | H = 12 / 1.2 | No | No | Yes, second |
+| Ceramic texture / 1200 | C = 12 / 1.2 | Yes | No | No |
+| Comic text / original | D = 8 / 1.5 | No | No | Yes, first |
+| Comic text / 1200 | E = 8 / 1.5 | No | No | No |
+
+Decoded counts: **8/CFG 1.5: 3**, **12/CFG 1.2: 2**, and one each for **8/CFG 1**, **8/CFG 1.2** and **12/CFG 1.5**. Thus this reviewer chose CFG 1.2–1.5 on **7/8 sheets** and CFG 2 on none. Exact image agreement is **2/8 with the maintainer** (counting the tied favorite), **2/8 with Gemini**, and **1/8 with the earlier assistant's first choices**; three choices occur in the earlier assistant's top two. The screenshot also warns against selecting a visually striking comic image if it distorts the title text. That is a stated evaluation concern, not a verified defect count from this vote.
+
+The four reviews favor different images and were not collected with a common scoring rubric: the maintainer chose 8/CFG 2 most often; Gemini chose CFG 1 on six sheets; this GPT favored moderate CFG; and the earlier assistant review was not fully blind. Their disagreement is evidence that the first screen cannot determine one global best setting by preference alone. Keep 8/CFG 1 as a reproducible reference and retain 8/CFG 2 and 12/CFG 1.2 only as **test candidates**, not recommended defaults. A held-out round with shared scoring criteria and explicit text / artifact checks remains the next measurement; no new generation or model change was made for this review.
+
+### Baked v0.9.4 versus SFT/Base + Turbo v0.9
+
+The assistant's eight first and second choices are in `assistant_blind_ratings.csv` (SHA-256 `ca03c3959839ff4b49f3bdf17caa1313441a96b152e63228c1c3eeb0339a08fe`), sealed before this key was opened; it had seen the baked images in the earlier screen. Assistant: SFT first on **7/8**, Base **1/8**, baked **0/8**.
+
+The maintainer supplied two screenshots with one A/B/C choice per sheet, in order **GPT-text** and **Gemini**. The originals are archived as `gpt_text_blind_rating.png` (SHA-256 `c2c5115046f7b01dd745d1120b56cda383090738065e1674112c2f65176d4fac`) and `gemini_blind_rating.png` (SHA-256 `14b2793d376e802399450bc8427b29b09612015f70d0589ec1dccad3550b9a9f`) in the comparison archive. Their letters were transcribed to `additional_blind_ratings.csv` (SHA-256 `f61dc99e3dea8f6f2fbaf02c638e011d7ad5b7c8a4b4cfe77cfb37470fe6bbb5`). The screenshots describe qualitative judgments; neither provides standardized prompt-accuracy or artifact scores. The exact context supplied to either reviewer cannot be verified from the screenshots alone.
+
+| Scene / seed | Maintainer | Assistant | GPT-text | Gemini | Sheet result |
+|---|---|---|---|---|---|
+| Airlock / original | SFT | SFT | baked | Base | SFT plurality 2/4 |
+| Airlock / 1200 | SFT | SFT | baked | SFT | SFT 3/4 |
+| Trawler portrait / original | baked | SFT | baked | baked | Baked 3/4 |
+| Trawler portrait / 1200 | baked | Base | baked | baked | Baked 3/4 |
+| Ceramic texture / original | baked | SFT | baked | baked | Baked 3/4 |
+| Ceramic texture / 1200 | SFT | SFT | baked | SFT | SFT 3/4 |
+| Comic text / original | SFT | SFT | SFT | SFT | SFT 4/4 |
+| Comic text / 1200 | SFT | SFT | SFT | SFT | SFT 4/4 |
+
+| Reviewer | Baked v0.9.4 | SFT + v0.9 | Base + v0.9 |
+|---|---:|---:|---:|
+| Maintainer | 3 | 5 | 0 |
+| Assistant | 0 | 7 | 1 |
+| GPT-text | 6 | 2 | 0 |
+| Gemini | 3 | 4 | 1 |
+| **Descriptive total** | **12** | **18** | **2** |
+
+The maintainer and Gemini agree on **7/8 exact images**; GPT-text and the maintainer agree on **5/8**. Seven sheets have at least a 3/4 majority; the original-seed airlock has only a 2/4 plurality. Both comic sheets are unanimous for SFT + v0.9. The baked model wins 3/4 votes on both trawler sheets and the original-seed ceramic sheet. These are preferences among the **same eight triplets**, not 32 independent image tests; the assistant also had previous exposure to baked images. The reviewers used different qualitative criteria, and the screenshots cannot establish consistent blinding or scorer calibration. The added votes strengthen the scene-dependent observation, **not a universal quality ranking**. The conclusion remains limited to four selected prompts, two seeds each, 1152×1536, 8 steps and CFG 1. No additional rendering or model/default change was made for this tally.
+
+### Held-out eight scenes, baked v0.9.4 versus SFT + Turbo v0.9
+
+The assistant reviewed the eight blind sheets and full-resolution person images, then saved one overall preference per scene and a **separate face-texture-detail preference** for the four person scenes in `assistant_blind_ratings.csv` (SHA-256 `8e71057497d749f52424cbfe04bfa52846d8b491f4d5ad787feb08bd8019a0fb`). This file was sealed **before opening the A/B key**. The assistant had seen baked-model images from earlier experiments, so the review is not perfectly blind. The maintainer subsequently supplied eight independent A/B choices, after which the key was opened. The decoded results are below; additional reviewers should avoid the key, variant-named PNGs, `metrics.csv` and the decoded section until they have voted.
+
+| Scene | Maintainer overall | Assistant overall | Assistant face-texture detail |
+|---|---|---|---|
+| Watchmaker | B = baked | A = SFT | B = baked |
+| Trumpeter | B = baked | A = SFT | B = baked |
+| Climber | B = baked | A = SFT | B = baked |
+| Flower seller | B = SFT | B = SFT | A = baked |
+| Pocket-watch macro | A = SFT | A = SFT | — |
+| Rainy alley | B = baked | A = SFT | — |
+| Citrus still life | B = SFT | B = SFT | — |
+| Lunar observatory | A = baked | B = SFT | — |
+
+The assistant prefers SFT + v0.9 on **8/8** overall but marks baked v0.9.4 as having **more visible facial texture on 4/4 person scenes**: texture and whole-image preference can point different ways.
+
+The maintainer supplied separate screenshots of **GPT, then Gemini**, each with one A/B choice and qualitative explanation per scene. The originals are archived in this experiment as `gpt_blind_rating.png` (SHA-256 `0ad2e421816d049d7f284a2026aca86478d9b11297191bad61f75d724bfb44c9`) and `gemini_blind_rating.png` (SHA-256 `e938968c50dc7774c1ac15d13f803b22fd56f642858e6c3922b18f65ee33fc2b`). Their letters were transcribed to `additional_blind_ratings.csv` (SHA-256 `12633065a14b969ab9e2cbd54db9741b5e422941536189bdcb9329ae94c10191`). The screenshots state or imply blind selection; they do not establish each reviewer's entire context, nor a shared numerical rubric.
+
+| Scene | Maintainer | Assistant overall | GPT | Gemini | Per-sheet result |
+|---|---|---|---|---|---|
+| Watchmaker | Baked | SFT | Baked | Baked | Baked 3/4 |
+| Trumpeter | Baked | SFT | SFT | SFT | SFT 3/4 |
+| Climber | Baked | SFT | Baked | Baked | Baked 3/4 |
+| Flower seller | SFT | SFT | Baked | Baked | Tie 2/2 |
+| Pocket-watch macro | SFT | SFT | SFT | SFT | SFT 4/4 |
+| Rainy alley | Baked | SFT | Baked | Baked | Baked 3/4 |
+| Citrus still life | SFT | SFT | SFT | Baked | SFT 3/4 |
+| Lunar observatory | Baked | SFT | Baked | SFT | Tie 2/2 |
+
+| Reviewer | Baked v0.9.4 | SFT + v0.9 | Baked person scenes | Baked nonperson scenes |
+|---|---:|---:|---:|---:|
+| Maintainer | 5/8 | 3/8 | 3/4 | 2/4 |
+| Assistant overall | 0/8 | 8/8 | 0/4 | 0/4 |
+| GPT | 5/8 | 3/8 | 3/4 | 2/4 |
+| Gemini | 5/8 | 3/8 | 3/4 | 2/4 |
+
+GPT and Gemini agree on **6/8 exact images** and on **all four person scenes**. In their descriptions, both favor the baked watchmaker and climber for visible face/gear texture, but the SFT trumpeter for more coherent pose and instrument. They also favor the baked flower seller, while the maintainer and assistant prefer SFT overall there. This fits the assistant's earlier **4/4 baked face-texture** assessment while showing that texture and whole-image quality can lead to different votes. The pocket-watch macro is the only unanimous sheet; flower seller and observatory are tied. Across the three newly supplied reviewers, baked receives **15/24 preferences**; adding the assistant's eight SFT preferences yields **15 baked versus 17 SFT**. These totals are descriptive only: the same eight image pairs were judged repeatedly, reviewers' criteria differ, and AI judgments may be correlated. The three supplied reviews each prefer baked on **3/4 people** versus **2/4 nonperson** scenes, which strengthens the *scene-dependent preference hypothesis* but does not establish a population-level portrait advantage or prove physically faithful facial detail. No new rendering or default change was made for these added votes.
+
+### Baked v0.9.4 versus SFT + Turbo v0.7
+
+The assistant recorded one overall preference per scene and a separate face-texture-detail choice for each person scene in `assistant_partial_blind_ratings.csv` (SHA-256 `646c8b586f42902075b30a1f3f6dd1ee03c42523c1bd16e534ae1f6bfe6476ab`) before opening the new key. The assistant also recognizes images from the prior round. A fresh-scene validation would be needed if this quick screen suggests a surprising result; the older LoRA and familiar images limit what one vote can establish. No commit or push was made.
+
+GPT and Gemini screenshots were archived as `gpt_blind_rating.png` (SHA-256 `442c1a70ebd2c5fa1fe96754505063dea4067817ca1cd39d52982f95872b0c2f`) and `gemini_blind_rating.png` (SHA-256 `ee8fcc51be099c33c9dcb85c45f822dc794358cdb3e03c17ead0d2795135a45`); their letters are in `additional_blind_ratings.csv` (SHA-256 `76e42f7cffef084f77416c50231aa008ba4477d0cd519ef472c34b29606aa941`). The screenshots provide qualitative reasons but cannot establish whether the reviewers recognized images from the earlier round.
+
+| Scene | A / B mapping | Maintainer | GPT | Gemini | Assistant overall | Assistant face texture |
+|---|---|---|---|---|---|---|
+| Watchmaker | SFT v0.7 / baked | Baked | SFT v0.7 | Baked | SFT v0.7 | Baked |
+| Trumpeter | SFT v0.7 / baked | Baked | SFT v0.7 | SFT v0.7 | SFT v0.7 | Baked |
+| Climber | Baked / SFT v0.7 | Baked | Baked | Baked | SFT v0.7 | Baked |
+| Flower seller | Baked / SFT v0.7 | SFT v0.7 | Baked | Baked | SFT v0.7 | Baked |
+| Pocket-watch macro | Baked / SFT v0.7 | SFT v0.7 | SFT v0.7 | SFT v0.7 | SFT v0.7 | — |
+| Rainy alley | SFT v0.7 / baked | Baked | Baked | Baked | Baked | — |
+| Citrus still life | Baked / SFT v0.7 | Baked | Baked | Baked | SFT v0.7 | — |
+| Lunar observatory | SFT v0.7 / baked | Baked | Baked | SFT v0.7 | SFT v0.7 | — |
+
+| Reviewer | Baked v0.9.4 first | SFT + v0.7 first |
+|---|---:|---:|
+| Maintainer | **6/8** | 2/8 |
+| GPT | **5/8** | 3/8 |
+| Gemini | **5/8** | 3/8 |
+| Assistant overall | 1/8 | **7/8** |
+
+Rainy alley is unanimous for baked v0.9.4; pocket-watch macro is unanimous for SFT + v0.7. Citrus and climber give baked a 3/4 majority, and trumpeter gives SFT a 3/4 majority. Watchmaker, flower seller and observatory split 2/2. Three reviewers individually favor baked on these familiar pairs, while the assistant favors SFT; **17 versus 15** total votes across all four reviewers would be a misleading headline because the same eight pairs are repeatedly judged under different criteria. In the immediately preceding v0.9 comparison on these same prompts, maintainer/GPT/Gemini each selected baked 5/8; replacing v0.9 with v0.7 did not produce a decisive separation in their short preference tallies. It is not a direct blind head-to-head between the two LoRAs.

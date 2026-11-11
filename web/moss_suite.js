@@ -310,8 +310,7 @@ for (const [cls, { title, sliders = {} }] of Object.entries(GENERIC)) {
     };
 }
 
-for (const [cls, title] of Object.entries({ HaDeSMossLayoutRegions: "LAYOUT REGIONS · DEV TOOLS", HaDeSMossImageAudit: "IMAGE AUDIT · DEV TOOLS",
-    HaDeSMossPairGuard: "PAIR GUARD · DEV TOOLS", HaDeSMossRecipePreview: "RECIPE PREVIEW · DEV TOOLS" })) {
+for (const [cls, title] of Object.entries({ HaDeSMossLayoutRegions: "LAYOUT REGIONS · DEV TOOLS", HaDeSMossImageAudit: "IMAGE AUDIT · DEV TOOLS" })) {
     INSTALLERS[cls] = (node) => {
         banner(node, { title });
         styleWidgets(node, { sliders: { difference_gain: [0, 16], change_threshold: [0, 32] } });

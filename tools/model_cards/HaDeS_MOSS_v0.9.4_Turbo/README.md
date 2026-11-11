@@ -71,14 +71,14 @@ The model was saved as BF16 with nearest rounding. Its safetensors header identi
 
 ## Evaluation and limits
 
-The [measurement log](https://github.com/Devildonia/HaDeS-MOSS-Suite/blob/main/tools/RESULTS.md) records exact prompts, seeds, settings, image metrics and reviewer votes. Comparisons used identical prompt text, seed, 1152 × 1536 size, 8 steps, CFG 1, Euler/simple, flow shift 5, text encoder and VAE within each image pair. The compared pipelines differed in their model weights and LoRA application; these tests do not isolate the contribution of any one baked LoRA.
+The [measurement log](https://github.com/Devildonia/HaDeS-MOSS-Suite/blob/main/tools/RESULTS.md) records exact prompts, seeds, settings, image metrics and the author's blind votes. Comparisons used identical prompt text, seed, 1152 × 1536 size, 8 steps, CFG 1, Euler/simple, flow shift 5, text encoder and VAE within each image pair. The compared pipelines differed in their model weights and LoRA application; these tests do not isolate the contribution of any one baked LoRA.
 
-| Comparison | Images | Preferences for v0.9.4 |
+| Comparison | Images | Author's blind preference for v0.9.4 |
 |---|---:|---|
-| Against SFT + private Turbo v0.9, eight new prompts fixed before rendering | 8 pairs | Author 5/8; separate GPT review 5/8; Gemini 5/8; audit assistant 0/8 |
-| Against SFT + released [Turbo v0.7](https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo), same eight prompts and seeds | 8 pairs | Author 6/8; separate GPT review 5/8; Gemini 5/8; audit assistant 1/8 |
+| Against SFT + private Turbo v0.9, eight new prompts fixed before rendering | 8 pairs | 5/8 |
+| Against SFT + released [Turbo v0.7](https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo), same eight prompts and seeds | 8 pairs | 6/8 |
 
-The second comparison reused familiar images from the first, so it was only partially blind. Reviewers weighted photographic detail, anatomy, lettering, composition and color differently. The author found v0.9.4 publishable as an **alternative** to SFT, and the results support that practical description. They do not establish general superiority, long-run consistency or a model-wide defect rate. In the eight new pairs, v0.9.4 had higher measured mean HSV saturation in every pair and more near-clipped pixels in seven; those numbers describe appearance, not image quality. Hands, small text and physical structure still deserve inspection in individual outputs.
+One reviewer, one seed per prompt; the second comparison reused familiar images from the first, so it was only partially blind. AI-model reviews of the same sheets are logged separately as qualitative impressions and are not counted here. The author found v0.9.4 publishable as an **alternative** to SFT, and the results support that practical description. They do not establish general superiority, long-run consistency or a model-wide defect rate. In the eight new pairs, v0.9.4 had higher measured mean HSV saturation in every pair and more near-clipped pixels in seven; those numbers describe appearance, not image quality. Hands, small text and physical structure still deserve inspection in individual outputs.
 
 The comparisons used **this BF16 file**. They do not validate the visual equivalence of the separately saved int8 ConvRot variant. The custom LoRA datasets and training details are not fully specified by the available model metadata; do not infer a training-data inventory from this card.
 

@@ -9,7 +9,7 @@ NODE_NAMES = {
     "latent": "Latent", "layout": "Layout Compiler", "ksampler": "KSampler", "prompt_enhancer": "Prompt Enhancer",
     "multi_lora": "Multi-LoRA", "layout_editor": "Layout Editor", "loader": "Loader", "metadata_reader": "Metadata Reader", "control": "Control",
     "turbo": "Turbo LoRA", "sampler_metadata": "Sampler Metadata", "image_saver": "Image Saver", "telemetry": "Suite Telemetry",
-    "layout_regions": "Layout Regions", "image_audit": "Image Audit", "pair_guard": "Pair Guard", "recipe_preview": "Recipe Preview",
+    "layout_regions": "Layout Regions", "image_audit": "Image Audit",
 }
 
 
@@ -54,6 +54,20 @@ def diagnose(metas):
                                 "on a 2x-upscaled image only."))
         if m.get("slg", "off") != "off":
             out.append(("note", f"KSampler SLG '{m['slg']}': measured, it did not change text accuracy on SFT or Base."))
+        # denoise below 1 with the core schedule: int(steps / denoise) steps, the last `steps` run (comfy/samplers.py, set_steps)
+        n = m.get("schedule_steps")
+        if m.get("denoise_mode", "core") == "core" and n is not None and m.get("denoise", 1.0) < 0.9999:
+            steps, d = m["steps"], m["denoise"]
+            sigma = f" (start sigma {m['start_sigma']:.3f})" if "start_sigma" in m else ""
+            if n == steps:
+                out.append(("warning", f"KSampler denoise {d:.2f} at {steps} steps runs the full schedule from pure noise{sigma}: the input "
+                                       "latent is ignored, as at denoise 1. Lower denoise, or use denoise_mode exact."))
+            else:
+                lo, hi = steps / (n + 1), steps / n  # every denoise in (lo, hi] builds the same n-step schedule
+                if hi - lo >= 0.02:
+                    out.append(("note", f"KSampler denoise {d:.2f} at {steps} steps: the core builds {n} steps and runs the last {steps}"
+                                        f"{sigma}, so any denoise above {lo:.2f} up to {hi:.2f} gives the same image. denoise_mode exact "
+                                        "makes it continuous."))
 
     for m in by_node.get("model_block_merger", []) + by_node.get("multi_model_merger", []):
         if m.get("quantized"):
@@ -65,11 +79,17 @@ def diagnose(metas):
         if rescale:
             out.append(("note", f"{NODE_NAMES[m['node']]}: fp16-fixed residual scale normalized ({rescale})."))
 
-    for kind in ("lora_extractor", "lora_resize", "lora_merger"):
+    for m in by_node.get("lora_extractor", []):
+        if m["energy_kept"] is not None and m["energy_kept"] < 0.959:  # the lowest energy measured that stayed close to the finetune
+            out.append(("warning", f"LoRA Extractor: {m['energy_kept']:.1%} energy kept. Measured on a finetune: 95.9% rendered 4-12 from it, "
+                                   "90.6% rendered 8-24 (mean pixel difference). Raise the rank to stay close."))
+    # energy does not predict the image across LoRA kinds: a style LoRA drifted at about 90%, few-step LoRAs held at rank 2
+    for kind in ("lora_resize", "lora_merger"):
         for m in by_node.get(kind, []):
-            if m["energy_kept"] is not None and m["energy_kept"] < 0.979:  # the lowest energy measured within the noise floor
-                out.append(("warning", f"{NODE_NAMES[kind]}: {m['energy_kept']:.1%} energy kept. Measured: 97.9-100% stayed within the "
-                                       "noise floor of the source, 90.4-91.1% drifted visibly. Raise the rank to stay close."))
+            if m["energy_kept"] is not None and m["energy_kept"] < 0.979:
+                out.append(("note", f"{NODE_NAMES[kind]}: {m['energy_kept']:.1%} energy kept. Measured: a style LoRA (Anubis) stayed within the "
+                                    "noise floor at 97.9% and drifted visibly at 90.4-91.1%; few-step LoRAs cut to rank 2 rendered the full "
+                                    "LoRA's images (tools/RESULTS.md). Energy alone does not predict the image: compare renders."))
 
     for m in by_node.get("loader", []):
         if m["precision"].startswith("int8"):

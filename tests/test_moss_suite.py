@@ -823,6 +823,64 @@ class TestLoader(unittest.TestCase):
         self.assertTrue(any("57% slower" in f["message"] for f in findings))
 
 
+class TestDenoiseSchedule(unittest.TestCase):
+    def setUp(self):
+        from comfy.model_sampling import ModelSamplingDiscreteFlow
+        self.ms = ModelSamplingDiscreteFlow()
+        self.ms.set_parameters(shift=5.0, multiplier=1000)
+
+    def test_core_start_sigmas_match_comfy_schedule(self):
+        # 4 steps, shift 5, simple: int(steps / denoise) steps, the last 4 run
+        expected = {0.3: (13, 0.690), 0.5: (8, 0.833), 0.6: (6, 0.909), 0.7: (5, 0.952), 0.8: (5, 0.952), 0.9: (4, 1.0)}
+        for d, (n, sigma) in expected.items():
+            self.assertEqual(sampler.core_schedule_steps(4, d), n)
+            self.assertAlmostEqual(sampler.start_sigma(self.ms, "euler", "simple", 4, d, sampler.DENOISE_CORE), sigma, places=3)
+
+    def test_exact_is_continuous_and_full_at_one(self):
+        full = sampler.full_sigmas(self.ms, "euler", "simple", 4)
+        torch.testing.assert_close(sampler.exact_sigmas(self.ms, "euler", "simple", 4, 1.0), full, atol=1e-6, rtol=0)
+        starts = [float(sampler.exact_sigmas(self.ms, "euler", "simple", 4, d)[0]) for d in (0.6, 0.7, 0.8, 0.89, 0.9)]
+        self.assertEqual(starts, sorted(starts))
+        self.assertEqual(len(set(round(s, 4) for s in starts)), 5)  # 0.7 and 0.8 differ, unlike the core schedule
+        self.assertAlmostEqual(starts[3], 0.976, places=3)
+        for d in (0.3, 0.7, 0.9):
+            s = sampler.exact_sigmas(self.ms, "euler", "simple", 4, d)
+            self.assertEqual(len(s), 5)
+            self.assertEqual(float(s[-1]), 0.0)
+            self.assertTrue(bool((s[:-1] > s[1:]).all()))
+            self.assertAlmostEqual(float(s[0]), sampler.start_sigma(self.ms, "euler", "simple", 4, d, sampler.DENOISE_EXACT), places=4)
+
+    def test_ksampler_modes_reach_the_sampler_and_info(self):
+        seen = {}
+
+        def fake_sample(model, noise, steps, cfg, sampler_name, scheduler, positive, negative, latent_image, **kw):
+            seen["sigmas"] = kw.get("sigmas")
+            return torch.zeros_like(latent_image)
+
+        def fake_ksampler(model, seed, steps, cfg, sampler_name, scheduler, positive, negative, latent, denoise=1.0):
+            seen["denoise"] = denoise
+            return ({"samples": torch.zeros(1, 128, 4, 4)},)
+
+        originals = sampler.comfy.sample.sample, sampler.nodes.common_ksampler
+        sampler.comfy.sample.sample, sampler.nodes.common_ksampler = fake_sample, fake_ksampler
+        try:
+            run = lambda mode: common.parse_info_meta(sampler.HaDeSMossKSampler().sample(
+                load(tiny_state_dict(12)), None, None, {"samples": torch.zeros(1, 128, 4, 4)}, 3, 4, 1.0, "euler", "simple", 0.7, 0.0, "off",
+                denoise_mode=mode)[2])
+            exact, core = run(sampler.DENOISE_EXACT), run(sampler.DENOISE_CORE)
+        finally:
+            sampler.comfy.sample.sample, sampler.nodes.common_ksampler = originals
+        self.assertEqual(len(seen["sigmas"]), 5)
+        self.assertAlmostEqual(float(seen["sigmas"][0]), exact["start_sigma"], places=4)
+        self.assertEqual((exact["denoise_mode"], round(exact["start_sigma"], 3)), ("exact", 0.921))
+        self.assertNotIn("schedule_steps", exact)
+        self.assertEqual(seen["denoise"], 0.7)
+        self.assertEqual((core["denoise_mode"], core["schedule_steps"], round(core["start_sigma"], 3)), ("core", 5, 0.952))
+
+    def test_discard_penultimate_samplers_keep_length(self):
+        self.assertEqual(len(sampler.exact_sigmas(self.ms, "dpm_2", "simple", 4, 0.7)), 5)
+
+
 class TestTelemetry(unittest.TestCase):
     def test_every_trailer_is_known_to_telemetry(self):
         """The Suite's rule: every node writes a HADES_META trailer and Suite Telemetry names it instead of counting it as foreign."""
@@ -865,8 +923,31 @@ class TestTelemetry(unittest.TestCase):
         report, data, summary, info = telemetry.HaDeSMossSuiteTelemetry().audit("T", **{f"info_{i + 1}": s for i, s in enumerate(infos)})["result"]
         self.assertEqual(common.parse_info_meta(info)["error"], 1)
         levels = [x["level"] for x in json.loads(data)["findings"]]
-        self.assertEqual((levels.count("error"), levels.count("warning"), levels.count("note")), (1, 3, 1))
+        self.assertEqual((levels.count("error"), levels.count("warning"), levels.count("note")), (1, 2, 2))  # resize energy: a note
         self.assertIn("1 input(s) without a HaDeS MOSS trailer ignored", report)
+
+    def test_energy_rules(self):
+        f = common.format_info
+        audit = lambda info: [(x["level"], x["message"][:14]) for x in json.loads(telemetry.HaDeSMossSuiteTelemetry().audit("T", info_1=info)["result"][1])["findings"]]
+        self.assertEqual(audit(f("x", "lora_extractor", saved_path="p", rank=32, layers=1, energy_kept=0.906)), [("warning", "LoRA Extractor")])
+        self.assertEqual(audit(f("x", "lora_extractor", saved_path="p", rank=64, layers=1, energy_kept=0.959)), [])
+        self.assertEqual(audit(f("x", "lora_merger", saved_path="p", rank=2, layers=1, energy_kept=0.56)), [("note", "LoRA Merger: 5")])
+
+    def test_denoise_schedule_rules(self):
+        f = common.format_info
+        base = dict(width=1024, height=1024, cfg=1.0, flow_shift=5.0, sampler="euler", scheduler="simple", seed=1, slg="off")
+        def findings(**extra):
+            data = telemetry.HaDeSMossSuiteTelemetry().audit("T", info_1=f("x", "ksampler", **{**base, **extra}))["result"][1]
+            return [(x["level"], x["message"]) for x in json.loads(data)["findings"] if "denoise" in x["message"] and "Turbo" not in x["message"]]
+        (level, msg), = findings(steps=4, denoise=0.9, denoise_mode="core", schedule_steps=4, start_sigma=1.0)
+        self.assertEqual(level, "warning")
+        self.assertIn("pure noise", msg)
+        (level, msg), = findings(steps=4, denoise=0.7, denoise_mode="core", schedule_steps=5, start_sigma=0.9524)
+        self.assertEqual(level, "note")
+        self.assertIn("above 0.67 up to 0.80", msg)
+        self.assertEqual(findings(steps=25, denoise=0.5, denoise_mode="core", schedule_steps=50), [])  # a 0.01-wide band: no note
+        self.assertEqual(findings(steps=4, denoise=0.7, denoise_mode="exact", start_sigma=0.921), [])
+        self.assertEqual(findings(steps=4, denoise=0.7), [])  # infos written before 0.7.3 have no schedule_steps
 
     def test_clean_pipeline(self):
         f = common.format_info

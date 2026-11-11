@@ -123,30 +123,6 @@ EXAMPLES = {
                     "refine_loader": (450, 350), "refine_prompt": (450, 750), "refine_ks": (450, 1150),
                     "full": (900, 350), "stage": (900, 850), "saver": (1400, 350)},
     },
-    "HaDeS MOSS Suite - Pair Guard and Recipe Preview (Dev)": {
-        "reference": ("EmptyImage", {"width": 64, "height": 64, "batch_size": 1, "color": 0x304050}),
-        "candidate": ("EmptyImage", {"width": 64, "height": 64, "batch_size": 1, "color": 0xB04050}),
-        "ref_info": ("PrimitiveStringMultiline", {"value": synthetic_info("ksampler", width=64, height=64, seed=1200,
-            steps=8, cfg=1.0, sampler="euler", scheduler="simple", flow_shift=5.0, denoise=1.0, slg="off")}),
-        "cand_info": ("PrimitiveStringMultiline", {"value": synthetic_info("ksampler", width=64, height=64, seed=1200,
-            steps=8, cfg=1.0, sampler="euler", scheduler="simple", flow_shift=5.0, denoise=1.0, slg="off")}),
-        "guard": ("HaDeSMossPairGuard", {"reference": ("reference", 0), "candidate": ("candidate", 0),
-            "reference_metadata": ("ref_info", 0), "candidate_metadata": ("cand_info", 0), "require_metadata": True,
-            "compare_prompt": False}),
-        "audit": ("HaDeSMossImageAudit", {"reference": ("guard", 0), "candidate": ("guard", 1),
-            "change_threshold": 2.0, "difference_gain": 1.0, "reference_label": "Base", "candidate_label": "Variant"}),
-        "recipe_info": ("PrimitiveStringMultiline", {"value": "Demo recipe: Base plus color LoRA at 0.6\nHADES_META "
-            + json.dumps({"node": "multi_lora", "loras": [{"name": "color.safetensors", "strength": 0.6}],
-                          "sources": {"model": {"node": "loader", "model_file": "base.safetensors"}}}, separators=(",", ":"))}),
-        "recipe": ("HaDeSMossRecipePreview", {"recipe_info": ("recipe_info", 0), "include_metadata": True}),
-        "note": ("Note", {"text": "MODEL-FREE DEV EXAMPLE. Queue to run Pair Guard and Recipe Preview.\n\n"
-            "Pair Guard checks matching image geometry and declared sampler settings, then passes images to Image Audit. "
-            "Change the candidate seed to see a clear failure. The synthetic metadata does not establish actual generation provenance.\n\n"
-            "Recipe Preview shows the exact text that would feed Model Saver's recipe input. Its dummy file names are illustrative; "
-            "no model is loaded or saved. Connect a real Suite info output and optionally its model to check an actual recipe."}),
-        "_layout": {"reference": (0, 0), "candidate": (0, 300), "ref_info": (350, 0), "cand_info": (350, 400),
-                    "guard": (800, 0), "audit": (1250, 0), "recipe_info": (350, 850), "recipe": (800, 850), "note": (0, 1100)},
-    },
     "HaDeS MOSS Suite - Merge, Save and Telemetry": {
         **loader(),  # SFT, its text encoder and VAE
         "base": ("UNETLoader", {"unet_name": BASE, "weight_dtype": "default"}),
@@ -335,8 +311,7 @@ EXAMPLES = {
     },
 }
 
-DEV_EXAMPLE_TITLES = {"HaDeS MOSS Suite - Dev Tools", "HaDeS MOSS Suite - Stage Metadata (Dev)",
-                      "HaDeS MOSS Suite - Pair Guard and Recipe Preview (Dev)"}
+DEV_EXAMPLE_TITLES = {"HaDeS MOSS Suite - Dev Tools", "HaDeS MOSS Suite - Stage Metadata (Dev)"}
 
 
 def fetch(server, path, data=None):

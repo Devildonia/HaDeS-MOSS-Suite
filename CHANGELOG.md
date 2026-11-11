@@ -7,9 +7,17 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **MOSS KSampler `denoise_mode`:** `exact` makes denoise continuous at few steps (a point on the model's noise-time axis, every step run from there with the scheduler's spacing); the default `steps / denoise (core)` keeps the stock schedule. `info` records the start sigma and, in core mode, the steps the core actually builds.
+- **`tools/moss_pair_check.py`:** checks that two images saved by the MOSS Image Saver (or two Telemetry json files) are a fair A / B pair: same size, sampling settings and prompt; a different model or LoRA is listed. Replaces the Pair Guard node.
+
 ### Changed
-- **Every node has an `info` output with HADES_META, read by Suite Telemetry:** MOSS Turbo LoRA, MOSS Sampler Metadata, MOSS Image Saver and MOSS Suite Telemetry get an `info` output (added last, so saved workflows keep their links); MOSS Pair Guard and MOSS Recipe Preview add the trailer to their `report`. Telemetry lists them by name instead of counting them as foreign inputs.
+- **Every node has an `info` output with HADES_META, read by Suite Telemetry:** MOSS Turbo LoRA, MOSS Sampler Metadata, MOSS Image Saver and MOSS Suite Telemetry get an `info` output (added last, so saved workflows keep their links). Telemetry lists them by name instead of counting them as foreign inputs, and a test keeps every node's trailer and Telemetry's names in step.
 - **Dev Tools are repository-only:** `moss_dev_nodes.py`, `web/moss_dev_tools.js` and `examples/dev/` are left out of the Comfy Registry package; the Suite loads without them. `pyproject.toml` no longer lists `web` and `examples` under `includes`: comfy-cli forces listed folders in past `.comfyignore`, and both are packaged anyway as git-tracked files.
+- **Removed MOSS Pair Guard and MOSS Recipe Preview** (Dev Tools, repository-only): the pair check is now `tools/moss_pair_check.py`, for saved images; Recipe Preview repeated what the `info` outputs and the Metadata Reader show. Their Dev example is removed; the Dev Tools README section is rewritten in the Suite's format.
+- **Suite Telemetry, denoise:** a warning when a core-mode denoise below 1 runs the full schedule from pure noise (e.g. 0.9 at 4 steps: the input is ignored), and a note when step rounding gives the same image across a range of denoise values. From ComfyUI's own schedule code; reported independently by lilting.ch.
+- **Suite Telemetry, LoRA energy:** the 97.9% energy warning for LoRA Resize / Merger is now a note with both measurements: a style LoRA drifted at about 90% energy, while few-step LoRAs cut to rank 2 rendered the full LoRA's images, so energy alone does not predict the image. LoRA Extractor keeps a warning, at its own measured threshold (95.9%).
+- **`tools/RESULTS.md`:** GPT, Gemini and assistant preferences on the blind sheets moved to a section marked qualitative; the experiments' conclusions cite only the maintainer's votes and the metrics. The v0.9.4 Turbo model card likewise counts only the author's votes.
 
 ### Fixed
 - **Dev Tools report widget:** the read-only report no longer fails when the frontend gives the widget no `inputEl` (Nodes 2.0 / Vue).
