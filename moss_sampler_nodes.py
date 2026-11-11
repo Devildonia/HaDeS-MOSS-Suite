@@ -63,8 +63,8 @@ class HaDeSMossTurbo:
             },
         }
 
-    RETURN_TYPES = ("MOSS_TURBO",)
-    RETURN_NAMES = ("turbo",)
+    RETURN_TYPES = ("MOSS_TURBO", "STRING")
+    RETURN_NAMES = ("turbo", "info")
     FUNCTION = "pick"
     CATEGORY = "HaDeS/MOSS Samplers"
     DESCRIPTION = ("Few-step LoRA for the MOSS KSampler's turbo input: the KSampler applies it to its model and samples at this node's "
@@ -73,8 +73,11 @@ class HaDeSMossTurbo:
 
     def pick(self, lora_name, strength, steps=TURBO_SETTINGS["steps"], cfg=TURBO_SETTINGS["cfg"], sampler_name=TURBO_SETTINGS["sampler_name"],
              scheduler=TURBO_SETTINGS["scheduler"]):
+        info = format_info(f"HaDeS MOSS Turbo LoRA | {lora_name} | strength {float(strength):g} | {int(steps)} steps, CFG {float(cfg):g}, "
+                           f"{sampler_name} / {scheduler}", "turbo", lora=lora_name, strength=float(strength), steps=int(steps), cfg=float(cfg),
+                           sampler=sampler_name, scheduler=scheduler)
         return ({"lora_name": lora_name, "strength": float(strength), "steps": int(steps), "cfg": float(cfg), "sampler_name": sampler_name,
-                 "scheduler": scheduler},)
+                 "scheduler": scheduler}, info)
 
 
 class HaDeSMossKSampler:
@@ -154,10 +157,11 @@ class HaDeSMossSamplerMetadata:
     def INPUT_TYPES(cls):
         return {"required": {"info": ("STRING", {"forceInput": True, "tooltip": "info output of a MOSS KSampler."})}}
 
-    RETURN_TYPES = ("INT", "INT", "FLOAT", "STRING", "STRING", "FLOAT", "FLOAT", "STRING")
-    RETURN_NAMES = ("seed", "steps", "cfg", "sampler_name", "scheduler", "denoise", "flow_shift", "turbo")
+    RETURN_TYPES = ("INT", "INT", "FLOAT", "STRING", "STRING", "FLOAT", "FLOAT", "STRING", "STRING")
+    RETURN_NAMES = ("seed", "steps", "cfg", "sampler_name", "scheduler", "denoise", "flow_shift", "turbo", "info")
     OUTPUT_TOOLTIPS = ("", "", "", "", "", "", "", "The turbo LoRA file and strength when the KSampler had one (e.g. "
-                                                                 "\"HaDeS-MOSS-Turbo-v0.6.safetensors:1\"), empty otherwise.")
+                                                                 "\"HaDeS-MOSS-Turbo-v0.6.safetensors:1\"), empty otherwise.",
+                       "The values read, for Suite Telemetry.")
     FUNCTION = "read"
     CATEGORY = "HaDeS/MOSS Samplers"
     DESCRIPTION = "The settings a MOSS KSampler actually sampled with, read from its info output, for image-saver metadata (turbo LoRA included)."
@@ -168,7 +172,10 @@ class HaDeSMossSamplerMetadata:
             raise ValueError("HaDeS MOSS Sampler Metadata needs the info output of a MOSS KSampler.")
         turbo = f"{meta['turbo']}:{meta.get('turbo_strength', 1.0):g}" if meta.get("turbo") else ""
         values = (meta["seed"], meta["steps"], meta["cfg"], meta["sampler"], meta["scheduler"], meta["denoise"], meta["flow_shift"], turbo)
-        return {"ui": {"settings": [list(values)]}, "result": values}
+        info = format_info(f"HaDeS MOSS Sampler Metadata | seed {values[0]} | {values[1]} steps, CFG {values[2]:g}, {values[3]} / {values[4]}"
+                           + (f" | turbo {turbo}" if turbo else ""), "sampler_metadata",
+                           **dict(zip(("seed", "steps", "cfg", "sampler", "scheduler", "denoise", "flow_shift", "turbo"), values)))
+        return {"ui": {"settings": [list(values)]}, "result": values + (info,)}
 
 
 NODE_CLASS_MAPPINGS = {"HaDeSMossKSampler": HaDeSMossKSampler, "HaDeSMossTurbo": HaDeSMossTurbo, "HaDeSMossSamplerMetadata": HaDeSMossSamplerMetadata}

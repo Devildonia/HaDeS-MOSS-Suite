@@ -15,7 +15,13 @@ import {
 import { createMultiLoraWidget, multiLoraStatus } from "./moss_multilora.js";
 import { createLayoutEditorWidget, layoutEditorStatus } from "./moss_layout_editor.js";
 import { api } from "../../scripts/api.js";
-import { addMeasurementReport } from "./moss_dev_tools.js";
+// the Dev Tools are in the git repository only (not in the Comfy Registry package): load their report helper when present
+let addMeasurementReport = () => {};
+try {
+    ({ addMeasurementReport } = await import("./moss_dev_tools.js"));
+} catch {
+    // Registry install: no Dev Tools nodes either
+}
 
 // =============================================================================
 // HADES MOSS SUITE UI

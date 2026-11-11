@@ -7,3 +7,7 @@ AGENTS.md
 Agents.md
 # Measurements cited by the README and the node tooltips
 !tools/RESULTS.md
+# Dev Tools: measurement nodes, their UI and example workflows stay in the git repository
+moss_dev_nodes.py
+web/moss_dev_tools.js
+examples/dev/

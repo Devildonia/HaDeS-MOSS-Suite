@@ -12,7 +12,7 @@ from PIL.PngImagePlugin import PngInfo
 import folder_paths
 from comfy.cli_args import args
 
-from .moss_common import parse_info_meta
+from .moss_common import format_info, parse_info_meta
 
 # sha256 per file, kept while the file is unchanged (same size and modification time) for this ComfyUI session
 _HASHES = {}
@@ -163,9 +163,9 @@ class HaDeSMossImageSaver:
             "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},
         }
 
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("parameters",)
-    OUTPUT_TOOLTIPS = ("The A1111 parameters text written into the images.",)
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("parameters", "info")
+    OUTPUT_TOOLTIPS = ("The A1111 parameters text written into the images.", "The files saved and what was written into them, for Suite Telemetry.")
     FUNCTION = "save"
     OUTPUT_NODE = True
     CATEGORY = "HaDeS/MOSS Pipeline"
@@ -209,10 +209,15 @@ class HaDeSMossImageSaver:
             img.save(os.path.join(full_folder, file), pnginfo=info, compress_level=4)
             results.append({"filename": file, "subfolder": subfolder, "type": "output"})
             counter += 1
+        files = [f"{r['subfolder']}/{r['filename']}" if r["subfolder"] else r["filename"] for r in results]
+        info = format_info(f"HaDeS MOSS Image Saver | {len(files)} image(s) | {files[0] if files else ''}"
+                           + "".join(f"\nnote: {n}" for n in notes), "image_saver", files=files,
+                           metadata=bool(metadata), primary_stage=primary is not None, hashes=bool(hashes),
+                           embed_workflow=bool(embed_workflow) and not args.disable_metadata, metadata_written=not args.disable_metadata, notes=notes)
         if notes:
             parameters_note = "\n".join(f"note: {n}" for n in notes)
-            return {"ui": {"images": results, "text": [parameters_note]}, "result": (parameters,)}
-        return {"ui": {"images": results}, "result": (parameters,)}
+            return {"ui": {"images": results, "text": [parameters_note]}, "result": (parameters, info)}
+        return {"ui": {"images": results}, "result": (parameters, info)}
 
 
 NODE_CLASS_MAPPINGS = {"HaDeSMossImageSaver": HaDeSMossImageSaver}

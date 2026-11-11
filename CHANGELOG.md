@@ -5,6 +5,19 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Changed
+- **Every node has an `info` output with HADES_META, read by Suite Telemetry:** MOSS Turbo LoRA, MOSS Sampler Metadata, MOSS Image Saver and MOSS Suite Telemetry get an `info` output (added last, so saved workflows keep their links); MOSS Pair Guard and MOSS Recipe Preview add the trailer to their `report`. Telemetry lists them by name instead of counting them as foreign inputs.
+- **Dev Tools are repository-only:** `moss_dev_nodes.py`, `web/moss_dev_tools.js` and `examples/dev/` are left out of the Comfy Registry package; the Suite loads without them. `pyproject.toml` no longer lists `web` and `examples` under `includes`: comfy-cli forces listed folders in past `.comfyignore`, and both are packaged anyway as git-tracked files.
+
+### Fixed
+- **Dev Tools report widget:** the read-only report no longer fails when the frontend gives the widget no `inputEl` (Nodes 2.0 / Vue).
+- **Docs:** `tools/RESULTS.md` and the README no longer carry local drive paths, chat attachment identifiers or an internal working note.
+
+### Tests
+- int8 ConvRot model + LoRA saved as int8: the LoRA'd layers are requantized, the untouched ones are written byte for byte.
+
 ## [0.7.2] - 2026-11-11
 
 ### Added

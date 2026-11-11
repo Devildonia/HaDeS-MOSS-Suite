@@ -264,7 +264,9 @@ class HaDeSMossPairGuard(io.ComfyNode):
         lines += ["Unverified: " + ", ".join(unverified)] if unverified else []
         lines += ["Allowed difference: " + item for item in differences]
         lines.append("No pixel alignment or quality judgment. Images pass through unchanged.")
-        report = "\n".join(lines)
+        report = format_info("\n".join(lines), "pair_guard", status="pass", width=width, height=height, batch_pairs=batch,
+                             metadata_checked=bool(reference_metadata), matched_controls=sorted(checked), unverified=unverified,
+                             allowed_differences=len(differences))
         return io.NodeOutput(reference, candidate, report, json.dumps(record, ensure_ascii=False, indent=2), ui=ui.PreviewText(report))
 
 
@@ -316,7 +318,9 @@ class HaDeSMossRecipePreview(io.ComfyNode):
                  f"Will be embedded if Model Saver uses these settings: {'yes' if include_metadata else 'no'}"]
         lines += ["NOTE: " + note for note in notes]
         lines += ["", "Recipe text sent to Model Saver:", recipe]
-        report = "\n".join(lines)
+        # the trailer goes last, after the recipe's own trailers, so parse_info_meta reads this node's
+        report = format_info("\n".join(lines), "recipe_preview", characters=len(recipe), structured_nodes=[m.get("node") for m in metas],
+                             model_attachment_match=match, will_embed_if_saver_matches=bool(include_metadata), notes=len(notes))
         return io.NodeOutput(recipe, report, json.dumps(record, ensure_ascii=False, indent=2), ui=ui.PreviewText(report))
 
 

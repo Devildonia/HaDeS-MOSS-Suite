@@ -6,8 +6,10 @@ export function addMeasurementReport(node) {
     // This native output widget is content, not a HaDeS replacement for a standard input.
     report._isHadesCustom = false;
     if (node._hadesCustomWidgets) node._hadesCustomWidgets = node._hadesCustomWidgets.filter(w => w !== report);
-    report.inputEl.readOnly = true;
-    Object.assign(report.inputEl.style, { minHeight: "0", boxSizing: "border-box", whiteSpace: "pre-wrap", overflowWrap: "anywhere", overflow: "auto", resize: "none" });
+    if (report.inputEl) {
+        report.inputEl.readOnly = true;
+        Object.assign(report.inputEl.style, { minHeight: "0", boxSizing: "border-box", whiteSpace: "pre-wrap", overflowWrap: "anywhere", overflow: "auto", resize: "none" });
+    }
     // Tell the node layout about the space; a CSS min-height alone overflows at small node sizes / zoom levels.
     report.options.getMinHeight = () => 180;
     report.options.read_only = true; // Vue renders its own textarea rather than the legacy inputEl.

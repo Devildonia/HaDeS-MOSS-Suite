@@ -195,6 +195,7 @@ class TestPairGuard(unittest.TestCase):
         self.assertIs(out.args[0], a)
         self.assertIs(out.args[1], b)
         record = json.loads(out.args[3])
+        self.assertEqual(common.parse_info_meta(out.args[2])["node"], "pair_guard")
         self.assertEqual(record["status"], "pass")
         self.assertEqual(record["batch_pairs"], 2)
         self.assertEqual(len(record["allowed_differences"]), 1)
@@ -243,6 +244,7 @@ class TestRecipePreview(unittest.TestCase):
         self.assertEqual(out.args[0], source)
         self.assertTrue(json.loads(out.args[2])["model_attachment_match"])
         self.assertIn("turbo", out.args[1])
+        self.assertEqual(common.parse_info_meta(out.args[1])["node"], "recipe_preview")  # its own trailer, after the recipe's
 
     def test_empty_malformed_and_metadata_off(self):
         with self.assertRaisesRegex(ValueError, "empty"):

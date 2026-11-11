@@ -32,7 +32,6 @@ Repository = "https://github.com/Devildonia/HaDeS-MOSS-Suite"
 PublisherId = "hades"
 DisplayName = "HaDeS MOSS Suite"
 Icon = "https://raw.githubusercontent.com/Devildonia/HaDeS-MOSS-Suite/main/web/icon.png"
-includes = [
-    "web",
-    "examples",
-]
+# web/ and examples/ are git-tracked, so they are packaged without being listed here; listing them would force them in past
+# .comfyignore (comfy-cli), which keeps the Dev Tools out
+includes = []

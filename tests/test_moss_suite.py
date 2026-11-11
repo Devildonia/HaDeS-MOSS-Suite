@@ -63,9 +63,10 @@ def load(sd, dtype=None):
     return comfy.sd.load_diffusion_model_state_dict({k: v.clone() for k, v in sd.items()}, model_options={"dtype": dtype} if dtype else {})
 
 
-def load_int8(sd):
-    """The state dict saved and loaded back in Comfy-Org's int8 ConvRot layout (layer linears int8, int8 attention)."""
-    path = os.path.join(TMP, "q.safetensors")
+def load_int8(sd, name="q"):
+    """The state dict saved and loaded back in Comfy-Org's int8 ConvRot layout (layer linears int8, int8 attention), as TMP/<name>.safetensors
+    (a name of its own when the test reads the file back: Windows keeps a loaded file locked)."""
+    path = os.path.join(TMP, f"{name}.safetensors")
     out = {}
     for k, v in sd.items():
         if saver._INT8_LAYER_LINEAR_RE.match(k):
@@ -507,6 +508,22 @@ class TestSaverAndSampler(unittest.TestCase):
             if k.endswith(("proj.qkv.weight", "proj.o.weight", "proj.ffn_up_gate.weight", "proj.ffn_down.weight", "weight_scale", "comfy_quant")):
                 torch.testing.assert_close(before[k], after[k], rtol=0, atol=0)
 
+    def test_int8_with_lora_saved_as_int8_requantizes_only_patched_layers(self):
+        key = "layers.2.proj.o"
+        g = torch.Generator().manual_seed(1)
+        lora = {f"diffusion_model.{key}.lora_up.weight": torch.randn(DIM, 4, generator=g) * 0.05,
+                f"diffusion_model.{key}.lora_down.weight": torch.randn(4, DIM, generator=g) * 0.05, f"diffusion_model.{key}.alpha": torch.tensor(4.0)}
+        q = load_int8(tiny_state_dict(31), "q_lora")
+        m = comfy.sd.load_lora_for_models(q, None, lora, 1.0, 0)[0]
+        path = saver.HaDeSMossModelSaver().save(m, "tests/int8_lora", saver.PRECISIONS[1], False)["result"][1]
+        raw_in = safetensors.torch.load_file(os.path.join(TMP, "q_lora.safetensors"))
+        out = safetensors.torch.load_file(path)
+        self.assertFalse(torch.equal(raw_in[f"{key}.weight"], out[f"{key}.weight"]))  # the LoRA is in the saved int8 weight
+        self.assertFalse(torch.equal(raw_in[f"{key}.weight_scale"], out[f"{key}.weight_scale"]))
+        self.assertEqual(out[f"{key}.weight"].dtype, torch.int8)
+        for k in ("layers.3.proj.o.weight", "layers.3.proj.o.weight_scale", "layers.2.proj.qkv.weight"):  # untouched: byte for byte
+            torch.testing.assert_close(raw_in[k], out[k], rtol=0, atol=0)
+
     def test_int8_model_saved_as_bf16_holds_no_int8(self):
         q = load_int8(tiny_state_dict(7))
         for precision, dtype in (("bfloat16", "BF16"), ("float32", "F32")):
@@ -598,6 +615,7 @@ class TestSaverAndSampler(unittest.TestCase):
         self.assertEqual((meta["turbo"], meta["slg"], meta["steps"]), ("turbo_test.safetensors", "off", 4))
         values = sampler.HaDeSMossSamplerMetadata().read(info)["result"]
         self.assertEqual((values[1], values[2], values[7]), (4, 1.0, "turbo_test.safetensors:1"))
+        self.assertEqual(common.parse_info_meta(values[8])["node"], "sampler_metadata")
         # the turbo node's steps widget replaces the default 4; the KSampler's own steps (25) stay ignored
         sampler.nodes.common_ksampler = fake_ksampler
         try:
@@ -806,6 +824,18 @@ class TestLoader(unittest.TestCase):
 
 
 class TestTelemetry(unittest.TestCase):
+    def test_every_trailer_is_known_to_telemetry(self):
+        """The Suite's rule: every node writes a HADES_META trailer and Suite Telemetry names it instead of counting it as foreign."""
+        import ast
+        import glob
+        names = set()
+        for path in glob.glob(os.path.join(PACK_DIR, "moss_*.py")):
+            for call in ast.walk(ast.parse(open(path, encoding="utf-8").read())):
+                if isinstance(call, ast.Call) and getattr(call.func, "id", None) in ("format_info", "format_model_info") and len(call.args) > 1:
+                    if isinstance(call.args[1], ast.Constant):  # moss_common's own wrapper passes a variable
+                        names.add(call.args[1].value)
+        self.assertEqual(names, set(telemetry.NODE_NAMES))  # no unknown trailer, no stale name
+
     def test_turbo_notes(self):
         f = common.format_info
         base = dict(width=1024, height=1024, steps=4, cfg=1.0, flow_shift=5.0, sampler="euler", scheduler="simple", seed=0, slg="off")
@@ -832,7 +862,8 @@ class TestTelemetry(unittest.TestCase):
                  f("x", "multi_model_merger", method="TIES", models=2, density=0.5, scale=1.0, modified_tensors=1, quantized=["model_2"], rescaled=[]),
                  f("x", "lora_resize", saved_path="p", rank=16, layers=1, energy_kept=0.85),
                  "foreign text"]
-        report, data, summary = telemetry.HaDeSMossSuiteTelemetry().audit("T", **{f"info_{i + 1}": s for i, s in enumerate(infos)})["result"]
+        report, data, summary, info = telemetry.HaDeSMossSuiteTelemetry().audit("T", **{f"info_{i + 1}": s for i, s in enumerate(infos)})["result"]
+        self.assertEqual(common.parse_info_meta(info)["error"], 1)
         levels = [x["level"] for x in json.loads(data)["findings"]]
         self.assertEqual((levels.count("error"), levels.count("warning"), levels.count("note")), (1, 3, 1))
         self.assertIn("1 input(s) without a HaDeS MOSS trailer ignored", report)

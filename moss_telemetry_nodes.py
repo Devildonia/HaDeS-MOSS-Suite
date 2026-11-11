@@ -1,6 +1,6 @@
 import json
 
-from .moss_common import parse_info_meta
+from .moss_common import format_info, parse_info_meta
 
 N_INFO = 8
 NODE_NAMES = {
@@ -8,7 +8,8 @@ NODE_NAMES = {
     "lora_extractor": "LoRA Extractor", "lora_block_weight": "LoRA Block Weight", "lora_merger": "LoRA Merger", "lora_resize": "LoRA Resize",
     "latent": "Latent", "layout": "Layout Compiler", "ksampler": "KSampler", "prompt_enhancer": "Prompt Enhancer",
     "multi_lora": "Multi-LoRA", "layout_editor": "Layout Editor", "loader": "Loader", "metadata_reader": "Metadata Reader", "control": "Control",
-    "layout_regions": "Layout Regions", "image_audit": "Image Audit",
+    "turbo": "Turbo LoRA", "sampler_metadata": "Sampler Metadata", "image_saver": "Image Saver", "telemetry": "Suite Telemetry",
+    "layout_regions": "Layout Regions", "image_audit": "Image Audit", "pair_guard": "Pair Guard", "recipe_preview": "Recipe Preview",
 }
 
 
@@ -116,8 +117,8 @@ class HaDeSMossSuiteTelemetry:
             "optional": {f"info_{i}": ("STRING", {"forceInput": True}) for i in range(1, N_INFO + 1)},
         }
 
-    RETURN_TYPES = ("STRING", "STRING", "STRING")
-    RETURN_NAMES = ("report", "json", "summary")
+    RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING")
+    RETURN_NAMES = ("report", "json", "summary", "info")
     FUNCTION = "audit"
     OUTPUT_NODE = True
     CATEGORY = "HaDeS/MOSS Pipeline"
@@ -150,7 +151,8 @@ class HaDeSMossSuiteTelemetry:
                    + (f" | {findings[0][1][:80]}" if findings else ""))
         data = json.dumps({"nodes": metas, "findings": [{"level": l, "message": m} for l, m in findings]}, ensure_ascii=False, indent=1)
         report = "\n".join(lines)
-        return {"ui": {"text": [report]}, "result": (report, data, summary)}
+        info = format_info(f"HaDeS MOSS Suite Telemetry | {summary}", "telemetry", nodes=[m["node"] for m in metas], foreign=foreign, **counts)
+        return {"ui": {"text": [report]}, "result": (report, data, summary, info)}
 
 
 NODE_CLASS_MAPPINGS = {"HaDeSMossSuiteTelemetry": HaDeSMossSuiteTelemetry}
