@@ -978,6 +978,14 @@ class FakeClip:
 
 
 class TestPromptEnhancer(unittest.TestCase):
+    def test_count_tags_read_as_adults_in_every_mode(self):
+        # Danbooru 1girl / 1boy say nothing about age; "girl" in prose read as a child to MOSS-Image
+        for mode in ("caption", "layout"):
+            for has_image in (False, True):
+                text = enhancer.instructions(mode, has_image)
+                self.assertIn("1girl", text)
+                self.assertIn('"a young woman" or "a young man", never "girl", "boy" or "child", unless the idea itself states an age', text)
+
     def test_caption_parsing(self):
         self.assertEqual(enhancer.parse_caption('```json\n{"caption": "A red fox in snow."}\n```'), "A red fox in snow.")
         self.assertEqual(enhancer.parse_caption('Caption: "A red fox in snow."'), "A red fox in snow.")

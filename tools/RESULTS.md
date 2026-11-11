@@ -1577,6 +1577,39 @@ The maintainer prefers **baked v0.9.4 on 6/8** against SFT + v0.7 (5/8 against S
 
 The color numbers describe appearance, not fidelity or realism. The baked timings were recorded in the earlier run and the SFT + v0.7 timings in this run, so the median difference is not a controlled speed result. No default, model file or user workflow was changed for this comparison.
 
+## HaDeS MOSS v0.9.4 Turbo outside 8 steps / CFG 1: steps, CFG and café bias (2026-11-11)
+
+`tools/moss_v094_range_eval.py`, archive `<archive>/v094_range_2026-11-11`, 84 images, all successful. Stock ComfyUI nodes, `HaDeS_MOSS_v0.9.4_Turbo.safetensors`, the Qwen3.5 int8 ConvRot text encoder and FLUX.2 VAE, euler / simple, shift 5, denoise 1. The eight held-out scenes and seeds of the v0.9.4 versus SFT + Turbo v0.9 comparison, 1152 x 1536; the 8-step images reproduce that comparison's baked images pixel for pixel (difference 0.0 on all eight). One seed per scene: what follows holds for these scenes, not as a rate.
+
+**Steps** (CFG 1, 8 scenes, medians):
+
+| Steps | Seconds | Mean luma / 255 | Mean HSV saturation / 255 | Near-clip pixels | Laplacian std | High-frequency energy |
+|---:|---:|---:|---:|---:|---:|---:|
+| 6 | 3.5 | 95.4 | 85.8 | 5.2% | 15.8 | 1.43% |
+| 8 | 4.0 | 100.1 | 87.8 | 5.9% | 18.7 | 1.67% |
+| 12 | 5.8 | 101.2 | 90.1 | 8.0% | 20.5 | 2.29% |
+| 20 | 9.5 | 107.3 | 93.7 | 9.1% | 24.7 | 3.22% |
+| 30 | 14.0 | 108.6 | 93.0 | 10.9% | 27.5 | 3.72% |
+| 50 | 23.0 | 109.2 | 94.2 | 11.7% | 29.6 | 4.27% |
+
+- No image broke or burned from 6 to 50 steps (by eye, all 48). More steps add texture and fine detail (Laplacian and high-frequency energy rise at every step count, 50 steps about 2.6x the high-frequency share of 8) and brighten slightly; the near-clipped share doubles.
+- The image does not converge: the mean pixel change from one step count to the next stays 8-52 / 255 even from 30 to 50, against 36-57 between 8 and 50. People keep their pose and identity; backgrounds, objects and wide scenes change (the observatory widens and rebuilds its room from 20 steps). Choosing a step count chooses an image, as at 8-16 steps in the CFG / step screen above.
+- Text: `OBSERVATORY 7` right at every step count; the alley sign read `CAFE24` at 6, only `24` at 8, and `CAFE 24` from 12 to 50.
+
+**CFG** (20 steps; watchmaker, trumpeter, pocket watch, rainy alley; medians):
+
+| CFG | Seconds | Mean luma / 255 | Mean HSV saturation / 255 | Near-clip pixels | Laplacian std |
+|---:|---:|---:|---:|---:|---:|
+| 1.0 | 9.8 | 86.7 | 93.6 | 8.1% | 18.7 |
+| 1.5 | 18.5 | 78.7 | 98.3 | 15.3% | 21.9 |
+| 2.0 | 18.5 | 76.8 | 104.3 | 16.8% | 21.5 |
+| 2.5 | 18.5 | 72.0 | 112.7 | 18.6% | 22.0 |
+| 3.0 | 18.5 | 66.9 | 112.9 | 19.7% | 23.9 |
+
+- No burn up to CFG 3 on these four (by eye); each step up darkens and saturates the image, and near-clipped pixels more than double from 1 to 3. Above CFG 1 every step runs the model twice (1.9x the time). Above 1.5 the prompt's "navy apron" spread to the whole outfit of the watchmaker; `CAFE 24` stayed right at every CFG.
+
+**Café bias** (`photograph of a woman sitting in a café`, seeds 0-15, 1024 x 1024, 8 steps, CFG 1, the protocol of the 2026-11-09 counts): by eye, **9 of 16 clearly East Asian, 2 ambiguous** (about 9-11 / 16). Same counter and protocol: Base 25 steps about 2-4 / 16, the BeTa Turbo v0.9 LoRA live on Base about 12 / 16 with euler. v0.9.4 keeps most of the bias of the BeTa turbo baked into it; the other two LoRAs do not remove it. One counter, by eye, one prompt.
+
 ## HaDeS MOSS v0.9.4 Turbo: source and baked recipe (2026-11-11)
 
 The maintainer supplied the complete construction workflow after the comparison rounds. Its active path is **`mossImage_base_bf16.safetensors` (MOSS Image Base) → MOSS Multi-LoRA → MOSS Model Saver**. The visually dimmed LoRA Extractor/Merger branches in the screenshot do not feed the Multi-LoRA input and are not part of this saved model's stated recipe. This corrects any possible reading of the SFT comparison arm as the baked model's source: **v0.9.4 starts from Base, not SFT**. The maintainer reports that both the BF16 and int8 ConvRot v0.9.4 files use the following recipe; the screenshots directly show the BF16 saving path, while the exact int8 conversion path is not shown.

@@ -55,7 +55,15 @@ These are display-size JPEGs made from **BF16 v0.9.4** outputs in the eight-scen
 
 Leave the KSampler's separate `turbo` LoRA input unconnected: its Turbo weights are already in this checkpoint. These settings were exercised on ComfyUI 0.43.0. Other resolutions may work, but the comparisons below used 1152 × 1536.
 
-CFG 1 is the reproducible starting point, not a universal aesthetic optimum. In a paired four-scene, two-seed screen, raising CFG from 1 to 2 at eight steps increased saturation and near-clipped pixels, darkened all eight images, and took about 1.8 times as long in that session. Some reviewers preferred stronger CFG on particular images. Increasing steps also changed compositions; it was not a consistent quality improvement.
+CFG 1 is the reproducible starting point, not a universal aesthetic optimum. In a paired four-scene, two-seed screen, raising CFG from 1 to 2 at eight steps increased saturation and near-clipped pixels, darkened all eight images, and took about 1.8 times as long in that session. The author preferred stronger CFG on some images (8 / CFG 2 on 3 of 8 sheets). Increasing steps also changed compositions; it was not a consistent quality improvement.
+
+### Other step counts and CFG
+
+Measured on eight scenes, one seed each ([measurement log](https://github.com/Devildonia/HaDeS-MOSS-Suite/blob/main/tools/RESULTS.md)): no image broke or burned from **6 to 50 steps** at CFG 1, nor up to **CFG 3** at 20 steps. More steps add texture and fine detail and take longer (about 4 s at 8 steps, 9.5 s at 20 and 23 s at 50 on an RTX 5090 at 1152 × 1536), but the image does not settle: each step count gives a different image of the same scene, so pick the count you like rather than expecting more steps to refine the 8-step one. In one scene a short sign was only right from 12 steps. Higher CFG darkens and saturates the image and doubles the time per step.
+
+### Known bias
+
+Asked for "a woman sitting in a café" with no ethnicity, 16 seeds at 8 steps gave about **9-11 of 16 East Asian faces** (counted by eye), against about 2-4 for MOSS-Image-Base at 25 steps. The Turbo LoRA baked into this model carries that bias. Name the person's appearance in the prompt when it matters: MOSS-Image-SFT and Base followed an explicit ethnicity in every test of the measurement log (not yet checked on this model).
 
 ## Construction
 

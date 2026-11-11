@@ -7,9 +7,16 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-11-11
+
+First Comfy Registry release since 0.6.0: it also carries 0.6.1, 0.7.0, 0.7.1 and 0.7.2 below.
+
 ### Added
+- **MOSS Prompt Enhancer, tag prompts:** Danbooru count tags (`1girl`, `1boy`, `2girls`, `multiple_boys`) are written as adults ("a young woman", "a young man") unless the idea states an age; written as "girl", a recycled `1girl` prompt rendered a childlike figure. Checked through ComfyUI on four tag prompts x two seeds: 8 / 8 adult wording, `elderly` kept.
 - **MOSS KSampler `denoise_mode`:** `exact` makes denoise continuous at few steps (a point on the model's noise-time axis, every step run from there with the scheduler's spacing); the default `steps / denoise (core)` keeps the stock schedule. `info` records the start sigma and, in core mode, the steps the core actually builds.
 - **`tools/moss_pair_check.py`:** checks that two images saved by the MOSS Image Saver (or two Telemetry json files) are a fair A / B pair: same size, sampling settings and prompt; a different model or LoRA is listed. Replaces the Pair Guard node.
+
+- **`tools/moss_v094_range_eval.py`:** HaDeS MOSS v0.9.4 Turbo at 6-50 steps and CFG 1-3, and the café bias count; results in `tools/RESULTS.md` and the v0.9.4 model card.
 
 ### Changed
 - **Every node has an `info` output with HADES_META, read by Suite Telemetry:** MOSS Turbo LoRA, MOSS Sampler Metadata, MOSS Image Saver and MOSS Suite Telemetry get an `info` output (added last, so saved workflows keep their links). Telemetry lists them by name instead of counting them as foreign inputs, and a test keeps every node's trailer and Telemetry's names in step.
