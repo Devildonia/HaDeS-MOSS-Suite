@@ -1610,6 +1610,67 @@ The color numbers describe appearance, not fidelity or realism. The baked timing
 
 **Café bias** (`photograph of a woman sitting in a café`, seeds 0-15, 1024 x 1024, 8 steps, CFG 1, the protocol of the 2026-11-09 counts): by eye, **9 of 16 clearly East Asian, 2 ambiguous** (about 9-11 / 16). Same counter and protocol: Base 25 steps about 2-4 / 16, the BeTa Turbo v0.9 LoRA live on Base about 12 / 16 with euler. v0.9.4 keeps most of the bias of the BeTa turbo baked into it; the other two LoRAs do not remove it. One counter, by eye, one prompt.
 
+## Turbo v1.0: neutral people prompts against the café bias (2026-11-12)
+
+**Question.** Turbo v0.9 (BeTa) drifted to East Asian faces on the neutral café prompt (about 12 / 16, Base about 2-4). Its training prompts named an ethnicity for 86 of 115 people prompts, and only 29 of 1024 left the appearance open. DMD follows the teacher's dominant mode. Do the teacher's own regression pairs on neutral people prompts keep Base's variety?
+
+**Recipe.** `tools/moss_dmd_train.py` with v0.9's settings: Base as teacher and student, int4 text encoder, 512 px, 4 steps, rank 2 on layers 24-41, 3000 updates, `--reg-weight 0.05`, `--fake-updates 5`. Two things changed:
+- **Prompts:** `tools/moss_turbo_v10_prompts.py` replaced 230 no-person prompts of v0.9 with photographs of people whose ethnicity is not given, so 234 of 1024 prompts are neutral people prompts.
+- **Regression pairs:** `--reg-pairs 1024`, one teacher pair per prompt.
+
+The run finished with 3000 updates and 0 skipped. Run folder: `<archive>/moss_turbo_runs/dmd512_base_v10`.
+
+**Café bias** (v0.9 protocol: Base + LoRA at 1.0, 8 steps, euler / simple, CFG 1, 1024 x 1024, seeds 0-15). Clearly East Asian faces, counted by eye by one counter:
+
+| Checkpoint | 600 | 1000 | 1400 | 2000 | 3000 |
+|---|---:|---:|---:|---:|---:|
+| Clearly East Asian (ambiguous) | 7 (up to 10) | 6 (up to 9) | 9 (up to 10) | 7 (up to 8), 2 with no face | 8, 2 with no face |
+
+v0.9 counted about 8-9 early and about 11-12 at the end. In v1.0 the count stays flat through training instead of growing. At 3000 updates it is about 8 / 16, still above Base. One prompt, one counter.
+
+**Quality** (Base + LoRA, 8 steps, euler / simple, CFG 1). Test set:
+- the eight held-out scenes (1152 x 1536, their seeds);
+- the two text prompts of `moss_eval` (1024 x 1024, seeds 1000-1002).
+
+Medians of 14 images. Archive: `<archive>/moss_eval/turbo_v10/quality`.
+
+| LoRA | Mean luma / 255 | Mean HSV saturation / 255 | Near-clip pixels | Laplacian std | High-frequency energy |
+|---|---:|---:|---:|---:|---:|
+| Turbo v0.9 (BeTa) | 109.7 | 89.3 | 4.5% | 14.9 | 1.49% |
+| v1.0, 2000 updates | 110.6 | 95.6 | 9.7% | 15.7 | 1.65% |
+| v1.0, 3000 updates | 119.6 | 74.2 | 6.1% | 13.3 | 1.22% |
+
+- **Text:** the bakery sign and the three-line poster were right on all 6 seeds with every LoRA. The small text in the held-out scenes (`CAFE 24`, `OBSERVATORY 7`) was right with v0.9 and with 3000 updates. With 2000 updates both were wrong.
+- **Look:** 3000 updates is brighter and less saturated than v0.9, and slightly softer.
+- **Maintainer verdict:** after testing 3000 updates on their own prompts, the maintainer judged it the best turbo LoRA trained so far. It becomes **Turbo v1.0**. This is a judgement, not a blind vote.
+
+### Turbo v1.0 at CFG 1.5: the guidance and the negative, separated (2026-11-12)
+
+**Setup.** Same 14 jobs and settings as the quality table above, with v1.0 at 3000 updates. Three arms:
+- CFG 1;
+- CFG 1.5 with the held-out negative;
+- CFG 1.5 with an empty negative.
+
+At CFG 1 ComfyUI never evaluates the negative: `comfy/samplers.py` skips the uncond pass when `cfg == 1`. So the CFG 1 arm is the quality run's images. Going from CFG 1 to 1.5 therefore adds two things: the guidance, and the negative.
+- CFG 1 against 1.5 with the empty negative isolates the guidance.
+- 1.5 empty against 1.5 with the negative isolates the negative.
+
+Archive: `<archive>/moss_eval/turbo_v10/cfg`.
+
+| Arm | Mean luma / 255 | Mean HSV saturation / 255 | Near-clip pixels | Laplacian std | High-frequency energy |
+|---|---:|---:|---:|---:|---:|
+| CFG 1 | 119.6 | 74.2 | 6.1% | 13.3 | 1.22% |
+| CFG 1.5, empty negative | 102.5 | 104.9 | 9.9% | 16.3 | 1.81% |
+| CFG 1.5, negative | 98.2 | 105.5 | 10.4% | 16.1 | 1.80% |
+
+- **The guidance moves the image, not the negative.** Mean pixel change per image:
+  - CFG 1 against 1.5 empty (the guidance): 17-34 / 255, median 28.
+  - 1.5 empty against 1.5 with the negative: 3-17 / 255, median 10.
+
+  With the negative or without it, CFG 1.5 gives the same composition with small changes in detail. The guidance darkens and saturates the image and sharpens it, about to where v0.9 sits at CFG 1. The negative only darkens it a little more.
+- **Text:** right on all 14 jobs in all three arms: the bakery sign and the poster on every seed, and `CAFE 24` and `OBSERVATORY 7`. At CFG 1 none of these 14 was wrong, so this test cannot show a text gain at CFG 1.5. The broken "E" of "EUROPA" in the maintainer's example at CFG 1 (fixed at 1.5) was one seed of a prompt outside this set.
+- **Cost:** above CFG 1 every step runs the model twice.
+
 ## HaDeS MOSS v0.9.4 Turbo: source and baked recipe (2026-11-11)
 
 The maintainer supplied the complete construction workflow after the comparison rounds. Its active path is **`mossImage_base_bf16.safetensors` (MOSS Image Base) → MOSS Multi-LoRA → MOSS Model Saver**. The visually dimmed LoRA Extractor/Merger branches in the screenshot do not feed the Multi-LoRA input and are not part of this saved model's stated recipe. This corrects any possible reading of the SFT comparison arm as the baked model's source: **v0.9.4 starts from Base, not SFT**. The maintainer reports that both the BF16 and int8 ConvRot v0.9.4 files use the following recipe; the screenshots directly show the BF16 saving path, while the exact int8 conversion path is not shown.

@@ -7,6 +7,13 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **`tools/moss_turbo_v10_prompts.py`:** writes the training prompts of Turbo v1.0. It takes the 1024 prompts of Turbo v0.9 and replaces 230 of the no-person prompts with photographs of people whose ethnicity is not given, against the café bias.
+- **Turbo v1.0 measurements in `tools/RESULTS.md`:**
+  - On the neutral café prompt, about 8 / 16 East Asian faces, against about 11-12 for v0.9, and the count stays flat through training.
+  - Text is right as often as with v0.9.
+  - Images are brighter and less saturated than v0.9 (median luma 120 against 110, saturation 74 against 89).
+
 ## [0.7.3] - 2026-11-11
 
 First Comfy Registry release since 0.6.0: it also carries 0.6.1, 0.7.0, 0.7.1 and 0.7.2 below.
