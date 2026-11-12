@@ -14,6 +14,11 @@ The project adheres to [Semantic Versioning](https://semver.org/).
   - Text is right as often as with v0.9.
   - Images are brighter and less saturated than v0.9 (median luma 120 against 110, saturation 74 against 89).
 
+### Changed
+- **MOSS KSampler, `denoise_mode` tooltip:** now gives the measured result instead of "not measured yet". On img2img with Turbo v1.0 at 4 and 8 steps (112 images, `tools/RESULTS.md`):
+  - up to denoise 0.5 the two modes give the same image;
+  - above 0.5, `exact` moves smoothly, while the core mode repeats an image and, at 0.9, starts from pure noise.
+
 ## [0.7.3] - 2026-11-11
 
 First Comfy Registry release since 0.6.0: it also carries 0.6.1, 0.7.0, 0.7.1 and 0.7.2 below.

@@ -181,9 +181,10 @@ class HaDeSMossKSampler:
                 "denoise_mode": ([DENOISE_CORE, DENOISE_EXACT], {"default": DENOISE_CORE, "tooltip":
                     "steps / denoise (core): the stock KSampler's schedule. exact: denoise is a point on the model's noise-time axis and every "
                     "step runs from there (start sigma = percent_to_sigma(1 - denoise), the scheduler's spacing kept), so it is continuous at few "
-                    "steps; at denoise 1 both are the same. With shift 5, exact 0.89 starts at sigma 0.976. Measured outside this suite "
-                    "(lilting.ch, akhaliq 4-step LoRA, the core mode plus manual sigmas): text on a sign appeared from sigma 0.95, an "
-                    "illustration turned photographic between 0.97 and 0.98. The exact mode itself is not measured yet."}),
+                    "steps; at denoise 1 both are the same. Measured on img2img with Turbo v1.0 at 4 and 8 steps (four inputs, tools/RESULTS.md): "
+                    "up to 0.5 both modes give the same image; above it exact rose smoothly with every 0.1, where core repeated 0.7 at 0.8 "
+                    "(4 steps) and ignored the input at 0.9 (4 and 8 steps); exact 0.9 (sigma 0.978) kept a poster's layout and text, "
+                    "photographs became new scenes."}),
                 "turbo": ("MOSS_TURBO", {"tooltip": "Optional: a MOSS Turbo LoRA. When connected, the LoRA is applied to the model and the KSampler "
                                                     "samples with SLG off and the turbo node's steps, CFG, sampler and scheduler (4, 1, euler / simple "
                                                     "by default), ignoring those widgets; "

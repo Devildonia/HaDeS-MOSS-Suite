@@ -1671,6 +1671,51 @@ Archive: `<archive>/moss_eval/turbo_v10/cfg`.
 - **Text:** right on all 14 jobs in all three arms: the bakery sign and the poster on every seed, and `CAFE 24` and `OBSERVATORY 7`. At CFG 1 none of these 14 was wrong, so this test cannot show a text gain at CFG 1.5. The broken "E" of "EUROPA" in the maintainer's example at CFG 1 (fixed at 1.5) was one seed of a prompt outside this set.
 - **Cost:** above CFG 1 every step runs the model twice.
 
+## MOSS KSampler denoise_mode: core against exact on img2img (2026-11-12)
+
+**Question.** At 4-8 steps, does `exact` give a denoise that moves smoothly where the core schedule jumps, and does it cost image quality?
+
+**Setup.** Img2img through `MOSS KSampler`. Archive with script, inputs and records: `<archive>/moss_eval/denoise_exact`.
+- **Model:** MOSS-Image Base + Turbo 8-steps v1.0 at 1.0, euler / simple, CFG 1, shift 5, seed 7.
+- **Prompt:** the same prompt as the input image.
+- **Inputs:** four 1152 x 1536 images:
+  - two photographs rendered by HaDeS MOSS v0.9.4 (watchmaker, rainy alley);
+  - two images from the maintainer: an anime knight and a flat "VISIT EUROPA" poster.
+- **Grid:** 4 and 8 steps, denoise 0.3-0.9 in steps of 0.1, both modes: 112 images, all successful. The start sigma is read from the KSampler's own `info`.
+
+**Start sigma and mean distance to the input** (RGB MAE / 255; watchmaker, alley, knight, poster):
+
+| Denoise | 4 steps, core | 4 steps, exact | 8 steps, core | 8 steps, exact |
+|---:|---|---|---|---|
+| 0.3 | 0.690: 11 / 22 / 12 / 7 | 0.682: 11 / 22 / 12 / 7 | 0.690: 12 / 23 / 13 / 7 | 0.682: 12 / 23 / 13 / 7 |
+| 0.5 | 0.833: 17 / 32 / 19 / 11 | 0.833: same image | 0.833: 18 / 33 / 20 / 12 | 0.833: same image |
+| 0.6 | 0.909: 23 / 42 / 28 / 18 | 0.882: 20 / 38 / 24 / 15 | 0.889: 22 / 41 / 26 / 16 | 0.882: 21 / 40 / 25 / 16 |
+| 0.7 | **0.952**: 33 / 52 / 39 / 31 | 0.921: 25 / 44 / 30 / 19 | 0.930: 28 / 47 / 34 / 23 | 0.921: 27 / 46 / 31 / 20 |
+| 0.8 | **0.952: the 0.7 image again** | 0.952: 33 / 52 / 39 / 31 | 0.952: 35 / 55 / 41 / 32 | 0.952: 34 / 55 / 40 / 32 |
+| 0.9 | **1.000: pure noise** | 0.978: 53 / 58 / 48 / 38 | **1.000: pure noise** | 0.978: 54 / 62 / 48 / 40 |
+
+**Up to 0.5 the two modes are the same.** At 0.4 and 0.5 the start sigma is identical, and at 0.3 it is 0.690 against 0.682. The mode matters only above 0.5.
+
+**Core jumps, as ComfyUI's schedule code predicts:**
+- At 4 steps, 0.7 and 0.8 give pixel-identical images.
+- At **0.9 the core starts from pure noise at 4 and at 8 steps** (`int(8 / 0.9) = 8`), so the input is ignored:
+  - The poster became a new, washed-out poster.
+  - At 8 steps its title broke: "VISIT" was cut off.
+
+**Exact is continuous.** Distance to the input rose with every 0.1 step, on all four inputs and at both step counts. At the same denoise, 4 and 8 steps landed within about 4 / 255 of each other.
+
+**At 0.9 exact (sigma 0.978), the input is mostly gone:**
+- The poster kept its layout, palette and text.
+- The knight kept the character and the setting in a new pose.
+- The photographs became new scenes; the alley lost its sign.
+
+**Quality.**
+- **At the same start sigma**, the two modes give the same Laplacian sharpness and no artifacts by eye.
+- **At 4 steps, 0.6-0.7 exact** fills the gap the core skips, with clean images.
+- **Side observation:** the input alley's sign read only "24"; denoise 0.7-0.8 rewrote it as "CAFE 24" in both modes.
+
+**Limits.** One seed, one model setup, four inputs. Image quality was judged by eye, not voted.
+
 ## HaDeS MOSS v0.9.4 Turbo: source and baked recipe (2026-11-11)
 
 The maintainer supplied the complete construction workflow after the comparison rounds. Its active path is **`mossImage_base_bf16.safetensors` (MOSS Image Base) → MOSS Multi-LoRA → MOSS Model Saver**. The visually dimmed LoRA Extractor/Merger branches in the screenshot do not feed the Multi-LoRA input and are not part of this saved model's stated recipe. This corrects any possible reading of the SFT comparison arm as the baked model's source: **v0.9.4 starts from Base, not SFT**. The maintainer reports that both the BF16 and int8 ConvRot v0.9.4 files use the following recipe; the screenshots directly show the BF16 saving path, while the exact int8 conversion path is not shown.
