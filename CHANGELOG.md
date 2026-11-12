@@ -13,6 +13,10 @@ The project adheres to [Semantic Versioning](https://semver.org/).
   - On the neutral café prompt, about 8 / 16 East Asian faces, against about 11-12 for v0.9, and the count stays flat through training.
   - Text is right as often as with v0.9.
   - Images are brighter and less saturated than v0.9 (median luma 120 against 110, saturation 74 against 89).
+- **Edit benchmark in `tools/RESULTS.md`:** 24 edit instructions on 8 SFT references, 3 seeds, chinoll's MOSS-edit, HQ armV5 and no edit LoRA, scored blind by the maintainer.
+  - Clean removals: armV5 11 / 21, chinoll 7 / 21, none 0 / 21.
+  - Other instructions done: armV5 46 / 51, chinoll 42 / 51; chinoll changes less of the rest of the image.
+  - The Prompt Enhancer's edit mode renders pixel-identical to the core `TextEncodeMOSSImageEdit` on four checked cases.
 
 ### Changed
 - **MOSS KSampler, `denoise_mode` tooltip:** now gives the measured result instead of "not measured yet". On img2img with Turbo v1.0 at 4 and 8 steps (112 images, `tools/RESULTS.md`):

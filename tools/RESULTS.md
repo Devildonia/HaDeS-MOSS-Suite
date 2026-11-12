@@ -2,7 +2,7 @@
 
 `<archive>` is the maintainer's local measurement archive (images and run records, not published); `<ComfyUI>` is the ComfyUI install the runs used.
 
-[MOSS-edit layer ablation (2026-11-10)](#moss-edit-layer-ablation-2026-11-10).
+[MOSS-edit layer ablation (2026-11-10)](#moss-edit-layer-ablation-2026-11-10); [Edit benchmark, scored blind (2026-11-12)](#edit-benchmark-chinoll-armv5-and-no-lora-scored-blind-2026-11-12).
 
 ## Original benchmark environment
 
@@ -1351,6 +1351,91 @@ No reviewed source establishes reliable removal across seeds and scenes for thes
 After manual testing, the user reports that HQ is more reliable than the previously tested chinoll adapter, but still has limitations. In the user's initial comparison, **armV5 has better visual quality**, while **armV7s1 produces excessively saturated outputs**. Further user tests are pending.
 
 These are user-reported qualitative observations. No paired output files, exact settings, seeds or trial counts were supplied for this comparison; no success rate, objective quality ranking or cause of the saturation is established. Do not infer that armV7s1 improves editing from its version number. Treat armV5 as the provisional comparison baseline and armV7s1 as experimental, pending matched comparisons. No new automated measurements or training were launched.
+
+## Edit benchmark: chinoll, armV5 and no LoRA, scored blind (2026-11-12)
+
+Do the published edit LoRAs remove objects cleanly enough, or is there room for our own edit LoRA? Criterion fixed before the
+run: if the better LoRA removes cleanly in less than 70 % of the removal cases, the gap is real.
+
+**Setup.** Eight references made with SFT (er_sde / simple, 25 steps, CFG 2.5, seeds 32200-32207, 1024²; checked by eye before
+editing): mug, portrait, street, living room, perfume bottle, lake, anime classroom, "OPEN" sign. 24 instructions on them, written
+before the run: 7 remove, 7 add, 3 recolor, 2 material, 3 style, 2 text. Three arms: chinoll's `MOSS-edit` (17a48b8c...), HQ
+`armV5` and no edit LoRA (same reference conditioning). armV7s1 left out: its author recommends armV5 and the maintainer's tests
+found v7 worse. SFT bf16, `mossImage_base_txt_int4`, flux2-vae, Euler / normal, 30 steps, CFG 4, shift 5, 1024², seeds 1000-1002,
+LoRA strength 1, negative `nsfw, worst quality, bad anatomy, watermark, jpeg artifact`. Conditioning by the **MOSS Prompt
+Enhancer** (`as written`, `edit_format` Moss-Image-Edit, `edit_megapixels` 1.0). 216 renders. Images, records, metrics,
+blind sheets, key and scores: `<archive>/moss_eval/edit_bench/`.
+
+**Enhancer edit mode = core.** Before the run, the Enhancer and the core `TextEncodeMOSSImageEdit` were rendered with the same
+graph otherwise (chinoll, seed 1000) on mug_remove, portrait_leather, lake_autumn and sign_closed: **maximum pixel difference 0**
+on all four.
+
+**Blind scoring.** One sheet per instruction, the original and three columns with the arms shuffled (seeded), the seeds in rows.
+The maintainer scored every column and seed before the key was opened. Counts below are seeds out of 3.
+
+Removal (clean = the object gone and nothing else lost or put in its place):
+
+| Instruction | chinoll | armV5 | no LoRA |
+|---|---|---|---|
+| mug and its steam | 0 (steam gone 1 / 3, mug kept) | 0 (steam gone 3 / 3, mug kept) | 0 |
+| red car | 1 (one also removes the other cars and adds one, one turns it white) | 1 (one removes every car, one cuts the car behind) | 0 |
+| lamp post | 2 (third partial) | 3 | 0 |
+| floor lamp | 3 | 3 | 0 |
+| wooden dock | 1 | 3 | 0 |
+| desks and chairs on the left | 0 (removes everything but the girl) | 1 (one partial and takes furniture on the right, one removes all furniture) | 0 |
+| hanging sign | 0 (a blank wooden sign, a blank sign, "OPN") | 0 (a blank sign in all three) | 0 |
+| **clean** | **7 / 21 (33 %)** | **11 / 21 (52 %)** | 0 / 21 |
+
+**The better LoRA, armV5, removes cleanly in 52 % of the cases: below 70 %, so by the pre-declared criterion the gap is real.**
+Both fail the same two cases: the mug (both take the steam and leave the mug) and the sign (the text goes, the board stays).
+
+Other instructions (done; side effects in brackets):
+
+| Instruction | chinoll | armV5 | no LoRA |
+|---|---|---|---|
+| blue mug | 3 | 3 | 0 |
+| croissant on a plate | 3 (the pen disappears) | 3 (the pen disappears) | 0 |
+| red leather jacket | 3 (third seed: woman further away, black trousers) | 3 | 0 (washed out, face changes) |
+| sunglasses | 3 | 3 | 3 (washed out, degraded) |
+| snowy winter | 1 (two seeds swap the woman for two girls) | 3 | 0 |
+| cyclist | 3 | 3 | 1 |
+| cat on the sofa | 3 | 2 | 3 |
+| dark green sofa | 3 | 3 | 3 |
+| frosted blue glass | 3 (the bottle changes in all) | 3 (the bottle changes in two) | 0 |
+| rose petals | 3 | 3 | 0 |
+| black background | 2 (one removes the bottle) | 3 (bottle kept) | 0 |
+| autumn | 3 | 3 | partial (a few trees) |
+| red canoe | 3 | 0 | 0 |
+| navy blazer | 3 (one also recolors the bow tie) | 3 (bow tie recolored in all) | 0 (only the bow tie) |
+| black cat at her feet | 3 | 3 | 1 |
+| sign to "CLOSED" | partial (painted over; one pastes a new sign) | 2 (one blank sign) | 0 |
+| sign to "BACK IN 5 MIN" | partial (painted over) | 2 (one blank sign) | 0 |
+| **done** | **42 / 51** | **46 / 51** | **11 / 51** |
+
+**Preservation outside the edit box** (median pixel MAE against the reference, 0-255, coarse predeclared boxes, not masks):
+
+| Kind | chinoll | armV5 | no LoRA |
+|---|---|---|---|
+| remove | 5.5 | 17.3 | 20.4 |
+| add | 6.8 | 15.9 | 20.5 |
+| recolor | 5.7 | 11.9 | 11.4 |
+| material | 8.9 | 19.1 | 10.9 |
+| text | 11.7 | 14.9 | 14.3 |
+
+Style instructions change the whole image and have no meaningful outside box. chinoll keeps the rest of the image closest to the
+reference; armV5 changes it about as much as no LoRA does, but completes more instructions. A failed edit that copies the
+reference scores well here, so this table is not an edit-quality ranking.
+
+**Conclusions.**
+- armV5 is the better of the two on what was asked (removal 11 / 21 against 7 / 21, other instructions 46 / 51 against 42 / 51);
+  chinoll changes less of the rest of the image.
+- Removal is the weak point of both: 52 % at best, and the mug and the sign fail with both. The gap the criterion asked about is
+  real, so an own edit LoRA focused on removal is supported by this benchmark.
+- Without an edit LoRA, SFT with the reference conditioning still completes a few additions and one recolor (sunglasses, cat,
+  green sofa) but no removal.
+
+**Limits.** One maintainer scored, on 24 instructions, 8 references and 3 seeds, at one setting (30 steps, CFG 4, strength 1,
+SFT). Not measured: other strengths, step counts or CFG, Base, Turbo LoRAs, other resolutions, other edit LoRAs.
 
 ## Dev Tools validation (2026-11-11)
 
