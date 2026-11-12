@@ -112,7 +112,9 @@ Medians of the 14 images:
 
 ![Turbo 8-steps v1.0 at CFG 1, CFG 1.5 with a negative, CFG 1.5 with an empty negative](images/v10_cfg.jpg)
 
-**Not measured:** MOSS-Image SFT as the base, strengths other than 1.0, step counts other than 8, sizes above 1536, img2img, editing. One seed per scene.
+**On MOSS-Image SFT:** the author uses v1.0 on SFT with good results; on the eight held-out scenes it renders cleanly there too (same seeds, 8 steps, CFG 1), with small text less reliable (the alley sign kept only "24"). Not measured.
+
+**Not measured:** strengths other than 1.0, step counts other than 8, sizes above 1536, img2img, editing. One seed per scene.
 
 ### Turbo 8-steps v0.7, at 8 steps
 
