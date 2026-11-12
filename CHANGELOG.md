@@ -17,6 +17,9 @@ The project adheres to [Semantic Versioning](https://semver.org/).
   - Clean removals: armV5 11 / 21, chinoll 7 / 21, none 0 / 21.
   - Other instructions done: armV5 46 / 51, chinoll 42 / 51; chinoll changes less of the rest of the image.
   - The Prompt Enhancer's edit mode renders pixel-identical to the core `TextEncodeMOSSImageEdit` on four checked cases.
+- **`tools/moss_edit_pairs.py`:** builds removal pairs for an own edit LoRA. B is a clean MOSS SFT scene; an editor (Qwen-Image-Edit 2509 with the Lightning 8-step LoRA, or a MOSS edit LoRA) adds an object; only the changed area is pasted back onto B, so A equals B outside it. The pair is A + "Remove the X." → B. Qwen3.5-9B checks that the object is present in A and absent in B. Also writes review sheets.
+- **`tools/moss_edit_train.py`:** trains a MOSS-Image edit LoRA from zero on those pairs (flow matching, shift 5, Moss-Image-Edit reference format, gradient checkpointing: about 20 GB and 3.1 s / step at 512 px with accumulation 4). Holds out whole scenes, writes previews, resumable checkpoints and a report.
+  - Overfit check on 74 pilot pairs, 500 steps: the four training previews remove their object cleanly; on two unseen scenes, one clean removal and one partial. A pilot, not a result.
 
 ### Changed
 - **MOSS KSampler, `denoise_mode` tooltip:** now gives the measured result instead of "not measured yet". On img2img with Turbo v1.0 at 4 and 8 steps (112 images, `tools/RESULTS.md`):
