@@ -7,6 +7,7 @@ input it also sees the image (the text encoder file holds the vision tower).
 """
 import contextlib
 import json
+import random
 import re
 
 import torch
@@ -17,16 +18,18 @@ from .moss_common import format_info
 from .moss_pipeline_nodes import compile_layout, snap16
 
 VISION_BLOCK = "<|vision_start|><|image_pad|><|vision_end|>"
-MODES = ["caption", "layout", "as written"]
+MODES = ["caption", "detailed", "layout", "as written"]
 # The negative prompt of the official ComfyUI MOSS-Image templates, used in every measurement in tools/RESULTS.md
 DEFAULT_NEGATIVE = "nsfw, worst quality, bad anatomy, watermark, jpeg artifact"
 
-_COMMON = """You turn the user's idea into a concrete description for the MOSS-Image text-to-image model.
+_INTRO = "You turn the user's idea into a concrete description for the MOSS-Image text-to-image model.\n\n"
 
-Preserve the user's subjects, counts, relationships, medium, style, exclusions and intended visible wording. Resolve
+_PRESERVE = """Preserve the user's subjects, counts, relationships, medium, style, exclusions and intended visible wording. Resolve
 ordinary creative gaps yourself. Do not invent factual specifications as if the user supplied them.
 
-The idea may be a list of Danbooru-style tags: turn them into prose (underscores are spaces). A count tag such as 1girl,
+"""
+
+_SHARED = """The idea may be a list of Danbooru-style tags: turn them into prose (underscores are spaces). A count tag such as 1girl,
 1boy, 2girls or multiple_boys gives only the number and sex of the characters, not their age: write each as an adult,
 "a young woman" or "a young man", never "girl", "boy" or "child", unless the idea itself states an age.
 
@@ -34,12 +37,38 @@ Write descriptive prose in English unless the user asks for another language. Ke
 language, with its punctuation, capitalization and line breaks. A quoted sentence in an instruction is not necessarily
 text to render: tell visible wording apart from constraints.
 
-Describe visible choices: subject and action, relevant appearance, setting, camera and framing, medium, lighting,
+"""
+
+_DESCRIBE = """Describe visible choices: subject and action, relevant appearance, setting, camera and framing, medium, lighting,
 materials, palette and mood. Add detail where it makes the image more specific. Avoid quality tags (masterpiece, 8k,
 best quality), unrequested style changes and notes about the process. Keep a minimalist brief minimalist.
 
-For designed images (posters, covers, signs) write the actual copy, never placeholders such as "headline here", and keep
+"""
+
+# detailed mode: free to expand the idea, unlike caption, which keeps to it
+_EXPAND = """Expand the idea into a long, richly detailed prompt of about 120 to 200 words. Keep its main subject, its medium
+and style, any counts and exclusions it gives, and its visible wording. Beyond that you may add: setting, secondary
+figures and objects, props, weather, time of day, a small story moment, textures and materials that fit the idea.
+
+The medium comes first and never changes: when the idea names one (anime, manga, illustration, painting, poster, comic,
+3D render, pixel art...), begin the prompt with it and keep every detail in that medium. Only when the idea names no
+medium, choose the one that fits it best.
+
+Write it like a photographer or an illustrator briefing a shoot. Say where the light comes from and what it does. For a
+photograph give the shot type, lens and aperture and the genre (documentary, editorial, product, street...). For any
+other medium name the technique and the materials (brush, paper, ink, clay, screen print, cel shading, line art...) and
+use no camera or lens words. Prefer concrete,
+specific and slightly imperfect details (wear, dust, grain, stains, uneven surfaces) over generic praise. Avoid quality
+tags (masterpiece, 8k, best quality, ultra detailed), empty words (stunning, breathtaking, epic) and notes about the
+process.
+
+"""
+
+_DESIGN = """For designed images (posters, covers, signs) write the actual copy, never placeholders such as "headline here", and keep
 the text readable at the chosen size."""
+
+_COMMON = _INTRO + _PRESERVE + _SHARED + _DESCRIBE + _DESIGN
+_DETAILED = _INTRO + _SHARED + _EXPAND + _DESIGN
 
 _CAPTION = """
 
@@ -71,12 +100,53 @@ An image is attached. With no written idea it is the whole brief: describe it so
 idea, the image is the starting point and the idea wins wherever they disagree."""
 
 
-def instructions(mode, has_image):
-    return _COMMON + (_LAYOUT if mode == "layout" else _CAPTION) + (_IMAGE if has_image else "")
+# detailed mode with no idea and no image: the seed draws a medium, a subject area and a place / time, so prompts vary by
+# construction instead of drifting to the model's favourite scenes
+SURPRISE_MEDIA = [
+    "documentary photograph", "studio portrait photograph", "street photograph", "product photograph", "food photograph",
+    "wildlife photograph", "aerial photograph", "cinematic film still", "black and white film photograph", "oil painting",
+    "watercolor painting", "Chinese ink wash painting", "ukiyo-e woodblock print", "pen and ink illustration",
+    "children's book illustration", "anime key visual", "black and white manga page", "Franco-Belgian comic panel",
+    "American comic book cover", "3D animated film still", "claymation scene", "pixel art", "low-poly 3D illustration",
+    "vintage travel poster", "scientific illustration plate", "flat infographic poster",
+]
+SURPRISE_SUBJECTS = [
+    "a craft or trade at work", "a market or a small shop", "a meal being cooked or shared", "an animal in its habitat",
+    "a sport or a game", "a festival or celebration", "a quiet moment at home", "a vehicle or a machine",
+    "architecture or an interior", "a landscape in dramatic weather", "a city at night", "life by the sea or a river",
+    "a musician or a performance", "a science or space scene", "a myth or a fairy tale", "an everyday object up close",
+    "a group of friends or a family", "an elderly person's daily life", "a workplace", "a journey",
+]
+SURPRISE_PLACES = [
+    "a mountain village in the Andes", "Paris in the 1950s", "present-day Lagos", "a Nordic island in winter", "medieval Japan",
+    "a desert town in Morocco", "New York in the 1970s", "a rainforest in Borneo", "present-day Seoul", "the Scottish coast",
+    "an imagined far future", "a Mediterranean fishing town", "the Australian outback", "Shanghai in the 1920s",
+    "a Mexican city during a festival", "Victorian London", "the Mongolian steppe", "an Indian city in the monsoon",
+    "a Canadian forest in autumn", "an imagined fantasy kingdom",
+]
+
+_SURPRISE = """
+
+No idea is given: invent one original image inside the medium, subject area and place given by the user message. Pick a
+specific, unexpected scene there, not the most obvious one. Vary the people: different ages (adults, or a family), sexes,
+ethnicities and builds; no lone young woman posing for the camera unless the subject area is a portrait."""
 
 
-def user_message(idea, mode, width, height, negative):
-    parts = [f"Idea:\n{idea.strip()}" if idea.strip() else "No written idea: use the image."]
+def surprise_brief(seed):
+    rng = random.Random(seed)
+    return rng.choice(SURPRISE_MEDIA), rng.choice(SURPRISE_SUBJECTS), rng.choice(SURPRISE_PLACES)
+
+
+def instructions(mode, has_image, surprise=False):
+    return ((_DETAILED if mode == "detailed" else _COMMON) + (_LAYOUT if mode == "layout" else _CAPTION) + (_IMAGE if has_image else "")
+            + (_SURPRISE if surprise else ""))
+
+
+def user_message(idea, mode, width, height, negative, brief=None):
+    if brief:
+        parts = ["No idea: invent one.\nMedium: {}\nSubject area: {}\nPlace and time: {}".format(*brief)]
+    else:
+        parts = [f"Idea:\n{idea.strip()}" if idea.strip() else "No written idea: use the image."]
     if negative.strip():
         parts.append(f"Keep out of the image:\n{negative.strip()}")
     if mode == "layout":
@@ -243,8 +313,13 @@ class HaDeSMossPromptEnhancer:
             "required": {
                 "clip": ("CLIP", {"tooltip": "MOSS-Image's text encoder (CLIPLoader, type moss_image): the same Qwen3.5-9B that encodes the prompt "
                                              "writes it here, so no other model is loaded."}),
-                "idea": ("STRING", {"multiline": True, "default": "", "tooltip": "What you want, in your own words. May be empty when an image is connected."}),
-                "mode": (MODES, {"default": "caption", "tooltip": "caption: the model writes a detailed paragraph. layout: it writes a pixel "
+                "idea": ("STRING", {"multiline": True, "default": "", "tooltip": "What you want, in your own words. May be empty when an image is connected. "
+                                                                                  "Empty with no image in detailed mode: a random prompt, the seed "
+                                                                                  "drawing its medium, subject area and place."}),
+                "mode": (MODES, {"default": "caption", "tooltip": "caption: the model writes a detailed paragraph that keeps to the idea. "
+                                                                   "detailed: a longer prompt (about 120-200 words) that may add setting, "
+                                                                   "props and story details, with light, lens or technique spelled out; "
+                                                                   "another option, not a better one. layout: it writes a pixel "
                                                                    "Layout draft (boxes for objects and text), compiled here; the draft output also "
                                                                    "feeds the Layout Compiler for the matching latent. as written: no generation, the "
                                                                    "idea is encoded as typed (a plain prompt box)."}),
@@ -305,7 +380,7 @@ class HaDeSMossPromptEnhancer:
             if getattr(vae, "latent_channels", 128) != 128:
                 raise ValueError(f"MOSS Prompt Enhancer: the VAE has {vae.latent_channels} latent channels; MOSS-Image needs the 128-channel FLUX.2 VAE.")
             if mode == "layout":
-                raise ValueError("MOSS Prompt Enhancer: edit mode works with caption or as written, not layout.")
+                raise ValueError("MOSS Prompt Enhancer: edit mode works with caption, detailed or as written, not layout.")
             ref, width, height = edit_reference(image, edit_megapixels)
             ref_latent = vae.encode(ref)
 
@@ -324,12 +399,13 @@ class HaDeSMossPromptEnhancer:
                                prompt=prompt, negative=neg_text, edit_format=edit_format)
             return {"ui": {"text": [prompt]}, "result": (*outputs(prompt), prompt,
                                                          json.dumps({"caption": prompt}, ensure_ascii=False), width, height, info)}
-        if not idea.strip() and image is None:
-            raise ValueError("MOSS Prompt Enhancer: write an idea, connect an image, or both")
+        brief = surprise_brief(seed) if mode == "detailed" and not idea.strip() and image is None else None
+        if not idea.strip() and image is None and brief is None:
+            raise ValueError("MOSS Prompt Enhancer: write an idea, connect an image, or both (or use detailed mode with both empty for a random prompt)")
         if not hasattr(clip, "generate"):
             raise ValueError("MOSS Prompt Enhancer: this CLIP cannot generate text; use MOSS-Image's text encoder (type moss_image)")
         images = [fit_image(image)] if image is not None else []
-        text = chat(instructions(mode, bool(images)), user_message(idea, mode, width, height, negative), len(images))
+        text = chat(instructions(mode, bool(images), surprise=bool(brief)), user_message(idea, mode, width, height, negative, brief), len(images))
         tokens = clip.tokenize(text, images=images) if images else clip.tokenize(text)
         with decode_fallback() as state:
             ids = clip.generate(tokens, do_sample=temperature > 0, max_length=max_tokens, temperature=max(temperature, 0.01),
@@ -338,7 +414,7 @@ class HaDeSMossPromptEnhancer:
         fallback = bool(state and state["fallback"])
 
         notes = []
-        if mode == "caption":
+        if mode in ("caption", "detailed"):
             prompt = parse_caption(answer)
             if not prompt:
                 raise ValueError("MOSS Prompt Enhancer: the answer has no caption (raise max_tokens if it was cut, or try another seed). "
@@ -354,10 +430,12 @@ class HaDeSMossPromptEnhancer:
             prompt = compile_layout(draft_obj)[0]
         info = format_info(f"HaDeS MOSS Prompt Enhancer | {mode}" + (f" | {width}x{height}" if mode == "layout" else "")
                            + (" | image" if images else "") + (f" | edit {edit_format}, reference {width}x{height}" if editing else "")
+                           + (" | random: {} / {} / {}".format(*brief) if brief else "")
                            + f" | {len(prompt)} chars"
                            + (" | torch decode fallback" if fallback else "") + "".join(f"\nnote: {n}" for n in notes),
                            "prompt_enhancer", mode=mode, width=width, height=height, image=bool(images), decode_fallback=fallback, notes=notes,
-                           prompt=prompt, negative=neg_text, edit_format=edit_format)
+                           prompt=prompt, negative=neg_text, edit_format=edit_format,
+                           random_brief=list(brief) if brief else None)
         return {"ui": {"text": [prompt]}, "result": (*outputs(prompt), prompt, draft, width, height, info)}
 
 

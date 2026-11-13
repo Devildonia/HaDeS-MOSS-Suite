@@ -7,6 +7,14 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-11-14
+
+The Prompt Enhancer gets a `detailed` mode and random prompts.
+
+### Added
+- **`detailed` mode in `MOSS Prompt Enhancer`:** turns a short idea into a longer prompt (about 120-200 words) written like a photographer's or illustrator's brief: where the light comes from, lens and shot type for photographs, technique and materials for other media, concrete and slightly imperfect details, no quality tags. Unlike `caption`, it may add setting, props and story details beyond the idea; it keeps the idea's subject, medium, counts, exclusions and visible wording. Offered as another option, not measured against `caption`. The `caption` instructions are unchanged. The idea's medium is kept and named first, with no camera words outside photographs (a first version turned an anime idea into a photograph).
+- **Random prompts in `MOSS Prompt Enhancer`:** `detailed` mode with an empty `idea` and no `image` invents a prompt. The seed draws a medium (26), a subject area (20) and a place / time (20) from fixed lists, so prompts vary by construction rather than drifting to the model's favourite scenes; `info` names the draw.
+
 ## [0.7.4] - 2026-11-13
 
 Registry release: the listing of 0.7.3 still named two nodes removed in that version.

@@ -980,7 +980,7 @@ class FakeClip:
 class TestPromptEnhancer(unittest.TestCase):
     def test_count_tags_read_as_adults_in_every_mode(self):
         # Danbooru 1girl / 1boy say nothing about age; "girl" in prose read as a child to MOSS-Image
-        for mode in ("caption", "layout"):
+        for mode in ("caption", "detailed", "layout"):
             for has_image in (False, True):
                 text = enhancer.instructions(mode, has_image)
                 self.assertIn("1girl", text)
@@ -990,6 +990,18 @@ class TestPromptEnhancer(unittest.TestCase):
         self.assertEqual(enhancer.parse_caption('```json\n{"caption": "A red fox in snow."}\n```'), "A red fox in snow.")
         self.assertEqual(enhancer.parse_caption('Caption: "A red fox in snow."'), "A red fox in snow.")
         self.assertEqual(enhancer.parse_caption('<think>\nhmm {"x": 1}\n</think>\n\n{"caption": "A fox."}'), "A fox.")
+
+    def test_detailed_mode_expands_and_caption_keeps_to_the_idea(self):
+        detailed, caption = enhancer.instructions("detailed", False), enhancer.instructions("caption", False)
+        self.assertIn("120 to 200 words", detailed)
+        # a first try turned "anime girl on a rooftop" into an editorial photograph
+        self.assertIn("The medium comes first and never changes", detailed)
+        self.assertNotIn("Keep a minimalist brief minimalist", detailed)
+        self.assertIn("Keep a minimalist brief minimalist", caption)
+        self.assertNotIn("120 to 200 words", caption)
+        self.assertIn('{"caption": "..."}', detailed)  # same answer format, parsed like caption
+        out = enhancer.HaDeSMossPromptEnhancer().enhance(FakeClip('{"caption": "A long detailed fox."}'), "a fox", "detailed", 1024, 1024, 0.7, 0, 256)
+        self.assertEqual(out["result"][2], "A long detailed fox.")
 
     def test_empty_caption_is_an_error(self):
         # an empty caption used to be encoded as the raw JSON answer
@@ -1070,6 +1082,24 @@ class TestPromptEnhancer(unittest.TestCase):
     def test_needs_idea_or_image(self):
         with self.assertRaisesRegex(ValueError, "idea"):
             enhancer.HaDeSMossPromptEnhancer().enhance(FakeClip(""), "  ", "caption", 1024, 1024, 0.7, 0, 256)
+
+    def test_detailed_with_no_idea_writes_a_random_prompt(self):
+        clip = FakeClip('{"caption": "An invented scene."}')
+        out = enhancer.HaDeSMossPromptEnhancer().enhance(clip, "  ", "detailed", 1024, 1024, 0.7, 7, 256)
+        self.assertEqual(out["result"][2], "An invented scene.")
+        medium, subject, place = enhancer.surprise_brief(7)
+        chat_text = clip.seen[0]
+        self.assertIn(f"Medium: {medium}", chat_text)
+        self.assertIn(f"Place and time: {place}", chat_text)
+        self.assertIn("No idea is given", chat_text)
+        self.assertEqual(common.parse_info_meta(out["result"][6])["random_brief"], [medium, subject, place])
+        # the seed decides the brief, so the same seed gives the same draw and seeds spread over the lists
+        self.assertEqual(enhancer.surprise_brief(7), enhancer.surprise_brief(7))
+        self.assertGreater(len({enhancer.surprise_brief(s)[0] for s in range(40)}), 12)
+        # with an idea, no draw and no surprise instructions
+        clip2 = FakeClip('{"caption": "A fox."}')
+        enhancer.HaDeSMossPromptEnhancer().enhance(clip2, "a fox", "detailed", 1024, 1024, 0.7, 7, 256)
+        self.assertNotIn("No idea is given", clip2.seen[0])
 
     def test_decode_fallback_only_on_stride_errors(self):
         try:
