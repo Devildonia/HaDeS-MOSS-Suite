@@ -7,6 +7,10 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-11-13
+
+Registry release: the listing of 0.7.3 still named two nodes removed in that version.
+
 ### Added
 - **`tools/moss_turbo_v10_prompts.py`:** writes the training prompts of Turbo v1.0. It takes the 1024 prompts of Turbo v0.9 and replaces 230 of the no-person prompts with photographs of people whose ethnicity is not given, against the café bias.
 - **Turbo v1.0 measurements in `tools/RESULTS.md`:**
@@ -20,8 +24,14 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 - **`tools/moss_edit_pairs.py`:** builds removal pairs for an own edit LoRA. B is a clean MOSS SFT scene; an editor (Qwen-Image-Edit 2509 with the Lightning 8-step LoRA, or a MOSS edit LoRA) adds an object; only the changed area is pasted back onto B, so A equals B outside it. The pair is A + "Remove the X." → B. Qwen3.5-9B checks that the object is present in A and absent in B. Also writes review sheets.
 - **`tools/moss_edit_train.py`:** trains a MOSS-Image edit LoRA from zero on those pairs (flow matching, shift 5, Moss-Image-Edit reference format, gradient checkpointing: about 20 GB and 3.1 s / step at 512 px with accumulation 4). Holds out whole scenes, writes previews, resumable checkpoints and a report.
   - Overfit check on 74 pilot pairs, 500 steps: the four training previews remove their object cleanly; on two unseen scenes, one clean removal and one partial. A pilot, not a result.
+- **Edit LoRA tools, second round:**
+  - `moss_edit_pairs.py check` also asks how many of the object are in A; a usable pair has exactly one (Qwen-Image-Edit sometimes adds two). On the pilot it dropped 5 pairs, all with two or more of the object. Requests to ComfyUI retry on a dropped connection.
+  - New modes: `propose` (scenes from a prompt list, three objects per scene proposed by Qwen3.5-9B from offered kinds, the edit benchmark's objects excluded, a position each), `scenes` (B for that plan) and `combine` (objects added separately to the same B pasted together, each one removed with the others kept; on the 1000-scene run, 482 extra pairs from 241 scenes, no GPU).
+  - `moss_edit_train.py`: `--hold-out-objects` (whole objects out of training), `--vary-instruction` (Remove / Erase / Get rid of ...), `--t2i` (plain text-to-image LoRA on images and captions).
+- **First own removal LoRA, v0.1 (not published):** 3000 steps at 512 px on 1384 pairs of 62 objects. In ComfyUI it removes cleanly at 512 and copies the reference at 1 MP: 0 / 21 on the benchmark's removal tasks at 1 MP. At 512 it removed only objects close to its 62 training objects (a sign 3 / 3, a car 1 / 3; mug, lamp post, floor lamp, dock and desks 0 / 3). Next: train at 1024 on far more kinds of objects.
 
 ### Changed
+- **`pyproject.toml` description:** no longer names MOSS Pair Guard and MOSS Recipe Preview (removed in 0.7.3) or the repository-only Dev Tools, so the Comfy Registry listing matches the package.
 - **MOSS KSampler, `denoise_mode` tooltip:** now gives the measured result instead of "not measured yet". On img2img with Turbo v1.0 at 4 and 8 steps (112 images, `tools/RESULTS.md`):
   - up to denoise 0.5 the two modes give the same image;
   - above 0.5, `exact` moves smoothly, while the core mode repeats an image and, at 0.9, starts from pure noise.
