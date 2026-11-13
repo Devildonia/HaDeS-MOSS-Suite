@@ -12,6 +12,8 @@ tags:
 
 # HaDeS MOSS v0.9.4 Turbo — BF16
 
+> **Newer version:** [HaDeS MOSS v1.0 Turbo](https://huggingface.co/DeVilDoNia/HaDeS-MOSS-v1.0-Turbo) (Base + Turbo v1.0, about 1 East Asian face in 16 on the neutral café prompt against 9-11 here). This file stays available.
+
 A single-file, eight-step MOSS-Image text-to-image checkpoint for ComfyUI. It starts from [MOSS-Image-Base](https://huggingface.co/OpenMOSS-Team/MOSS-Image-Base), with three LoRAs baked into the diffusion weights. It offers a different rendering choice from MOSS-Image-SFT; the comparisons below do not show that either model is better for every prompt. **No separate Turbo or other LoRA is needed to run this file.**
 
 | Property | Value |

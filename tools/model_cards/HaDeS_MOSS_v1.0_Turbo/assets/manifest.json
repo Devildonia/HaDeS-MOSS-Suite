@@ -1,0 +1,56 @@
+[
+ {
+  "file": "diner.jpg",
+  "seed": 1001,
+  "size": "1344x1792",
+  "settings": "Steps: 8, Sampler: euler, Schedule type: simple, CFG scale: 1, Seed: 1001, Size: 1344x1792, Model hash: e1b205b78d, Model: HaDeS_MOSS_v1.0_Turbo_rc1, Shift: 5, VAE: flux2-vae, Text encoder: qwen3.5_9b_int8_convrot, Hashes: {\"model\": \"e1b205b78d\"}, Version: ComfyUI, HaDeS MOSS Suite",
+  "prompt": "Anamorphic 2.39:1 framing of a cinematic film still featuring a waitress in a pale green uniform wiping a counter inside a lonely diner. Viewed through a front window streaked with rain, the scene glows with a teal and amber colour grade. A red neon sign reading \"OPEN\" flickers softly, its light creating halation, while a reflection of the same red sign appears in a puddle in the foreground at blue hour. Teal and amber lighting. Desaturated blues, warm ambers, soft focus, cinematic lighting.",
+  "source_sha256": "793d6d70a61eb8996e81257b84c18b8d8db15085e28b932f364b663b6f211dc2",
+  "preview_sha256": "f5e11dadcef5110a193c09a62cfbd42bf731d18d2d9f37f7bd7adbf76c43e9af"
+ },
+ {
+  "file": "desert_elder.jpg",
+  "seed": 1001,
+  "size": "1344x1792",
+  "settings": "Steps: 8, Sampler: euler, Schedule type: simple, CFG scale: 1, Seed: 1001, Size: 1344x1792, Model hash: e1b205b78d, Model: HaDeS_MOSS_v1.0_Turbo_rc1, Shift: 5, VAE: flux2-vae, Text encoder: qwen3.5_9b_int8_convrot, Hashes: {\"model\": \"e1b205b78d\"}, Version: ComfyUI, HaDeS MOSS Suite",
+  "prompt": "A powerful close-up documentary photograph of a revered elderly Tuareg elder against a backdrop of sweeping wind-sculpted sand dunes. He faces forward, his dark complexion deeply weathered with sun-baked texture, prominent topographic laugh lines, crow's feet, and faint indigo dye staining near the cheekbones. His vibrant amber-hazel eyes stare directly into the lens, revealing fine blood vessels and reflections of the desert horizon. An authentic hand-woven deep indigo tagelmust (litham turban) covers his head and lower jaw, exposing only his gaze and a thick salt-and-pepper beard dusted with grains of sand. The visible portion of his matching gandora cloak displays raw coarse cotton weave and silver Tuareg metallic embroidery. Warm side lighting from late afternoon casts high relief on his features while casting long shadows, and atmospheric heat shimmer blurs the background. The image is captured on an 85mm portrait prime lens with creamy bokeh, rendered in a warm Kodachrome film palette.",
+  "source_sha256": "c4fc608557a568afa7d2420e8e1d93365383004dce708e8fd83212113822a8f1",
+  "preview_sha256": "7584edb24205672b3624c76e93c06c7479c43f7e1f5a978e9af08a191f661446"
+ },
+ {
+  "file": "shepherd.jpg",
+  "seed": 1001,
+  "size": "1344x1792",
+  "settings": "Steps: 8, Sampler: euler, Schedule type: simple, CFG scale: 1, Seed: 1001, Size: 1344x1792, Model hash: e1b205b78d, Model: HaDeS_MOSS_v1.0_Turbo_rc1, Shift: 5, VAE: flux2-vae, Text encoder: qwen3.5_9b_int8_convrot, Hashes: {\"model\": \"e1b205b78d\"}, Version: ComfyUI, HaDeS MOSS Suite",
+  "prompt": "Documentary photograph, editorial genre, shot on a 35mm lens at f/4 aperture capturing an elderly Sardinian shepherd leading his flock down a rugged stony mountain path. The scene is set at first light, with the low sun breaking over the horizon to cast long, dramatic shadows across the valley floor. Soft, golden morning illumination strikes from the left, catching the dust particles kicked up by the moving sheep and illuminating the texture of the worn, heavy wool coat draped over the shepherd's shoulders. His face is deeply weathered, etched with lines of age and labor, half-hidden in cool shadow while the other side glows warmly in the dawn light. A loyal sheepdog stands slightly behind the flock, its head turned back to look directly into the camera lens, creating a quiet moment of connection between subject and viewer. The color palette consists of muted earthy tones: ochre, dusty brown, slate grey, and pale gold. Visible natural film grain adds a tactile, authentic quality to the image, emphasizing the rough textures of the stone path and the coarse fabric. The atmosphere is serene and unposed, documenting a timeless ritual of rural life without artificial staging or modern intrusions.",
+  "source_sha256": "d69034856b79db4adf97a5e3de0e3dc1854b60adce7be53610a5ca4bc8133e8d",
+  "preview_sha256": "3fb5ffa8689b22b9db638feaa750abdcb601669c25e8e2fe8e3d525257c4f30d"
+ },
+ {
+  "file": "europa_poster.jpg",
+  "seed": 1001,
+  "size": "1344x1792",
+  "settings": "Steps: 8, Sampler: euler, Schedule type: simple, CFG scale: 1, Seed: 1001, Size: 1344x1792, Model hash: e1b205b78d, Model: HaDeS_MOSS_v1.0_Turbo_rc1, Shift: 5, VAE: flux2-vae, Text encoder: qwen3.5_9b_int8_convrot, Hashes: {\"model\": \"e1b205b78d\"}, Version: ComfyUI, HaDeS MOSS Suite",
+  "prompt": "A minimalist retro-futuristic travel poster rendered in bold vector art featuring clean silhouettes and sharp edges. The composition utilizes a cool cyan and deep navy color palette depicting a stylized view of Jupiter's moon Europa, perhaps a crescent against a starfield. Prominent geometric sans-serif typography reading \"VISIT EUROPA\" spans across the top edge, while smaller vintage lettering stating \"OCEANS OF MYSTERY\" runs along the bottom edge.",
+  "source_sha256": "0b02df01fc38f653810dd968334793094e9b2e83d1bdd07befdc3b40354b18a5",
+  "preview_sha256": "375f0c21aa7132590b2022f80c6b86052f957d3dd62ae115784c7cd280951c62"
+ },
+ {
+  "file": "anime_knight.jpg",
+  "seed": 1001,
+  "size": "1344x1792",
+  "settings": "Steps: 8, Sampler: euler, Schedule type: simple, CFG scale: 1, Seed: 1001, Size: 1344x1792, Model hash: e1b205b78d, Model: HaDeS_MOSS_v1.0_Turbo_rc1, Shift: 5, VAE: flux2-vae, Text encoder: qwen3.5_9b_int8_convrot, Hashes: {\"model\": \"e1b205b78d\"}, Version: ComfyUI, HaDeS MOSS Suite",
+  "prompt": "A high-detail anime illustration of an adult female celestial knight standing atop the weathered ruins of a floating marble temple high above a sea of clouds. She wears elaborate silver armor detailed with intricate filigree, accompanied by a translucent flowing cape that billows gently. Her hands rest near her sides as a glowing broadsword rests tip-down on the stone floor beside her, casting a soft light. The background features a golden hour twilight sky filled with streaks of shooting stars. Rendered with highly detailed linework from a dynamic low camera angle, capturing the scene in a vivid, emotive style similar to Makoto Shinkai.",
+  "source_sha256": "6cf5715d6ad2f9a783d18acab6b3d2d60906dd90488c7c85d6a418457fe47616",
+  "preview_sha256": "399d949ef198a95067f5b407c970aaaec0f56331078d9d8dced8fc3d64fd0722"
+ },
+ {
+  "file": "flamenco.jpg",
+  "seed": 1001,
+  "size": "1344x1792",
+  "settings": "Steps: 8, Sampler: euler, Schedule type: simple, CFG scale: 1, Seed: 1001, Size: 1344x1792, Model hash: e1b205b78d, Model: HaDeS_MOSS_v1.0_Turbo_rc1, Shift: 5, VAE: flux2-vae, Text encoder: qwen3.5_9b_int8_convrot, Hashes: {\"model\": \"e1b205b78d\"}, Version: ComfyUI, HaDeS MOSS Suite",
+  "prompt": "black and white editorial photography, shot on 85mm f1.4 lens. A solitary flamenco dancer captured in a dimly lit seville tablao during the twilight of performance. She stands center frame in sharp profile, her face etched with concentration and sweat-sheen, while her elaborate ruffled skirt swirls violently outward into a frozen arc of fabric dust particles frozen by the 1/60 second shutter speed. Behind her, slightly out of focus and blurred by depth of field, a male guitarist sits hunched over his classical guitar, his fingers dancing but indistinct in shadow. Intense overhead spotlight from above strikes her back and hair, creating a high-contrast silhouette effect against deep, inky blacks that swallow the corners of the room. The image bears the distinct, noisy grain structure of Tri-X film pushed two stops, lending a gritty documentary texture where silver halide crystals catch the light. Fine threads hang loose from the hem of her skirt, and the wooden floorboards beneath show scuffed wear from years of tap rhythms. Visible aperture blades form a hexagonal bokeh around distant lantern light points, no digital retouching, no watermarks, pure chemical film capture.",
+  "source_sha256": "398a7394cee23701e5ecb115fa2cb0f178bbbc26e4a6e205630021ff9b81e378",
+  "preview_sha256": "e1eef24459d7222f1ecaac7c4e35432b846f5c9c25005fc490537b8037200105"
+ }
+]

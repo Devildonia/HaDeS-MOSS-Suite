@@ -1846,6 +1846,50 @@ The model-free editor workflow [`examples/dev/HaDeS MOSS Suite - Pair Guard and 
 
 Validation ran on a separate **ComfyUI 0.43.0 / frontend 1.57.4** CPU instance with only this Suite enabled. Its API request/result, server object definitions and the frontend-saved workflow are under `<archive>/pair_recipe_validation/`; the user's active ComfyUI workflow and settings were not changed. The reports have native read-only output widgets: legacy `readOnly` and Vue `options.read_only`, with reserved layout height, wrapping and internal scrolling. Cached successful results were checked. After a failed queue item, ComfyUI can still display the previous successful report while marking the node as errored; users should read the queue error for the failed attempt. The test did not run real diffusion, verify provenance against source images or write a model file. Python development-node tests: **20 passed**; core suite: **66 passed, 1 opt-in CUDA test skipped**; JS widget tests: **5 passed**. No commit or push was made.
 
+## QwenLook LoRA and HaDeS MOSS v1.0 Turbo (2026-11-13)
+
+**QwenLook.** A text-to-image LoRA trained with `tools/moss_edit_train.py --t2i` on 1833 images that Qwen-Image-Edit 2509 (Lightning 8-step LoRA) drew from MOSS-Image SFT scenes, each captioned with its scene prompt plus the added object; rank 32, 1000 steps at 1024, one LoRA on SFT and one on Base. Runs: `<archive>/moss_edit_runs/qwenlook_{sft,base}1024`.
+
+**Distance to no LoRA** (6 unseen prompts x 3 seeds, 30 steps, CFG 4, 1024; pixel L1 x 100 at 64 px; `<archive>/moss_eval/qwenlook_cmp`): SFT 6.3 at strength 0.5 / 10 at 1.0; Base 14.8 / 16.9. Crude 64 px variety across seeds: SFT 15.7 → 14.7, Base 17.8 → 18.2. The LoRA teaches the SFT look, so it moves Base much more than SFT.
+
+**Base vs SFT with Turbo v1.0, with and without QwenLook** (10 varied prompts, 1 seed, 8 steps, CFG 1 and 1.5, 1344 x 1792; `<archive>/moss_eval/turbo_trio`). Pixel L1 x 100, CFG 1:
+
+| Pair | 64 px | 16 px |
+|---|---:|---:|
+| Base vs SFT, Turbo only | 14.05 | 11.30 |
+| Base vs SFT, Turbo + QwenLook | 12.73 | 10.17 |
+| Base: QwenLook on / off | 14.52 | 11.79 |
+| SFT: QwenLook on / off | 10.04 | 7.55 |
+
+QwenLook brings Base and SFT only about 10 % closer, prompt-dependent (watercolor 12 → 7, render 17 → 11; macro 9 → 12). CFG 1.5 gives the same pattern. An eye reading of the sheets had overstated this as "nearly the same".
+
+**QwenLook on / off on Base + Turbo v1.0** (16 photograph + 4 illustration prompts, 1 seed, CFG 1, 1344 x 1792; `<archive>/moss_eval/ql_onoff`):
+
+| | Without | With |
+|---|---:|---:|
+| Laplacian variance, photos (sharper in 16 / 16) | 39.1 | 77.1 |
+| High-frequency share (> 1/4 Nyquist), photos | 1.88 % | 3.71 % |
+| Laplacian variance, illustrations (4 / 4) | 113.6 | 271.2 |
+| Qwen3.5-9B "real photograph?" yes, photos | 15 / 16 | 2 / 16 |
+| Qwen3.5-9B "real photograph?" yes, illustrations | 0 / 4 | 0 / 4 |
+| Qwen3.5-9B detail score 1-10, photos | 8.31 | 8.75 |
+
+The VLM judge is not calibrated on real photographs. Maintainer's blind pairs (criterion: which looks more realistic, any visible error disqualifies): without 12, with 8 (photos 10 / 6). The maintainer reports that several votes went against QwenLook only for small errors in that seed and finds QwenLook more realistic overall; by eye the with-LoRA images are crisper, more saturated and more polished (fewer photographic choices such as motion blur).
+
+**Baked v1.0** (Base + Turbo v1.0 1.0 + QwenLook Base 1.0, MOSS Model Saver, BF16, stochastic). Against the live LoRAs on the 20 prompts above: same compositions and sharpness (Laplacian 77.7 vs 77.1, HF 3.73 vs 3.71 %; distance to without-QwenLook 14.68 vs 14.33), small details differ (L1 4.7 at 64 px, max 7.4; a pistol in one hand gone). Renders are deterministic (a live re-render differs by 0.0), so the difference comes from the bake's rounding at 8 steps. The released file (`HaDeS_MOSS_v1.0_Turbo.safetensors`, header title and recipe rewritten, tensors unchanged) re-renders the release candidate pixel-identically.
+
+**Blind pairs, v0.9.4 Turbo vs v1.0** (20 new prompts, 1 seed, 8 steps, CFG 1, 1344 x 1792, left / right at random; `<archive>/moss_eval/blind_rc1`): **maintainer v1.0 16 / v0.9.4 4**. The assistant's vote is under AI-model reviews.
+
+**Café bias, v1.0** ("photograph of a woman sitting in a café", 16 seeds, 8 steps, CFG 1, 1152 x 1536; `<archive>/moss_eval/cafe_rc1`): about 1 East Asian face in 16 by eye (v0.9.4: 9-11). The 16 women look much alike: young, long wavy brown hair, smiling at the camera.
+
+**Juggernaut Moss v1** (Kandoo/Juggernaut-Moss, `juggernaut_moss_v1_bf16.safetensors`, SHA-256 `99f2920a…` matching the author's repo; a full finetune of Base by its weights: norms identical to Base, linears about 0.4 % from Base). One seed per prompt, by eye: with Turbo v1.0 at 8 steps (10 prompts) and at the author's settings against Base + QwenLook (30 steps, CFG 3, SLG block 22, 5 photo prompts), Juggernaut gives more candid, photographic framing; Base + QwenLook follows the prompt more closely (the nurse prompt came out black and white, seen from behind, in both Juggernaut runs). A rank-256 LoRA of Juggernaut minus Base keeps 25.6 % of the SVD energy and closes about a third of the pixel gap (Base vs Juggernaut 10.94 → 7.19 at strength 1, 5 prompts, with Turbo v1.0).
+
+## Prompt Enhancer `detailed` mode and random prompts (2026-11-13)
+
+**detailed vs caption** (6 short ideas, enhancer seed 0, temperature 0.7, rendered with v1.0 rc1 at 8 steps, CFG 1, image seed 4242; `<archive>/moss_eval/enhancer_detailed`): caption 21-86 words, detailed 164-226. The first version turned "anime girl on a rooftop at sunset" into an editorial photograph with a 35 mm lens; after the medium rule, 6 / 6 ideas kept their medium in the first words (anime x 3 seeds, manga, watercolor; "a lighthouse in a storm", with no medium, became an oil painting). Not compared blind; the maintainer's impression is that detailed prompts improve the images a lot.
+
+**Random prompts** (detailed mode, empty idea, seeds 0-19, rendered with rc1; `<archive>/moss_eval/enhancer_random`): 17 different media out of 26 in 20 draws, prompts 166-243 words, varied people and places. Places repeated by chance in these seeds (Mongolian steppe 5, Lagos 3); over 2000 seeds each place is drawn 78-125 times. Golden-hour light dominates many images, a model preference not set by the draw.
+
 ## AI-model reviews (qualitative, not measurements)
 
 Preferences given by AI models on the blind sheets of the four 2026-11-11 experiments above: GPT and Gemini (screenshots supplied by the maintainer) and the assistant that ran the experiments (sealed before each key was opened, but it had seen earlier images, so never fully blind). They are kept for the record, with their tables as decoded. They are **impressions, not measurements**: the criteria differ and are not verifiable from screenshots, AI judgments may be correlated, and the same pairs were judged repeatedly. No conclusion, default or model card in this repository relies on them.
@@ -1994,3 +2038,7 @@ GPT and Gemini screenshots were archived as `gpt_blind_rating.png` (SHA-256 `442
 | Assistant overall | 1/8 | **7/8** |
 
 Rainy alley is unanimous for baked v0.9.4; pocket-watch macro is unanimous for SFT + v0.7. Citrus and climber give baked a 3/4 majority, and trumpeter gives SFT a 3/4 majority. Watchmaker, flower seller and observatory split 2/2. Three reviewers individually favor baked on these familiar pairs, while the assistant favors SFT; **17 versus 15** total votes across all four reviewers would be a misleading headline because the same eight pairs are repeatedly judged under different criteria. In the immediately preceding v0.9 comparison on these same prompts, maintainer/GPT/Gemini each selected baked 5/8; replacing v0.9 with v0.7 did not produce a decisive separation in their short preference tallies. It is not a direct blind head-to-head between the two LoRAs.
+
+### v0.9.4 Turbo vs v1.0 (2026-11-13)
+
+The assistant voted on the 20 blind pairs and saved its verdicts before opening the key: v1.0 11, v0.9.4 5, tie 4. It agreed with the maintainer on 10 of 20 pairs. Not counted in the model card.
