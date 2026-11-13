@@ -23,11 +23,20 @@ gets B and "Add <object>." (SFT, Euler / normal, 30 steps, CFG 4, strength 1, th
 where its output differs from B is pasted onto B (per-pixel difference blurred, thresholded, small specks dropped, dilated and
 feathered), so A still equals B outside that area. The LoRA only draws training inputs; nothing of its weights is trained on.
   python tools/moss_edit_pairs.py add --from I:/HaDeS_MOSS/moss_edit_pairs/pilot --lora MOSS/armV5-moss-edit-lora.safetensors --scenes 50 --out I:/HaDeS_MOSS/moss_edit_pairs/add_armV5
+`--lora qwen2509` uses Qwen-Image-Edit 2509 instead (the adder of the dataset, chosen on the pilot). `add` only draws; mode `check`
+then asks the text encoder whether the object is in A and not in B (`vlm`) and how many there are in A (`count`). A usable pair
+reads vlm ["yes", "no"] and count 1.
+  python tools/moss_edit_pairs.py run --b-only --scenes 1000 --seed 2 --out I:/HaDeS_MOSS/moss_edit_pairs/full
+  python tools/moss_edit_pairs.py add --from I:/HaDeS_MOSS/moss_edit_pairs/full --lora qwen2509 --scenes 1000 --out I:/HaDeS_MOSS/moss_edit_pairs/full_qwen2509
+  python tools/moss_edit_pairs.py check --out I:/HaDeS_MOSS/moss_edit_pairs/full_qwen2509
 """
 import argparse
 import hashlib
 import json
+import os
 import random
+import re
+import shutil
 import time
 import urllib.parse
 import urllib.request
@@ -84,7 +93,38 @@ OBJECTS = {
     "potted cactus": ("a small potted cactus", SHELF, SMALL),
     "teddy bear": ("a brown teddy bear", SHELF, SMALL),
     "price tag": ("a white price tag that reads \"SALE 50%\"", SHELF, SMALL),
+    # added for the full dataset (2026-11-12): more objects and scenes, so 2000 pairs do not repeat the pilot's few combinations
+    "cat": ("a grey tabby cat sitting", FLOOR, MID),
+    "umbrella": ("a closed black umbrella leaning against the wall", FLOOR, TALL),
+    "basketball": ("an orange basketball", FLOOR, SMALL),
+    "sneakers": ("a pair of white sneakers", FLOOR, SMALL),
+    "pumpkin": ("an orange pumpkin", FLOOR, SMALL),
+    "bowl of fruit": ("a ceramic bowl full of oranges", TABLE, MID),
+    "camera": ("a vintage film camera", TABLE, SMALL),
+    "headphones": ("a pair of black over-ear headphones", TABLE, SMALL),
+    "toolbox": ("a red metal toolbox", TABLE, MID),
+    "radio": ("a vintage portable radio", TABLE, SMALL),
+    "mirror": ("a round mirror with a gold frame", WALL, MID),
+    "flag": ("a small red flag on a pole", GROUND, TALL),
+    "shopping cart": ("a metal shopping cart", GROUND, MID),
+    "motorcycle": ("a parked black motorcycle", GROUND, WIDE),
+    "fire hydrant": ("a red fire hydrant", GROUND, SMALL),
+    "pigeon": ("a grey pigeon", GROUND, SMALL),
+    "woman": ("a woman in a red dress walking", GROUND, TALL),
+    "horse": ("a brown horse standing", GROUND, BIG),
+    "tent": ("a small orange camping tent", GROUND, WIDE),
+    "deer": ("a young deer", GROUND, MID),
+    "seagull": ("a flying seagull", SKY, SMALL),
+    "drone": ("a small white quadcopter drone", SKY, SMALL),
+    "kayak": ("a yellow kayak", WATER, WIDE),
+    "duck": ("a mallard duck", WATER, SMALL),
+    "globe": ("a small desk globe", SHELF, SMALL),
+    "jar of honey": ("a glass jar of honey", SHELF, SMALL),
 }
+# for the count question; the rest add -s / -es
+PLURAL = {"person": "people", "woman": "women", "stack of books": "stacks of books", "incense": "incense sticks", "sneakers": "pairs of sneakers",
+          "headphones": "pairs of headphones", "bowl of fruit": "bowls of fruit", "jar of honey": "jars of honey", "deer": "deer",
+          "potted cactus": "potted cacti"}
 
 SCENES = {
     "kitchen": ("Photograph of a bright kitchen with a white marble counter, wooden cabinets and a window, morning light.", ["teapot", "candle", "wine glass", "vase", "apple", "smartphone", "sticky note", "wall clock"]),
@@ -109,12 +149,38 @@ SCENES = {
     "anime_beach": ("Anime illustration of a bright beach with turquoise water and white clouds, clean line art.", ["boat", "buoy", "kite", "person", "dog", "airplane"]),
     "watercolor_garden": ("Watercolor painting of a cottage garden with flower beds and a stone path.", ["bench", "dog", "bicycle", "person", "kite", "houseplant"]),
     "oil_still_life": ("Oil painting of a still life on a draped table in front of a dark background, classical style.", ["vase", "apple", "candle", "wine glass", "teapot", "stack of books"]),
+    "living_room": ("Photograph of a living room with a grey sofa, a low wooden coffee table and a patterned rug, afternoon light.", ["cat", "dog", "houseplant", "vase", "laptop", "headphones", "bowl of fruit", "framed poster", "mirror", "basketball"]),
+    "office": ("Photograph of an open-plan office with white desks, monitors and large windows, daylight.", ["laptop", "smartphone", "houseplant", "backpack", "headphones", "sticky note", "wall clock", "stack of books"]),
+    "library": ("Photograph of a quiet library reading room with long wooden tables and tall bookshelves.", ["stack of books", "globe", "laptop", "backpack", "houseplant", "camera", "person"]),
+    "hallway": ("Photograph of an entrance hallway with a wooden floor, a coat rack and a white door, soft light.", ["umbrella", "sneakers", "backpack", "suitcase", "mirror", "cat", "dog", "houseplant"]),
+    "workshop": ("Photograph of a woodworking workshop with a heavy workbench and tools hanging on a pegboard.", ["toolbox", "radio", "cat", "wall clock", "backpack", "traffic cone", "camera"]),
+    "patio": ("Photograph of a sunny garden patio with a wooden table, folding chairs and potted flowers.", ["bowl of fruit", "wine glass", "candle", "cat", "umbrella", "pumpkin", "basketball", "radio"]),
+    "market": ("Photograph of an outdoor street market with fruit stalls and striped awnings, morning.", ["shopping cart", "bicycle", "person", "woman", "pigeon", "chalkboard sign", "trash bin"]),
+    "train_station": ("Photograph of an old train station platform with iron columns and a glass roof.", ["suitcase", "backpack", "person", "woman", "bench", "trash bin", "pigeon"]),
+    "mountain_trail": ("Photograph of a mountain hiking trail through alpine meadows with peaks in the background.", ["tent", "person", "dog", "horse", "drone", "flag", "backpack"]),
+    "lake": ("Photograph of a calm mountain lake with a pebble shore and pine forest, clear morning.", ["kayak", "boat", "duck", "swan", "tent", "drone", "seagull"]),
+    "farm": ("Photograph of a farmyard with a red barn, a wooden fence and green hills.", ["horse", "dog", "cat", "bicycle", "pumpkin", "flag", "traffic cone"]),
+    "rooftop": ("Photograph of a rooftop terrace with a city skyline at sunset.", ["drone", "airplane", "seagull", "houseplant", "bench", "person", "wine glass", "flag"]),
+    "forest": ("Photograph of a sunlit forest clearing with ferns and tall oak trees.", ["tent", "deer", "person", "dog", "backpack", "drone"]),
+    "night_street": ("Photograph of a pedestrian city street at night with shop windows and wet pavement.", ["fire hydrant", "motorcycle", "person", "woman", "neon sign", "trash bin", "scooter"]),
+    "museum": ("Photograph of a quiet art gallery with white walls, framed paintings and a wooden floor.", ["bench", "person", "woman", "houseplant", "framed poster", "globe"]),
+    "render_room": ("3D render of a pastel colored playroom with soft toys and a round window, soft lighting.", ["teddy bear", "basketball", "houseplant", "globe", "headphones", "cat", "pumpkin"]),
+    "anime_cafe": ("Anime illustration of a small café interior with wooden tables and plants, warm light, clean line art.", ["teapot", "cat", "laptop", "candle", "poster", "neon sign", "houseplant"]),
+    "sketch_street": ("Pencil sketch of an old European street with cobblestones and balconies.", ["bicycle", "person", "bench", "trash bin", "fire hydrant", "pigeon"]),
+    "watercolor_lake": ("Watercolor painting of a lake with wooden boats and hills in the distance.", ["boat", "swan", "duck", "kayak", "seagull", "hot air balloon"]),
 }
 
 
 def req(path, data=None, raw=False):
-    b = urllib.request.urlopen(urllib.request.Request(URL + path, json.dumps(data).encode() if data is not None else None, {"Content-Type": "application/json"})).read()
-    return b if raw else json.loads(b)
+    for attempt in range(6):  # a busy ComfyUI sometimes misses a request (WinError 10060 after ~1000 calls); retry instead of stopping a night run
+        try:
+            b = urllib.request.urlopen(urllib.request.Request(URL + path, json.dumps(data).encode() if data is not None else None, {"Content-Type": "application/json"}), timeout=120).read()
+            return b if raw else json.loads(b)
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+            if attempt == 5:
+                raise
+            print("retry", path, e, flush=True)
+            time.sleep(10)
 
 
 def upload(name, png_bytes):
@@ -176,11 +242,12 @@ def graph(scene_prompt, seed_b, items):
     return g
 
 
-def ask(img, obj, tag):
-    """Yes / no from the MOSS text encoder: is the object in this crop?"""
+def ask(img, obj, tag, question=None):
+    """Yes / no from the MOSS text encoder: is the object in this crop? (or another short question)"""
+    question = question or f"Is there a {obj} in this picture? Answer only yes or no."
     g = {"clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen3.5_9b_int8_convrot.safetensors", "type": "moss_image", "device": "default"}},
          "img": {"class_type": "LoadImage", "inputs": {"image": upload(f"hades_vlm_{tag}.png", png(img))}},
-         "gen": {"class_type": "TextGenerate", "inputs": {"clip": ["clip", 0], "prompt": f"Is there a {obj} in this picture? Answer only yes or no.",
+         "gen": {"class_type": "TextGenerate", "inputs": {"clip": ["clip", 0], "prompt": question,
                  "max_length": 8, "sampling_mode": "off", "image": ["img", 0], "thinking": False}},
          "show": {"class_type": "PreviewAny", "inputs": {"source": ["gen", 0]}}}
     pid = req("/prompt", {"prompt": g, "client_id": "hades_edit_pairs"})["prompt_id"]
@@ -188,6 +255,216 @@ def ask(img, obj, tag):
         time.sleep(0.3)
     assert h[pid]["status"]["status_str"] == "success", h[pid]["status"]
     return h[pid]["outputs"]["show"]["text"][0].strip().strip(".").lower()
+
+
+def generate(text, max_length=160):
+    """Text from the MOSS text encoder, no image, no sampling."""
+    g = {"clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen3.5_9b_int8_convrot.safetensors", "type": "moss_image", "device": "default"}},
+         "gen": {"class_type": "TextGenerate", "inputs": {"clip": ["clip", 0], "prompt": text, "max_length": max_length, "sampling_mode": "off", "thinking": False}},
+         "show": {"class_type": "PreviewAny", "inputs": {"source": ["gen", 0]}}}
+    pid = req("/prompt", {"prompt": g, "client_id": "hades_edit_pairs"})["prompt_id"]
+    while pid not in (h := req(f"/history/{pid}")):
+        time.sleep(0.3)
+    assert h[pid]["status"]["status_str"] == "success", h[pid]["status"]
+    return h[pid]["outputs"]["show"]["text"][0].strip()
+
+
+# v0.2 data: scenes from a prompt list (the turbo v1.0 prompts), objects proposed per scene by the text encoder. Three kinds are
+# offered per scene (it picks those that fit); the removal kinds of ConceptEdit-12M's taxonomy are among them. The benchmark's
+# objects stay out, so the benchmark keeps measuring objects the LoRA never saw.
+KINDS = ["animal", "bird", "vehicle", "bicycle or scooter", "piece of furniture", "food or drink", "household item", "electronic device",
+         "tool", "toy", "plant in a pot", "bag or luggage", "sports equipment", "musical instrument", "box or container", "sign or poster with text",
+         "street object such as a bin, cone or barrier", "garden object", "kitchen item", "decoration", "standing person", "light source",
+         "book or stationery", "boat", "aircraft or balloon", "trash or clutter on the ground", "fence or barrier", "statue or sculpture"]
+BENCH = ("mug", "cup", "car", "lamp post", "street lamp", "floor lamp", "dock", "pier", "desk", "chair", "hanging sign")
+POSITIONS = ("on the left side of the picture", "on the right side of the picture", "in the middle of the picture",
+             "in the lower left part of the picture", "in the lower right part of the picture", "in the upper part of the picture")
+PROPOSE_Q = ("Image description: \"{}\"\n\nSuggest 6 objects to add to this image, from these kinds: {}. Each must be one concrete physical "
+             "object that is not already in the image and stands on its own: not worn or held by anyone, not part of a building, not a "
+             "liquid, a light effect or scattered pieces. Prefer medium-sized objects that are easy to see. Avoid the words vintage, wooden "
+             "and rustic. Write exactly 6 lines, no numbering, each as: object name | the object in a few words\n"
+             "Example:\ntraffic cone | an orange traffic cone\nbicycle | a red bicycle with a basket")
+VERBS = ("add ", "place ", "put ", "set ", "lay ", "hang ", "float ", "rest ", "stand ", "position ", "drape ", "include ")
+CUT = re.compile(r"\s(?:on|near|beside|in|inside|against|next to|across|at|by|under|above|behind|over|sits|stands|is|are|placed|leaning|resting|parked|perched|hanging|lying|floating|sitting|standing|tipped|curled|filled|with|that|which|walking|flying|surrounding|blocking|along|holding)(?:\s.*)?$")
+GENERIC = {"street object", "garden object", "light source", "decoration", "ornament", "toy", "household item", "container", "clutter pile", "object", "item"}
+
+
+def parse_proposals(text, prompt):
+    """(name, phrase) per answer line, whatever separator the model used; drops kind names echoed back and objects of the prompt."""
+    kinds = {k for k in KINDS} | {w for k in KINDS for w in k.split(" or ")}
+    out = []
+    for line in text.splitlines():
+        line = line.strip().strip("-*").strip()
+        if not line or line.lower().startswith("example"):
+            continue
+        sep = "|" if "|" in line else ("," if "," in line else (":" if ":" in line else None))
+        if not sep:
+            continue
+        name, phrase = (x.strip() for x in line.split(sep, 1))
+        name = re.sub(r"^[0-9.)\s]+", "", name).strip("<>\"' ").lower()
+        phrase = phrase.strip("<>\"' ").rstrip(".")
+        if "|" in phrase:
+            phrase = phrase.split("|", 1)[1].strip()
+        low = phrase.lower()
+        for v in VERBS:
+            if low.startswith(v):
+                phrase, low = phrase[len(v):], low[len(v):]
+        phrase = CUT.sub("", phrase).strip(" ,")
+        if not re.match(r"(?i)^(a|an|the|some|two|one)\s", phrase):
+            phrase = ("an " if phrase[:1].lower() in "aeiou" else "a ") + phrase
+        if name in kinds or name in GENERIC:  # the kind echoed back: name the object from its phrase instead
+            words = re.sub(r"(?i)^(a|an|the|some|one)\s", "", phrase).split()
+            name = " ".join(words[-2:] if len(words) >= 3 else words).lower()
+        name = re.sub(r"^(a|an|the)\s", "", name)
+        if not name or name in kinds or name in GENERIC or " or " in name or len(name.split()) > 3 or len(phrase.split()) > 12:
+            continue
+        if any(b in name for b in BENCH) or name in prompt.lower():
+            continue
+        out.append((name, phrase[0].lower() + phrase[1:]))
+    return out
+
+
+def propose(args):
+    """Plan: scenes from --prompts, --objects-per-scene objects each, with a position each so their changed areas rarely touch."""
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    plan_path = out / "plan.json"
+    plan = json.loads(plan_path.read_text()) if plan_path.exists() else []
+    done = {sc["scene_id"] for sc in plan}
+    prompts = json.load(open(args.prompts, encoding="utf-8"))
+    rng = random.Random(args.seed)
+    order = rng.sample(range(len(prompts)), len(prompts))
+    for s_i in range(args.scenes):
+        scene_id = f"s{s_i:05d}"
+        prompt = prompts[order[s_i % len(order)]]
+        kinds, positions = rng.sample(KINDS, 3), rng.sample(POSITIONS, args.objects_per_scene)
+        seed_b, seeds_a = args.seed * 100000 + s_i, [rng.randrange(2 ** 31) for _ in range(args.objects_per_scene)]
+        if scene_id in done:
+            continue
+        text = generate(PROPOSE_Q.format(prompt, ", ".join(kinds)))
+        objs, seen = [], set()
+        for name, phrase in parse_proposals(text, prompt):
+            if name in seen:
+                continue
+            seen.add(name)
+            objs.append({"object": name, "phrase": phrase})
+            if len(objs) == args.objects_per_scene:
+                break
+        for o, pos, sa in zip(objs, positions, seeds_a):
+            o.update(position=pos, seed_a=sa)
+        plan.append({"scene_id": scene_id, "scene_prompt": prompt, "seed_b": seed_b, "kinds": kinds, "objects": objs, "raw": text})
+        if s_i % 20 == 0:
+            plan_path.write_text(json.dumps(plan, indent=1))
+        print(scene_id, [o["object"] for o in objs], flush=True)
+    plan_path.write_text(json.dumps(plan, indent=1))
+
+
+def scenes(args):
+    """B for every scene of a `propose` plan (MOSS-Image SFT, the run mode's settings), one manifest entry per planned object."""
+    out = Path(args.out)
+    (out / "pairs").mkdir(parents=True, exist_ok=True)
+    plan = json.loads((out / "plan.json").read_text())
+    manifest_path = out / "pairs.json"
+    manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else []
+    done = {p["scene_id"] for p in manifest}
+    for sc in plan:
+        if sc["scene_id"] in done or not sc["objects"]:
+            continue
+        while (q := req("/queue"))["queue_running"] or q["queue_pending"]:
+            time.sleep(2)
+        pid = req("/prompt", {"prompt": graph(sc["scene_prompt"], sc["seed_b"], []), "client_id": "hades_edit_pairs"})["prompt_id"]
+        while pid not in (h := req(f"/history/{pid}")):
+            time.sleep(0.5)
+        assert h[pid]["status"]["status_str"] == "success", h[pid]["status"]
+        b_path = out / "pairs" / f"{sc['scene_id']}_B.png"
+        fetch(h[pid]["outputs"], "out_b").save(b_path)
+        for j, o in enumerate(sc["objects"]):
+            manifest.append({"scene_id": sc["scene_id"], "pair_id": f"{sc['scene_id']}_{j}", "scene": "prompt", "scene_prompt": sc["scene_prompt"],
+                             "seed_b": sc["seed_b"], "object": o["object"], "phrase": o["phrase"], "position": o["position"], "seed_a": o["seed_a"],
+                             "instruction": f"Remove the {o['object']}.", "b": b_path.name, "sha256_b": hashlib.sha256(b_path.read_bytes()).hexdigest()})
+        manifest_path.write_text(json.dumps(manifest, indent=1))
+        print(sc["scene_id"], "B", [o["object"] for o in sc["objects"]], flush=True)
+
+
+def combine(args):
+    """Pairs from combinations: every set of 2+ usable objects of a scene whose changed areas keep GAP px apart is pasted together onto B
+    (exact: B plus each object's A - B), and each object of the set is removed from it, the target keeping the others. Writes a new
+    folder (--out) with the composites, hard links to the single-object images it uses, and its own pairs.json. CPU only."""
+    import itertools
+    import scipy.ndimage as nd
+    src, out = Path(args.src), Path(args.out)
+    (out / "pairs").mkdir(parents=True, exist_ok=True)
+    gap = 8
+    m = json.loads((src / "pairs.json").read_text())
+    ok = lambda p: p.get("vlm") == ["yes", "no"] and p.get("count") == 1 and p.get("mask_area", 1) <= args.max_area  # noqa: E731
+    by_scene = {}
+    for p in m:
+        if ok(p):
+            by_scene.setdefault(p["scene_id"], []).append(p)
+    pairs, n_sets = [], 0
+
+    def link(name):
+        dst = out / "pairs" / name
+        if not dst.exists():
+            try:
+                os.link(src / "pairs" / name, dst)
+            except OSError:
+                shutil.copy2(src / "pairs" / name, dst)
+        return name
+
+    for sid, ps in by_scene.items():
+        names = [p["object"] for p in ps]
+        ps = [p for k, p in enumerate(ps) if names.count(p["object"]) == 1]  # "Remove the cat." is ambiguous with two cats
+        if len(ps) < 2:
+            continue
+        b = np.asarray(Image.open(src / "pairs" / ps[0]["b"]).convert("RGB"), np.int16)
+        d = [np.asarray(Image.open(src / "pairs" / p["a"]).convert("RGB"), np.int16) - b for p in ps]
+        grown = [nd.binary_dilation(np.any(x != 0, -1), iterations=gap) for x in d]
+        sup = [np.any(x != 0, -1) for x in d]
+        apart = {(i, j) for i in range(len(ps)) for j in range(len(ps)) if i < j and not (grown[i] & sup[j]).any()}
+        names_of = {}
+
+        def image_of(subset):
+            if len(subset) == 1:
+                return link(ps[subset[0]]["a"])
+            if subset not in names_of:
+                name = f"{sid}_C{''.join(str(i) for i in subset)}.png"
+                Image.fromarray(np.clip(b + sum(d[i] for i in subset), 0, 255).astype(np.uint8)).save(out / "pairs" / name)
+                names_of[subset] = name
+            return names_of[subset]
+        link(ps[0]["b"])
+        for size in range(2, len(ps) + 1):
+            for subset in itertools.combinations(range(len(ps)), size):
+                if not all(pair in apart for pair in itertools.combinations(subset, 2)):
+                    continue
+                n_sets += 1
+                for i in subset:
+                    rest = tuple(j for j in subset if j != i)
+                    pairs.append({"scene_id": sid, "pair_id": f"{sid}_C{''.join(map(str, subset))}_rm{i}", "scene": ps[i].get("scene"),
+                                  "scene_prompt": ps[i].get("scene_prompt"), "object": ps[i]["object"], "kept": [ps[j]["object"] for j in rest],
+                                  "instruction": f"Remove the {ps[i]['object']}.", "a": image_of(subset), "b": image_of(rest),
+                                  "vlm": ["yes", "no"], "count": 1, "mask_area": ps[i]["mask_area"], "box": ps[i]["box"]})
+    (out / "pairs.json").write_text(json.dumps(pairs, indent=1))
+    print("scenes", len(by_scene), "object sets", n_sets, "combination pairs", len(pairs), flush=True)
+
+
+def plural(obj):
+    return PLURAL.get(obj, obj + ("es" if obj.endswith(("s", "ch", "sh", "x")) else "s"))
+
+
+WORDS = {"zero": 0, "no": 0, "none": 0, "one": 1, "a": 1, "an": 1, "single": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6}
+
+
+def count(img, obj, tag):
+    """How many of the object the MOSS text encoder sees in the crop (-1 if the answer has no number): Qwen-Image-Edit sometimes
+    adds two of the object, and "Remove the X." on two of them is a different instruction."""
+    t = ask(img, obj, tag, f"How many {plural(obj)} are in this picture? Answer with a number only.")
+    for w in t.replace(".", " ").replace(",", " ").split():
+        if w.isdigit():
+            return int(w)
+        if w in WORDS:
+            return WORDS[w]
+    return -1
 
 
 def fetch(outputs, key):
@@ -317,8 +594,8 @@ def add(args):
         if p["scene_id"] not in scenes or p["pair_id"] in done:
             continue
         b_img = Image.open(src / "pairs" / p["b"]).convert("RGB")
-        phrase = OBJECTS[p["object"]][0]
-        text = f"Add {phrase}."
+        phrase = p.get("phrase") or OBJECTS[p["object"]][0]
+        text = f"Add {phrase} {p['position']}." if p.get("position") else f"Add {phrase}."
         g = {"unet": {"class_type": "UNETLoader", "inputs": {"unet_name": "mossImage_sft_bf16.safetensors", "weight_dtype": "default"}},
              "lora": {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["unet", 0], "lora_name": args.lora.replace("/", "\\"), "strength_model": 1.0}},
              "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen3.5_9b_int8_convrot.safetensors", "type": "moss_image", "device": "default"}},
@@ -352,19 +629,40 @@ def add(args):
             b_img.save(b_path)
         Image.fromarray(a).save(a_path)
         raw.save(out / "pairs" / f"{p['pair_id']}_raw.png")
-        crop = (max(box[0] - 96, 0), max(box[1] - 96, 0), min(box[2] + 96, SIZE), min(box[3] + 96, SIZE)) if len(xs) else (0, 0, SIZE, SIZE)
-        vlm = [ask(Image.fromarray(a).crop(crop), p["object"], f"{p['pair_id']}_a"), ask(b_img.crop(crop), p["object"], f"{p['pair_id']}_b")]
         manifest.append({**{k: p[k] for k in ("scene_id", "pair_id", "scene", "scene_prompt", "seed_b", "object", "seed_a", "instruction", "b", "sha256_b")},
-                         "adder": args.lora, "add_text": text, "box": box, "mask_area": round(area, 4), "a": a_path.name, "vlm": vlm,
+                         "adder": args.lora, "add_text": text, "box": box, "mask_area": round(area, 4), "a": a_path.name,
                          "raw_outside_mae": round(float(np.abs(r - b)[m == 0].mean()), 2) if (m == 0).any() else None,
                          "sha256_a": hashlib.sha256(a_path.read_bytes()).hexdigest()})
         manifest_path.write_text(json.dumps(manifest, indent=1))
-        print(p["pair_id"], p["object"], "area", round(area, 3), vlm, flush=True)
+        print(p["pair_id"], p["object"], "area", round(area, 3), flush=True)
+
+
+def check(args):
+    """Presence in A and B (`vlm`) and the count in A (`count`), for the pairs of an `add` folder that miss them. Run after `add`,
+    so ComfyUI keeps one model set loaded per phase instead of swapping the editor and the text encoder at every pair."""
+    out = Path(args.out)
+    manifest_path = out / "pairs.json"
+    manifest = json.loads(manifest_path.read_text())
+    for i, p in enumerate(manifest):
+        if "vlm" in p and "count" in p:
+            continue
+        box = p["box"]
+        crop = (max(box[0] - 96, 0), max(box[1] - 96, 0), min(box[2] + 96, SIZE), min(box[3] + 96, SIZE)) if box[2] > box[0] else (0, 0, SIZE, SIZE)
+        a_img = Image.open(out / "pairs" / p["a"]).convert("RGB").crop(crop)
+        if "vlm" not in p:
+            b_img = Image.open(out / "pairs" / p["b"]).convert("RGB").crop(crop)
+            p["vlm"] = [ask(a_img, p["object"], f"{p['pair_id']}_a"), ask(b_img, p["object"], f"{p['pair_id']}_b")]
+        p["count"] = count(a_img, p["object"], f"{p['pair_id']}_c")
+        if i % 20 == 0:
+            manifest_path.write_text(json.dumps(manifest, indent=1))
+        print(p["pair_id"], p["object"], p["vlm"], p["count"], flush=True)
+    manifest_path.write_text(json.dumps(manifest, indent=1))
 
 
 def sheet(args):
     out = Path(args.out)
-    manifest = sorted(json.loads((out / "pairs.json").read_text()), key=lambda p: (p["vlm"] == ["yes", "no"], p["pair_id"]))
+    ok = lambda p: p["vlm"] == ["yes", "no"] and p.get("count", 1) == 1  # noqa: E731
+    manifest = sorted(json.loads((out / "pairs.json").read_text()), key=lambda p: (ok(p), p["pair_id"]))
     t, cols, rows = 256, 4, 8  # 4 pairs per row (A, B side by side), 32 pairs per page
     from PIL import ImageFont
     font = ImageFont.load_default(size=14)
@@ -378,16 +676,18 @@ def sheet(args):
                 im = Image.open(out / "pairs" / name).convert("RGB")
                 ImageDraw.Draw(im).rectangle(p["box"], outline=(255, 40, 40), width=6)
                 s.paste(im.resize((t, t)), (x + side * t, y + 20))
-            d.text((x + 2, y + 2), f"{page + k + 1}. {p['pair_id']}  {p['object']}  vlm {'/'.join(p['vlm'])}", fill=(230, 230, 230) if p["vlm"] == ["yes", "no"] else (255, 120, 120), font=font)
+            d.text((x + 2, y + 2), f"{page + k + 1}. {p['pair_id']}  {p['object']}  vlm {'/'.join(p['vlm'])}  n {p.get('count', '?')}", fill=(230, 230, 230) if ok(p) else (255, 120, 120), font=font)
         s.save(out / f"sheet_{page // (cols * rows) + 1:02d}.jpg", quality=88)
     print("pages", (len(manifest) + cols * rows - 1) // (cols * rows), "pairs", len(manifest),
-          "vlm yes/no", sum(p["vlm"] == ["yes", "no"] for p in manifest),
+          "vlm yes/no", sum(p["vlm"] == ["yes", "no"] for p in manifest), "and count 1", sum(ok(p) for p in manifest),
           "max diff outside", max((p.get("diff_out_max", 0) for p in manifest), default=0))
 
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("mode", choices=("run", "add", "sheet"))
+    p.add_argument("mode", choices=("run", "propose", "scenes", "add", "check", "combine", "sheet"))
+    p.add_argument("--prompts", help="propose: json list of scene prompts (e.g. I:/HaDeS_MOSS/dmd_prompts/turbo_v10_prompts.json)")
+    p.add_argument("--max-area", type=float, default=0.3, help="combine: largest changed area of a usable pair")
     p.add_argument("--from", dest="src", help="add: the run folder whose B images and objects to reuse")
     p.add_argument("--lora", help="add: the edit LoRA that draws the object (ComfyUI loras/ path), or qwen2509 for Qwen-Image-Edit 2509")
     p.add_argument("--out", required=True)
@@ -396,4 +696,4 @@ if __name__ == "__main__":
     p.add_argument("--seed", type=int, default=1)
     p.add_argument("--b-only", action="store_true", help="run: render B and plan the objects, no inpainting (the source for add)")
     a = p.parse_args()
-    {"run": run, "add": add, "sheet": sheet}[a.mode](a)
+    {"run": run, "propose": propose, "scenes": scenes, "add": add, "check": check, "combine": combine, "sheet": sheet}[a.mode](a)

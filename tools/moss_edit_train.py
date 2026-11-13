@@ -50,6 +50,14 @@ import folder_paths  # noqa: E402
 WEIGHTS = ("qkv", "o", "ffn_up_gate", "ffn_down")
 METHOD = "index_timestep_zero_text_start"  # the core's EDIT_FORMATS["Moss-Image-Edit"]
 NEG = "nsfw, worst quality, bad anatomy, watermark, jpeg artifact"
+# --vary-instruction: a removal pair's instruction is drawn from these each time, so the LoRA ties the edit to the object, not to one sentence
+VARIANTS = ("Remove the {}.", "Erase the {}.", "Get rid of the {}.", "Delete the {} from the picture.", "Take out the {}.", "Remove the {} from the image.")
+
+
+def instructions(p, vary):
+    if vary and p["instruction"].startswith("Remove the ") and p.get("object"):
+        return [v.format(p["object"]) for v in VARIANTS]
+    return [p["instruction"]]
 
 
 class LoRASet(torch.nn.Module):
@@ -88,8 +96,8 @@ def layer_names(spec):
 def load_pairs(folder, max_area):
     """Usable pairs of a moss_edit_pairs folder: the text encoder saw the object in A and not in B, and the pasted area is small."""
     m = json.loads(open(os.path.join(folder, "pairs.json"), encoding="utf-8").read())
-    keep = [p for p in m if p.get("vlm") == ["yes", "no"] and p.get("mask_area", 0) <= max_area]
-    print(f"{len(keep)} of {len(m)} pairs usable (vlm yes/no, mask area <= {max_area})", flush=True)
+    keep = [p for p in m if p.get("vlm") == ["yes", "no"] and p.get("count", 1) == 1 and p.get("mask_area", 0) <= max_area]
+    print(f"{len(keep)} of {len(m)} pairs usable (vlm yes/no, count 1 where checked, mask area <= {max_area})", flush=True)
     return sorted(keep, key=lambda p: p["pair_id"])
 
 
@@ -117,6 +125,9 @@ def main():
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--no-checkpoint", action="store_true", help="keep every block's activations (faster, but at 512 it already fills 32 GB)")
     p.add_argument("--grad-check", action="store_true")
+    p.add_argument("--hold-out-objects", type=int, default=0, help="keep this many whole objects out of training (no pair removes or keeps them); the previews show up to --hold-out of them")
+    p.add_argument("--vary-instruction", action="store_true", help="draw each removal instruction from several phrasings (Remove / Erase / Get rid of ...)")
+    p.add_argument("--t2i", action="store_true", help="plain text-to-image LoRA: target b with its instruction as caption, no reference, no identity samples")
     p.add_argument("--out", required=True)
     args = p.parse_args(ARGV)
     os.makedirs(args.out, exist_ok=True)
@@ -134,7 +145,7 @@ def main():
 def build_cache(args, pairs):
     path = os.path.join(args.out, f"cache_{args.size}.pt")
     cache = torch.load(path) if os.path.exists(path) else {"lat": {}, "txt": {}}
-    texts = sorted({p["instruction"] for p in pairs} | {"", NEG})
+    texts = sorted({t for p in pairs for t in instructions(p, args.vary_instruction)} | {"", NEG})
     imgs = sorted({(p["_dir"], p["a"]) for p in pairs} | {(p["_dir"], p["b"]) for p in pairs})
     if all(t in cache["txt"] for t in texts) and all(f"{d}/{n}" in cache["lat"] for d, n in imgs):
         return cache
@@ -172,12 +183,23 @@ def train(args):
     scenes = sorted({p["scene_id"] for p in pairs})
     rng.shuffle(scenes)
     held_scenes, held = set(), []
-    for sc in scenes:
+    if args.hold_out_objects:
+        # held out by object: no pair removes or keeps these objects in training, so the previews show objects the LoRA never saw
+        objs = sorted({p["object"] for p in pairs})
+        rng.shuffle(objs)
+        held_objs = set(objs[:args.hold_out_objects])
+        involved = lambda p: p["object"] in held_objs or bool(held_objs & set(p.get("kept", [])))  # noqa: E731
+        held_all = [p for p in pairs if p["object"] in held_objs and not p.get("kept")]
+        held = [next(p for p in held_all if p["object"] == o) for o in sorted(held_objs) if any(p["object"] == o for p in held_all)][:args.hold_out]
+        held_scenes = {p["scene_id"] for p in held}
+        pairs_train = [p for p in pairs if not involved(p) and p["scene_id"] not in held_scenes]
+        print(f"held-out objects: {sorted(held_objs)}", flush=True)
+    for sc in [] if args.hold_out_objects else scenes:
         if len(held) >= args.hold_out:
             break
         held_scenes.add(sc)
         held += [p for p in pairs if p["scene_id"] == sc]
-    train_pairs = [p for p in pairs if p["scene_id"] not in held_scenes]
+    train_pairs = pairs_train if args.hold_out_objects else [p for p in pairs if p["scene_id"] not in held_scenes]
     with open(os.path.join(args.out, "split.json"), "w", encoding="utf-8") as f:
         json.dump({"held_out": [p["pair_id"] for p in held], "train": [p["pair_id"] for p in train_pairs]}, f, indent=0)
     print(f"{len(train_pairs)} training pairs, {len(held)} held out", flush=True)
@@ -244,7 +266,7 @@ def train(args):
             def run(img):
                 old, state["on"] = state["on"], on
                 try:
-                    return dm.layers[i](img, a["mod"], a["pe"], a["transformer_options"], None, kv[:, i], mask=None)
+                    return dm.layers[i](img, a["mod"], a["pe"], a["transformer_options"], None, kv[:, i] if kv is not None else None, mask=None)
                 finally:
                     state["on"] = old
             return {"img": torch.utils.checkpoint.checkpoint(run, a["img"], use_reentrant=False)}
@@ -254,6 +276,11 @@ def train(args):
 
     def denoise(x, sigma, context, ref):
         options = {}
+        if ref is None:  # --t2i: no reference pass
+            kv_now["kv"] = None
+            if not args.no_checkpoint and torch.is_grad_enabled():
+                options = ckpt_options
+            return bm.apply_model(x, sigma.view(1), c_crossattn=context, transformer_options=options).float()
         if not args.no_checkpoint and torch.is_grad_enabled():
             dm.preprocess_refs = refs_ckpt
             options = ckpt_options
@@ -272,9 +299,11 @@ def train(args):
             comfy.model_management.in_training = False
 
     def sample_loss(p):
-        ref, ident = lat(p, "a"), rng.random() < args.identity
+        ref, ident = lat(p, "a"), (not args.t2i) and rng.random() < args.identity
         x0 = ref if ident else lat(p, "b")
-        context = txt("" if ident else p["instruction"])
+        context = txt("" if ident else rng.choice(instructions(p, args.vary_instruction)))
+        if args.t2i:
+            ref = None
         u = rng.random()
         sigma = torch.tensor(min(max(shift * u / (1 + (shift - 1) * u), 0.02), 0.999), device=device)
         eps = torch.randn(x0.shape, device=device, generator=noise_gen)
@@ -304,7 +333,7 @@ def train(args):
     def save_lora(path):
         tmp = path + ".tmp"
         safetensors.torch.save_file(lora.comfy_state_dict(), tmp, metadata={
-            "trainer": "HaDeS moss_edit_train", "edit_format": "Moss-Image-Edit", "base_model": "OpenMOSS-Team/MOSS-Image-SFT",
+            "trainer": "HaDeS moss_edit_train", **({} if args.t2i else {"edit_format": "Moss-Image-Edit"}), "base_model": args.unet,
             "layers": args.layers, "rank": str(args.rank), "alpha": str(args.alpha), "size": str(args.size)})
         os.replace(tmp, path)
 
@@ -326,7 +355,10 @@ def train(args):
         with torch.no_grad():
             for i, p in enumerate(shown):
                 ref = lat(p, "a")
-                x = torch.randn(ref.shape, device=device, generator=torch.Generator(device=device).manual_seed(1000 + i)) * sig[0]
+                shape = ref.shape
+                if args.t2i:
+                    ref = None
+                x = torch.randn(shape, device=device, generator=torch.Generator(device=device).manual_seed(1000 + i)) * sig[0]
                 for s in range(args.preview_steps):
                     cond = denoise(x, sig[s], txt(p["instruction"]), ref)
                     uncond = denoise(x, sig[s], txt(NEG), ref)
