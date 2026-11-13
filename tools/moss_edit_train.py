@@ -163,7 +163,10 @@ def build_cache(args, pairs):
             key = f"{d}/{n}"
             if key in cache["lat"]:
                 continue
-            im = Image.open(os.path.join(d, "pairs", n)).convert("RGB").resize((args.size, args.size), Image.LANCZOS)
+            im = Image.open(os.path.join(d, "pairs", n)).convert("RGB")
+            # same area as size x size, aspect kept, sides a multiple of 16 (the latent's x16 reduction); square images are unchanged
+            k = args.size / (im.width * im.height) ** 0.5
+            im = im.resize((max(16, round(im.width * k / 16) * 16), max(16, round(im.height * k / 16) * 16)), Image.LANCZOS)
             cache["lat"][key] = vae.encode(torch.from_numpy(np.asarray(im, np.float32) / 255)[None]).to(torch.bfloat16).cpu()
             if (i + 1) % 50 == 0:
                 print(f"encoded {i + 1} / {len(imgs)} images ({time.time() - t0:.0f}s)", flush=True)
