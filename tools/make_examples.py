@@ -19,7 +19,7 @@ MUTED = 2  # LiteGraph node mode: never executed until the user unmutes it
 
 # Official file names (Comfy-Org/MOSS-Image and the ComfyUI templates)
 SFT, BASE = "moss_image_sft_bf16.safetensors", "moss_image_base_bf16.safetensors"
-TE, VAE = "qwen3.5_9b_w4a8_gptq.safetensors", "flux2-vae.safetensors"
+TE, VAE = "qwen3.5_9b_int8_convrot.safetensors", "flux2-vae.safetensors"
 NEGATIVE = "nsfw, worst quality, bad anatomy, watermark, jpeg artifact"
 # Download links the editor offers for missing models (fetched only when the user asks), as in the official templates
 HF = "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main"

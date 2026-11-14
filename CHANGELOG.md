@@ -7,6 +7,9 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **Example workflows:** the loaders now name the `qwen3.5_9b_int8_convrot` text encoder (and its Comfy-Org download link) instead of `qwen3.5_9b_w4a8_gptq`. The int8 file is the one used in every test on the HaDeS MOSS v1.0 Turbo card; the w4a8 file still loads (pick it in the loader for less VRAM).
+
 ### Fixed
 - **`MOSS Prompt Enhancer` status line:** in `detailed` mode it said CAPTION; it now says DETAILED, or "DETAILED · random prompt from the seed" with an empty idea and no image. The unused `width` / `height` rows are dimmed in `detailed` mode as in `caption`.
 - **Dev tools:** the scripts in `tools/` have one statement per line (the Registry's validator warns about `;`, and will reject it later).

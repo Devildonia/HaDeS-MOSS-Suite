@@ -21,7 +21,7 @@
    "inputs": [],
    "widgets_values": [
     "moss_image_sft_bf16.safetensors",
-    "qwen3.5_9b_w4a8_gptq.safetensors",
+    "qwen3.5_9b_int8_convrot.safetensors",
     "flux2-vae.safetensors",
     "default",
     "default"
@@ -35,8 +35,8 @@
       "directory": "diffusion_models"
      },
      {
-      "name": "qwen3.5_9b_w4a8_gptq.safetensors",
-      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_w4a8_gptq.safetensors",
+      "name": "qwen3.5_9b_int8_convrot.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_int8_convrot.safetensors",
       "directory": "text_encoders"
      },
      {
