@@ -7,6 +7,10 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **`MOSS Prompt Enhancer` status line:** in `detailed` mode it said CAPTION; it now says DETAILED, or "DETAILED · random prompt from the seed" with an empty idea and no image. The unused `width` / `height` rows are dimmed in `detailed` mode as in `caption`.
+- **Dev tools:** the scripts in `tools/` have one statement per line (the Registry's validator warns about `;`, and will reject it later).
+
 ## [0.7.5] - 2026-11-14
 
 The Prompt Enhancer gets a `detailed` mode and random prompts.

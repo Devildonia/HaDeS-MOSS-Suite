@@ -236,7 +236,8 @@ const INSTALLERS = {
     HaDeSMossPromptEnhancer(node) {
         const mode = () => widget(node, "mode")?.value;
         // rows the current mode does not use: the canvas only matters for layout, sampling settings not for "as written"
-        const UNUSED = { caption: new Set(["width", "height"]), "as written": new Set(["width", "height", "temperature", "seed", "max_tokens"]) };
+        const UNUSED = { caption: new Set(["width", "height"]), detailed: new Set(["width", "height"]),
+            "as written": new Set(["width", "height", "temperature", "seed", "max_tokens"]) };
         const imageLinked = () => node.inputs?.find((i) => i.name === "image")?.link != null;
         banner(node, {
             title: "MOSS PROMPT ENHANCER",
@@ -245,7 +246,9 @@ const INSTALLERS = {
                 const fmt = widget(node, "edit_format")?.value;
                 const edit = fmt && fmt !== "off" ? ` · EDIT ${fmt}` : "";
                 if (m === "as written") return `AS WRITTEN · plain prompt box, no generation${edit}`;
-                const what = m === "layout" ? `LAYOUT · ${num(node, "width")} × ${num(node, "height")}` : "CAPTION";
+                const ideaEmpty = !String(widget(node, "idea")?.value ?? "").trim();
+                const what = m === "layout" ? `LAYOUT · ${num(node, "width")} × ${num(node, "height")}`
+                    : m === "detailed" ? (ideaEmpty && !imageLinked() ? "DETAILED · random prompt from the seed" : "DETAILED") : "CAPTION";
                 return `${what} · temp ${num(node, "temperature").toFixed(2)}${imageLinked() ? " · + image" : ""}${edit} · MOSS text encoder`;
             },
         });

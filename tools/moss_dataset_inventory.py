@@ -63,7 +63,8 @@ def row(path, root):
             r["w"], r["h"] = im.size
             prompt, sett = "", {}
             if "parameters" in im.info:
-                r["meta"] = "a1111"; prompt, sett = a1111(str(im.info["parameters"]))
+                r["meta"] = "a1111"
+                prompt, sett = a1111(str(im.info["parameters"]))
             elif "prompt" in im.info:
                 r["meta"] = "comfyui"
                 try:
@@ -79,7 +80,8 @@ def row(path, root):
             elif r["ext"] in (".jpg", ".jpeg", ".webp"):
                 c = exif_comment(im)
                 if "Steps:" in c:
-                    r["meta"] = "a1111-exif"; prompt, sett = a1111(c)
+                    r["meta"] = "a1111-exif"
+                    prompt, sett = a1111(c)
         r["mp"] = round(r["w"] * r["h"] / 1e6, 2)
         r["model"] = sett.get("Model", "").strip('"')
         r["model_hash"] = sett.get("Model hash", "")
@@ -127,7 +129,8 @@ def main():
         w = None
         for i, r in enumerate(ex.map(job, tasks, chunksize=64)):
             if w is None:
-                w = csv.DictWriter(fh, fieldnames=list(r)); w.writeheader()
+                w = csv.DictWriter(fh, fieldnames=list(r))
+                w.writeheader()
             w.writerow(r)
             if (i + 1) % 5000 == 0:
                 print(f"{i + 1}/{len(tasks)} {time.time() - t0:.0f}s", flush=True)

@@ -66,11 +66,13 @@ def select(a):
             if r["look"] != look or per_model.get(key, 0) >= a.per_model:
                 continue
             per_model[key] = per_model.get(key, 0) + 1
-            picked.append(r); n += 1
+            picked.append(r)
+            n += 1
             if n == a.per_look:
                 break
         print(f"{look}: {n} from {len({m for (l, m) in per_model if l == look})} models", flush=True)
-    out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
+    out = Path(a.out)
+    out.mkdir(parents=True, exist_ok=True)
     cands = [{"id": f"f{i:05d}", "src": os.path.join(r["root"], r["path"]), "model": r["model"], "look": r["look"],
               "prompt_style": r["prompt_style"], "orig_prompt": r["prompt"]} for i, r in enumerate(picked)]
     (out / "candidates.json").write_text(json.dumps(cands, indent=0, ensure_ascii=False), encoding="utf-8")
@@ -78,7 +80,8 @@ def select(a):
 
 
 def prepare(a):
-    out = Path(a.out); (out / "pairs").mkdir(exist_ok=True)
+    out = Path(a.out)
+    (out / "pairs").mkdir(exist_ok=True)
     cands = json.loads((out / "candidates.json").read_text(encoding="utf-8"))
     t0 = time.time()
     for i, c in enumerate(cands):
@@ -94,7 +97,10 @@ def prepare(a):
 
 
 def textgen(img, question, max_length):
-    buf = io.BytesIO(); small = img.copy(); small.thumbnail((768, 768)); small.save(buf, "PNG")
+    buf = io.BytesIO()
+    small = img.copy()
+    small.thumbnail((768, 768))
+    small.save(buf, "PNG")
     g = {"clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen3.5_9b_int8_convrot.safetensors", "type": "moss_image", "device": "default"}},
          "img": {"class_type": "LoadImage", "inputs": {"image": upload("hades_forge_vlm.png", buf.getvalue())}},
          "gen": {"class_type": "TextGenerate", "inputs": {"clip": ["clip", 0], "prompt": question, "max_length": max_length,
@@ -128,7 +134,8 @@ def caption(a):
             rec["mark"] = textgen(img, ASK_MARK, 8).strip(".").lower()
             if rec["mark"].startswith("no"):
                 rec["caption"] = whole_sentences(" ".join(textgen(img, ASK_CAPTION, a.max_length).split()))
-        done[c["id"]] = rec; n += 1
+        done[c["id"]] = rec
+        n += 1
         if n % 20 == 0:
             path.write_text(json.dumps(done, indent=0, ensure_ascii=False), encoding="utf-8")
             print(f"{len(done)}/{len(cands)} {time.time() - t0:.0f}s ({(time.time() - t0) / n:.1f} s/image)", flush=True)
@@ -160,7 +167,8 @@ def sheet(a):
         chunk = pairs[s:s + cols * 5]
         img = Image.new("RGB", (cols * t, ((len(chunk) + cols - 1) // cols) * t), (18, 18, 20))
         for i, p in enumerate(chunk):
-            im = Image.open(out / "pairs" / p["a"]).convert("RGB"); im.thumbnail((t, t))
+            im = Image.open(out / "pairs" / p["a"]).convert("RGB")
+            im.thumbnail((t, t))
             img.paste(im, ((i % cols) * t + (t - im.width) // 2, (i // cols) * t + (t - im.height) // 2))
             ImageDraw.Draw(img).text(((i % cols) * t + 3, (i // cols) * t + 3), p["pair_id"], fill=(255, 255, 0))
         (out / "sheets").mkdir(exist_ok=True)
