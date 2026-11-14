@@ -1890,6 +1890,21 @@ The VLM judge is not calibrated on real photographs. Maintainer's blind pairs (c
 
 **Random prompts** (detailed mode, empty idea, seeds 0-19, rendered with rc1; `<archive>/moss_eval/enhancer_random`): 17 different media out of 26 in 20 draws, prompts 166-243 words, varied people and places. Places repeated by chance in these seeds (Mongolian steppe 5, Lagos 3); over 2000 seeds each place is drawn 78-125 times. Golden-hour light dominates many images, a model preference not set by the draw.
 
+## HaDeS MOSS v1.0 Turbo int8 ConvRot (2026-11-14)
+
+`HaDeS_MOSS_v1.0_Turbo.safetensors` saved by MOSS Model Saver as int8 ConvRot (Comfy-Org layout): 5.41 GB, SHA256 `e0707a51…ca7344`, the same keys, dtypes and shapes as the v0.9.4 int8 file. Against the BF16 file, 10 prompts of `prompts_40_variados.txt` (0, 6, 10, 14, 20, 25, 27, 30, 34, 35), stock nodes, seed 1001, 1344 x 1792, 8 steps, CFG 1, euler / simple, official negative (`<archive>/moss_eval/v10_int8`):
+
+| Measure | Value |
+|---|---|
+| Mean absolute difference, 64 px thumbnail | 2.87 % (1.30-4.17) |
+| Same, 16 px (composition) | 1.83 % (1.03-2.60) |
+| Same, full size | 12.5 / 255 |
+| Laplacian variance, BF16 / int8 (mean) | 918 / 862 |
+| int8 re-render vs first render | 0 (3 images) |
+
+- Same compositions in 10 / 10; small details change (a staff appears, a figure moves, invented beetle labels differ). "OPEN" and "VISIT THE FJORDS" right in both.
+- Time per image in this session (whole graph, models cached, the two files alternated twice on 3 prompts): int8 about 3.4 s, BF16 about 6.6 s. This is the opposite of the October measurement above (int8 slower); not investigated, so not claimed on the model card.
+
 ## AI-model reviews (qualitative, not measurements)
 
 Preferences given by AI models on the blind sheets of the four 2026-11-11 experiments above: GPT and Gemini (screenshots supplied by the maintainer) and the assistant that ran the experiments (sealed before each key was opened, but it had seen earlier images, so never fully blind). They are kept for the record, with their tables as decoded. They are **impressions, not measurements**: the criteria differ and are not verifiable from screenshots, AI judgments may be correlated, and the same pairs were judged repeatedly. No conclusion, default or model card in this repository relies on them.
