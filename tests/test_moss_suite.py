@@ -132,6 +132,7 @@ class TestLayoutCompiler(unittest.TestCase):
             "text without text": lambda d: d["items"][1].pop("text"),
             "centered space": lambda d: d.__setitem__("bbox_coord_space", "abs_centralized"),
             "bad label": lambda d: d["items"][0].__setitem__("label", "logo"),
+            "dropped not a list": lambda d: d.__setitem__("dropped", "an item"),
         }
         for name, mutate in cases.items():
             d = json.loads(json.dumps(self.DOC_EXAMPLE))
@@ -1024,6 +1025,10 @@ class TestPromptEnhancer(unittest.TestCase):
         self.assertNotIn("id", d["summary"])
         self.assertEqual(json.loads(prompt)["items"][0]["text"], "HELLO")
         self.assertIn("left out", info)
+        # the item without a box is kept for the Layout Editor, and the compiler leaves it out of the model prompt
+        self.assertEqual(d["dropped"], [{"label": "object", "caption": "No box.", "reason": "no box in the answer"}])
+        self.assertNotIn("No box.", prompt)
+        self.assertNotIn("dropped", json.loads(prompt))
         self.assertIn("Canvas: width 1024, height 768.", clip.seen[0])
         self.assertFalse(clip.kwargs["do_sample"])  # temperature 0 is greedy
         self.assertEqual(pos, [["cond", prompt]])

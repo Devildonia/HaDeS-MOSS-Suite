@@ -126,7 +126,10 @@ def compile_layout(draft):
         _fields(draft, {"caption"}, {"caption"}, "caption draft")
         _text(draft["caption"], "caption")
         return draft["caption"], None, None, []
-    _fields(draft, _DRAFT_FIELDS, _DRAFT_FIELDS, "layout draft")
+    # optional `dropped`: items the Prompt Enhancer left out for lack of a box, kept for the Layout Editor; never compiled
+    _fields(draft, _DRAFT_FIELDS | {"dropped"}, _DRAFT_FIELDS, "layout draft")
+    if "dropped" in draft:
+        _check(isinstance(draft["dropped"], list) and all(isinstance(v, dict) for v in draft["dropped"]), "dropped must be an array of objects")
     width, height = draft["width"], draft["height"]
     for name, v in (("width", width), ("height", height)):
         _check(type(v) is int and v > 0 and v % 16 == 0, f"{name} must be a positive multiple of 16")
@@ -200,6 +203,8 @@ class HaDeSMossLayoutCompiler:
             text = "HaDeS MOSS Layout | caption draft, passed through as plain text | latent 1024x1024"
         else:
             text = f"HaDeS MOSS Layout | {width}x{height} | {len(data['items'])} items, {len(texts)} with text | prompt {len(prompt)} chars"
+            if data.get("dropped"):
+                text += f"\n{len(data['dropped'])} dropped item(s) without a box not compiled (place them in the Layout Editor)"
             if multi:
                 text += ("\nMulti-line text (check that the box fits the lines: a two-line title in an 832x192 box came out on one line in "
                          "3 of 6 seeds, in a 640x384 box on two lines in 6 of 6, tools/RESULTS.md):")
@@ -244,11 +249,15 @@ class HaDeSMossLayoutEditor:
         counts = {label: sum(1 for item in data["items"] if item["label"] == label) for label in ("object", "character", "text")}
         text = (f"HaDeS MOSS Layout Editor | {width}x{height} | {len(data['items'])} boxes: "
                 + ", ".join(f"{n} {label}" for label, n in counts.items() if n))
+        n_dropped = len(data.get("dropped", []))
+        if n_dropped:
+            text += f"\n{n_dropped} dropped item(s) not placed (no box, so not sent to the model): place them on the canvas or discard them"
         ui = {"draft_in": [draft_in] if draft_in is not None else []}  # always sent, so an unplugged draft_in clears IMPORT
         if image is not None:
             ui["images"] = nodes.PreviewImage().save_images(image[:1], filename_prefix="hades_moss_layout_bg")["ui"]["images"]
         out = json.dumps(data, ensure_ascii=False, indent=2)
-        return {"ui": ui, "result": (out, width, height, format_info(text, "layout_editor", width=width, height=height, items=len(data["items"])))}
+        return {"ui": ui, "result": (out, width, height, format_info(text, "layout_editor", width=width, height=height, items=len(data["items"]),
+                                                                       dropped=n_dropped))}
 
 
 NODE_CLASS_MAPPINGS = {"HaDeSMossLatent": HaDeSMossLatent, "HaDeSMossLayoutCompiler": HaDeSMossLayoutCompiler,

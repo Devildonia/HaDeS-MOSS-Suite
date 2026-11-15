@@ -7,6 +7,9 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Dropped layout items can be placed again:** in `layout` mode the `MOSS Prompt Enhancer` used to leave out, with only a note in `info`, the items whose answer had no box or a box outside the canvas. It now keeps them in a `dropped` list in its draft (label, caption, text and the reason). After IMPORT, the `MOSS Layout Editor` shows one row per dropped item under the canvas: PLACE, then drag on the canvas, and the item joins the layout with its label, caption and text; DISCARD removes it. The `MOSS Layout Compiler` accepts `dropped` and leaves it out of the model prompt; its `info` and the editor's say how many are still unplaced. Suggested by a user.
+
 ### Changed
 - **Example workflows:** the loaders now name the `qwen3.5_9b_int8_convrot` text encoder (and its Comfy-Org download link) instead of `qwen3.5_9b_w4a8_gptq`. The int8 file is the one used in every test on the HaDeS MOSS v1.0 Turbo card; the w4a8 file still loads (pick it in the loader for less VRAM).
 

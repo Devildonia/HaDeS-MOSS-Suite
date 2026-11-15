@@ -188,20 +188,30 @@ def parse_caption(text):
 def fit_draft(obj, width, height):
     """The model's layout draft on the requested canvas: width / height set, boxes rounded to integers and clamped into the
     canvas (a box outside it would fail the compiler's bounds check), keys the compiler does not know dropped, items with
-    no usable box left out. Returns (draft, notes)."""
+    no usable box left out of `items` and kept in `dropped` (label, caption, text, reason) for the Layout Editor, which
+    can place them again; the compiler ignores `dropped`. Returns (draft, notes)."""
     notes = []
     summary = obj.get("summary") if isinstance(obj.get("summary"), dict) else {}
     summary = {k: v for k, v in summary.items() if k in ("caption", "meta", "canvas", "palette")}
     if not str(summary.get("caption", "")).strip():
         summary["caption"] = str(obj.get("caption", "")).strip() or "An image."
         notes.append("no summary caption in the answer")
-    items = []
+    items, dropped = [], []
+
+    def drop(it, reason):
+        label = it.get("label") if it.get("label") in ("object", "character", "text") else "object"
+        entry = {"label": label, "caption": str(it.get("caption", "")).strip() or str(it.get("text", "")).strip() or label}
+        if str(it.get("text", "")).strip():
+            entry["text"] = str(it["text"])
+        dropped.append({**entry, "reason": reason})
+
     for i, it in enumerate(obj.get("items") or []):
         if not isinstance(it, dict):
             continue
         box = it.get("bbox") or it.get("bbox_2d")
         if not (isinstance(box, list) and len(box) == 4 and all(isinstance(v, (int, float)) for v in box)):
-            notes.append(f"item {i} has no box, left out")
+            notes.append(f"item {i} has no box, left out (kept in dropped)")
+            drop(it, "no box in the answer")
             continue
         x0, y0, x1, y1 = box
         x0, x1 = sorted((x0, x1))
@@ -210,7 +220,8 @@ def fit_draft(obj, width, height):
         if clamped != [round(x0), round(y0), round(x1), round(y1)]:
             notes.append(f"item {i} box clamped into the canvas")
         if clamped[2] <= clamped[0] or clamped[3] <= clamped[1]:
-            notes.append(f"item {i} box empty after clamping, left out")
+            notes.append(f"item {i} box empty after clamping, left out (kept in dropped)")
+            drop(it, "box outside the canvas")
             continue
         label = it.get("label") if it.get("label") in ("object", "character", "text") else "object"
         item = {"label": label, "caption": str(it.get("caption", "")).strip() or str(it.get("text", "")).strip() or label, "bbox": clamped}
@@ -226,7 +237,10 @@ def fit_draft(obj, width, height):
         items.append(item)
     if not items:
         raise ValueError("MOSS Prompt Enhancer: the layout answer has no usable items")
-    return {"width": width, "height": height, "bbox_coord_space": "abs", "bbox_format": "xyxy", "summary": summary, "items": items}, notes
+    draft = {"width": width, "height": height, "bbox_coord_space": "abs", "bbox_format": "xyxy", "summary": summary, "items": items}
+    if dropped:
+        draft["dropped"] = dropped
+    return draft, notes
 
 
 @contextlib.contextmanager

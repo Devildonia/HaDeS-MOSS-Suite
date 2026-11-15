@@ -112,7 +112,7 @@ function upstreamImageUrl(node) {
 }
 
 export function createLayoutEditorWidget(node, backing) {
-    const state = { sel: -1, tool: "object", drag: null, hover: null, showBg: true };
+    const state = { sel: -1, tool: "object", drag: null, hover: null, showBg: true, place: -1 };
     const images = new Map(); // url -> HTMLImageElement
     const imageFor = (url) => {
         if (!url) return null;
@@ -166,7 +166,10 @@ export function createLayoutEditorWidget(node, backing) {
         d.width = W; d.height = H;
     };
 
-    const detailRows = (d) => (state.sel >= 0 && d.items[state.sel] ? 4 : 1);
+    // items the Prompt Enhancer left out for lack of a box: one row each under the canvas, placed again by drawing a box
+    const droppedOf = (d) => (Array.isArray(d.dropped) ? d.dropped : []);
+    const detailRows = (d) => (state.sel >= 0 && d.items[state.sel] ? 4 : 1) + droppedOf(d).length;
+    const drawLabel = (d) => droppedOf(d)[state.place]?.label ?? state.tool;
 
     return {
         name: "hades_layout_editor",
@@ -327,7 +330,7 @@ export function createLayoutEditorWidget(node, backing) {
             if (state.drag?.kind === "draw" && state.drag.box) {
                 const b = state.drag.box;
                 ctx.setLineDash([4, 3]);
-                ctx.strokeStyle = LABEL_COLORS[state.tool];
+                ctx.strokeStyle = LABEL_COLORS[drawLabel(d)] || LABEL_COLORS[state.tool];
                 ctx.lineWidth = 1.5;
                 ctx.strokeRect(f.x + b[0] * f.s, f.y + b[1] * f.s, (b[2] - b[0]) * f.s, (b[3] - b[1]) * f.s);
                 ctx.setLineDash([]);
@@ -394,6 +397,44 @@ export function createLayoutEditorWidget(node, backing) {
             } else {
                 row("summary", "IMAGE", shown(d.summary?.caption), null, !String(d.summary?.caption ?? "").trim());
             }
+            const dropped = droppedOf(d);
+            if (state.place >= dropped.length) state.place = -1;
+            dropped.forEach((di, i) => {
+                const color = LABEL_COLORS[di.label] || HADES_THEME.textMuted;
+                const placing = i === state.place;
+                drawRowSurface(ctx, x, ry + 2, w, 24);
+                if (placing) {
+                    drawRoundedRect(ctx, x, ry + 2, w, 24, 4);
+                    ctx.strokeStyle = color;
+                    ctx.stroke();
+                }
+                drawRowLabel(ctx, x, ry + 2, 24, 74, "DROPPED", color);
+                ctx.font = HADES_FONT.label;
+                const actions = [["place", placing ? "DRAW ON CANVAS" : "PLACE"], ["discard", "DISCARD"]];
+                let ax = x + w - 4;
+                const actionZones = [];
+                for (const [kind, text] of actions.reverse()) {
+                    const aw = ctx.measureText(text).width + 12;
+                    ax -= aw;
+                    ctx.fillStyle = kind === "discard" ? HADES_THEME.danger : placing ? color : HADES_THEME.textSecondary;
+                    ctx.textAlign = "center";
+                    ctx.fillText(text, ax + aw / 2, ry + 14.5);
+                    actionZones.push({ kind, index: i, x: ax, y: ry + 2, w: aw, h: 24 });
+                    ax -= 4;
+                }
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(x + 80, ry, ax - x - 84, ROW_H);
+                ctx.clip();
+                ctx.font = HADES_FONT.text;
+                ctx.textAlign = "left";
+                ctx.fillStyle = HADES_THEME.textPrimary;
+                const body = di.label === "text" && di.text ? `“${shown(di.text)}”` : shown(di.caption);
+                ctx.fillText(`${String(di.label ?? "object").toUpperCase()} · ${body}`, x + 80, ry + 14.5);
+                ctx.restore();
+                zones.push(...actionZones, { kind: "place", index: i, x, y: ry + 2, w: ax - x, h: 24 });
+                ry += ROW_H;
+            });
             this._zones = zones;
             ctx.restore();
         },
@@ -435,6 +476,8 @@ export function createLayoutEditorWidget(node, backing) {
                 if (hit?.kind === "size") showHadesTooltip("<strong>Canvas size</strong><br>Click to type width × height (multiples of 16). Boxes scale with it.", event.clientX, event.clientY, HADES_THEME.accent);
                 else if (hit?.kind === "tool") showHadesTooltip(`<strong>${hit.label}</strong><br>Drag on an empty part of the canvas to draw a new ${hit.label} box.`, event.clientX, event.clientY, LABEL_COLORS[hit.label]);
                 else if (hit?.kind === "import") showHadesTooltip("<strong>Import</strong><br>Replaces this draft with the one at the draft_in input (from the last run).", event.clientX, event.clientY, HADES_THEME.accent);
+                else if (hit?.kind === "place") showHadesTooltip("<strong>Dropped by the Prompt Enhancer</strong><br>This item came without a usable box, so it is not sent to the model. Click, then drag on an empty part of the canvas: it joins the layout with its label, caption and text.", event.clientX, event.clientY, HADES_THEME.accent);
+                else if (hit?.kind === "discard") showHadesTooltip("<strong>Discard</strong><br>Removes this dropped item from the draft.", event.clientX, event.clientY, HADES_THEME.danger);
                 else if (hit?.kind === "match") showHadesTooltip("<strong>Match image</strong><br>Sets the canvas to the background image's aspect ratio at about the current area, snapped to 16 px.", event.clientX, event.clientY, HADES_THEME.accent);
                 else hideHadesTooltip();
                 return false;
@@ -447,7 +490,18 @@ export function createLayoutEditorWidget(node, backing) {
                 const d = p.draft;
                 if (g.kind === "draw") {
                     const b = g.box;
-                    if (b && b[2] - b[0] >= MIN_BOX && b[3] - b[1] >= MIN_BOX) {
+                    const dropped = droppedOf(d);
+                    const di = dropped[state.place];
+                    if (b && b[2] - b[0] >= MIN_BOX && b[3] - b[1] >= MIN_BOX && di) {
+                        // a dropped item placed again: its label, caption and text, the new box; the reason stays behind
+                        const label = LABELS.includes(di.label) ? di.label : "object";
+                        d.items.push({ label, caption: String(di.caption ?? ""), ...(di.text !== undefined || label === "text" ? { text: String(di.text ?? "") } : {}), bbox: b });
+                        dropped.splice(state.place, 1);
+                        if (!dropped.length) delete d.dropped;
+                        state.place = -1;
+                        state.sel = d.items.length - 1;
+                        write(d);
+                    } else if (b && b[2] - b[0] >= MIN_BOX && b[3] - b[1] >= MIN_BOX) {
                         d.items.push({ label: state.tool, caption: "", ...(state.tool === "text" ? { text: "" } : {}), bbox: b });
                         state.sel = d.items.length - 1;
                         write(d);
@@ -475,8 +529,21 @@ export function createLayoutEditorWidget(node, backing) {
             const edit = (title, value, apply, hint) => openTextEditor(event, title, value, (v) => { apply(v); write(d); }, hint);
 
             switch (hit.kind) {
+                case "place":
+                    state.place = state.place === hit.index ? -1 : hit.index;
+                    n.setDirtyCanvas(true, false);
+                    return true;
+                case "discard": {
+                    const dropped = droppedOf(d);
+                    dropped.splice(hit.index, 1);
+                    if (!dropped.length) delete d.dropped;
+                    state.place = -1;
+                    write(d);
+                    return true;
+                }
                 case "tool":
                     state.tool = hit.label;
+                    state.place = -1;
                     n.setDirtyCanvas(true, false);
                     return true;
                 case "size":
@@ -503,6 +570,7 @@ export function createLayoutEditorWidget(node, backing) {
                     const imported = parseDraft(node._hadesDraftIn);
                     if (imported.draft || imported.caption !== undefined) {
                         state.sel = -1;
+                        state.place = -1;
                         setWidgetValue(backing, imported.draft ? JSON.stringify(imported.draft, null, 2) : node._hadesDraftIn, node);
                         fit();
                     }
@@ -587,5 +655,6 @@ export function layoutEditorStatus(backing) {
     const parts = [`${d.width} × ${d.height}`, `${d.items.length} boxes`];
     for (const l of LABELS) if (count(l)) parts.push(`${count(l)} ${l}`);
     if (todo) parts.push(`${todo} to fill in`);
+    if (Array.isArray(d.dropped) && d.dropped.length) parts.push(`${d.dropped.length} dropped`);
     return parts.join(" · ");
 }
