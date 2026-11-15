@@ -7,7 +7,12 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-15
+
+A new node, `MOSS Compare Sheet`, for comparing LoRAs or checkpoints inside the Suite; the Layout Editor places layout items the Prompt Enhancer dropped.
+
 ### Added
+- **`MOSS Compare Sheet`:** up to four images (A to D) side by side in one PNG, each labelled with the LoRA its branch used, read from that branch's `info` (Multi-LoRA rows with their strength, LoRA Block Weight, the KSampler's turbo, else the Loader's model), with seed and prompt underneath (from the KSampler and Prompt Enhancer infos). Labels and footer can be typed instead. Images of other sizes are scaled to image A's height. Saves to `MOSS/compare/` (or only previews), keeps the workflow in the PNG and the labels in a `hades_moss_compare` chunk, and returns the sheet and an `info` for Suite Telemetry. Comparing checkpoints of one LoRA no longer needs stitch nodes or a script.
 - **Dropped layout items can be placed again:** in `layout` mode the `MOSS Prompt Enhancer` used to leave out, with only a note in `info`, the items whose answer had no box or a box outside the canvas. It now keeps them in a `dropped` list in its draft (label, caption, text and the reason). After IMPORT, the `MOSS Layout Editor` shows one row per dropped item under the canvas: PLACE, then drag on the canvas, and the item joins the layout with its label, caption and text; DISCARD removes it. The `MOSS Layout Compiler` accepts `dropped` and leaves it out of the model prompt; its `info` and the editor's say how many are still unplaced. Suggested by a user.
 
 ### Changed

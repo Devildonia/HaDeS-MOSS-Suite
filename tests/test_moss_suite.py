@@ -824,6 +824,44 @@ class TestLoader(unittest.TestCase):
         self.assertTrue(any("57% slower" in f["message"] for f in findings))
 
 
+class TestCompareSheet(unittest.TestCase):
+    def test_labels_from_branch_infos_and_saved_sheet(self):
+        from PIL import Image
+        cmp = importlib.import_module(f"{PACK}.moss_compare_nodes")
+        f = common.format_info
+        multi = f("x", "multi_lora", enabled=True, loras=[{"name": "MOSS\\manara\\style_s1500.safetensors", "strength": 1.0}], turbo=[])
+        blockw = f("x", "lora_block_weight", lora="style_s1600.safetensors", strength_model=0.8, weights="")
+        tel = json.dumps({"nodes": [common.parse_info_meta(f("x", "ksampler", seed=1001, steps=8, cfg=1.0)),
+                                    common.parse_info_meta(f("x", "prompt_enhancer", prompt="A terrace at sunset."))]})
+        out = cmp.HaDeSMossCompareSheet().compare(torch.rand(1, 64, 48, 3), "tests/compare", True, True,
+                                                   image_B=torch.rand(1, 32, 24, 3), image_C=torch.rand(1, 64, 48, 3),
+                                                   info_A=multi, info_B=blockw, info_C=tel, label_C="", footer="")
+        meta = common.parse_info_meta(out["result"][1])
+        self.assertEqual(meta["labels"], ["A: style_s1500", "B: style_s1600 x0.8", "C"])
+        self.assertEqual(meta["label_sources"], ["info", "info", "slot"])
+        self.assertEqual(meta["footer"], "seed 1001 | A terrace at sunset.")
+        self.assertTrue(any("scaled" in n for n in meta["notes"]))
+        sheet = out["result"][0]
+        self.assertEqual(sheet.shape[0], 1)
+        self.assertGreater(sheet.shape[2], 3 * 48)
+        item = out["ui"]["images"][0]
+        with Image.open(os.path.join(TMP, item["subfolder"], item["filename"])) as png:
+            self.assertIn("hades_moss_compare", png.text)
+            self.assertEqual(png.size, (sheet.shape[2], sheet.shape[1]))
+
+    def test_manual_label_and_preview_only(self):
+        cmp = importlib.import_module(f"{PACK}.moss_compare_nodes")
+        with patch.object(cmp.folder_paths, "get_temp_directory", return_value=TMP):
+            out = cmp.HaDeSMossCompareSheet().compare(torch.rand(2, 32, 32, 3), "tests/compare_preview", False, False,
+                                                       image_B=torch.rand(1, 32, 32, 3), label_A="base", footer="seed 7")
+        meta = common.parse_info_meta(out["result"][1])
+        self.assertEqual(meta["labels"], ["A: base", "B"])
+        self.assertEqual(meta["files"], [])
+        self.assertEqual(out["result"][0].shape[0], 1)
+        self.assertTrue(any("batch sizes differ" in n for n in meta["notes"]))
+        self.assertEqual(out["ui"]["images"][0]["type"], "temp")
+
+
 class TestDenoiseSchedule(unittest.TestCase):
     def setUp(self):
         from comfy.model_sampling import ModelSamplingDiscreteFlow
