@@ -7,6 +7,8 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-11-17
+
 ### Added
 - **`MOSS Text Check`** (new node): reads the text in a generated image with MOSS-Image's own text encoder (Qwen3.5-9B, whose file holds the vision tower; no other model is loaded) and compares it with what was asked: each layout text item inside its box, or expected texts anywhere. Verdicts exact / close / missing / outside its box, a mask of the boxes that failed for a retry, `passed`, and `info`. On 75 images with text drawn in common fonts (28-110 px) every verdict was right (exact 40/40, a one-letter typo 20/20 close, empty box 15/15 missing; `tools/RESULTS.md`); on 20 texts painted by MOSS itself 19 verdicts were right (the miss: a word cut by the image edge read as whole). A text split over several lines is matched joined.
 - **`MOSS Compare Sheet` blind mode:** `blind` shuffles the panels and numbers them 1 to 4 without names; the key goes to `info` and the PNG, never onto the sheet. `blind_seed` sets the order.
