@@ -9,7 +9,7 @@ NODE_NAMES = {
     "latent": "Latent", "layout": "Layout Compiler", "ksampler": "KSampler", "prompt_enhancer": "Prompt Enhancer",
     "multi_lora": "Multi-LoRA", "layout_editor": "Layout Editor", "loader": "Loader", "metadata_reader": "Metadata Reader", "control": "Control",
     "turbo": "Turbo LoRA", "sampler_metadata": "Sampler Metadata", "image_saver": "Image Saver", "compare_sheet": "Compare Sheet", "telemetry": "Suite Telemetry",
-    "layout_regions": "Layout Regions", "image_audit": "Image Audit",
+    "layout_regions": "Layout Regions", "image_audit": "Image Audit", "text_check": "Text Check",
 }
 
 

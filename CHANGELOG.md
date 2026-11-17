@@ -7,6 +7,12 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **`MOSS Text Check`** (new node): reads the text in a generated image with MOSS-Image's own text encoder (Qwen3.5-9B, whose file holds the vision tower; no other model is loaded) and compares it with what was asked: each layout text item inside its box, or expected texts anywhere. Verdicts exact / close / missing / outside its box, a mask of the boxes that failed for a retry, `passed`, and `info`. On 75 images with text drawn in common fonts (28-110 px) every verdict was right (exact 40/40, a one-letter typo 20/20 close, empty box 15/15 missing; `tools/RESULTS.md`); on 20 texts painted by MOSS itself 19 verdicts were right (the miss: a word cut by the image edge read as whole). A text split over several lines is matched joined.
+- **`MOSS Compare Sheet` blind mode:** `blind` shuffles the panels and numbers them 1 to 4 without names; the key goes to `info` and the PNG, never onto the sheet. `blind_seed` sets the order.
+- **`tools/moss_lora_atlas.py`:** per-group profile of a LoRA (each 6-layer group alone and left out), block recipes built from it, and their check on other prompts. Measured on three LoRAs (`tools/RESULTS.md`, LoRA atlas): layers 24-29 carry much of what a LoRA adds, but no recipe beat the full LoRA or a plain strength change for the user, so it stays a research tool.
+- **`tools/moss_edit_train.py --hold-out-ids`:** holds out the given scenes instead of a random draw, so two runs can be compared on the same held-out images.
+
 ### Fixed
 Audit of 0.8.0 (every finding checked first; details and tests in `docs/AUDIT_0.8.0.md`):
 - **`MOSS KSampler` turbo input:** a LoRA that changes no weight of the model (made for another model) is now an error; before, the few-step settings still ran and the metadata named the turbo. Strength 0 means no turbo.

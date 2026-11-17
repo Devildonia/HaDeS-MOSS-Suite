@@ -3,6 +3,7 @@ PNG. The labels come from each branch's HaDeS MOSS info (Multi-LoRA, LoRA Block 
 Telemetry json), so a checkpoint comparison needs no script and no stitch nodes."""
 import json
 import os
+import random
 
 import numpy as np
 import torch
@@ -176,6 +177,11 @@ class HaDeSMossCompareSheet:
         for s in SLOTS:
             optional[f"label_{s}"] = ("STRING", {"default": "", "tooltip": f"Label over image {s}. Empty: the LoRA names (and strength when not 1) "
                                                                             f"from info_{s}, else its model file, else '{s}'."})
+        optional["blind"] = ("BOOLEAN", {"default": False, "tooltip": "Blind comparison: the panels are shuffled and numbered 1 to 4 "
+                                                                    "without names; the key (number -> branch) is in the info output and "
+                                                                    "in the PNG. Pick your favourite before looking at it."})
+        optional["blind_seed"] = ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFF, "tooltip": "Order of the blind shuffle; change it "
+                                                                                              "for a new order of the same images."})
         optional["footer"] = ("STRING", {"default": "", "multiline": True, "tooltip": "Text under the sheet. Empty: seed and prompt read from the "
                                                                                        "branch infos (KSampler and Prompt Enhancer) when connected."})
         return {
@@ -198,7 +204,8 @@ class HaDeSMossCompareSheet:
     DESCRIPTION = ("Puts up to four images side by side, A to D, each labelled with the LoRA or model its branch used (read from the "
                    "branch's info), with seed and prompt underneath, and saves the sheet as one PNG.")
 
-    def compare(self, image_A, filename_prefix, save, embed_workflow, prompt=None, extra_pnginfo=None, footer="", **kw):
+    def compare(self, image_A, filename_prefix, save, embed_workflow, prompt=None, extra_pnginfo=None, footer="", blind=False,
+                blind_seed=0, **kw):
         images = [(s, image_A if s == "A" else kw.get(f"image_{s}")) for s in SLOTS]
         images = [(s, im) for s, im in images if im is not None]
         metas = {s: branch_metas(kw.get(f"info_{s}")) for s, _ in images}
@@ -227,7 +234,13 @@ class HaDeSMossCompareSheet:
                 common.insert(0, next(iter(known_models)))
             footer = " | ".join(common + ([prompt_text] if prompt_text else []))
         batch = min(im.shape[0] for _, im in images)
-        sheets = [build_sheet([to_pil(im[b]) for _, im in images], labels, footer.strip()) for b in range(batch)]
+        order, key = list(range(len(images))), {}
+        shown = labels
+        if blind:  # shuffled panels numbered 1..n; the key goes to info and the PNG, never onto the sheet
+            random.Random(blind_seed).shuffle(order)
+            shown = [str(k + 1) for k in range(len(order))]
+            key = {str(k + 1): labels[i] for k, i in enumerate(order)}
+        sheets = [build_sheet([to_pil(images[i][1][b]) for i in order], shown, footer.strip()) for b in range(batch)]
 
         results, files = [], []
         if save:
@@ -236,7 +249,7 @@ class HaDeSMossCompareSheet:
             for b, sheet in enumerate(sheets):
                 info = PngInfo()
                 if not args.disable_metadata:
-                    info.add_text("hades_moss_compare", json.dumps({"labels": labels, "footer": footer.strip(),
+                    info.add_text("hades_moss_compare", json.dumps({"labels": labels, "footer": footer.strip(), "blind_key": key,
                                                                     "branches": {s: metas[s] for s, _ in images}}, ensure_ascii=False))
                     if embed_workflow:
                         if prompt is not None:
@@ -262,10 +275,12 @@ class HaDeSMossCompareSheet:
             notes.append(f"images of different sizes {sorted(sizes)}: scaled to image A's height")
         if any(im.shape[0] != batch for _, im in images):
             notes.append(f"batch sizes differ: {batch} sheet(s), the extra images were left out")
-        text = (f"HaDeS MOSS Compare Sheet | {len(images)} images | " + " | ".join(labels)
+        head = ("blind, key: " + " | ".join(f"{n} = {lab}" for n, lab in key.items())) if blind else " | ".join(labels)
+        text = (f"HaDeS MOSS Compare Sheet | {len(images)} images | " + head
                 + (f"\nsaved: {files[0]}" + (f" (+{len(files) - 1})" if len(files) > 1 else "") if files else "\nnot saved (preview only)")
                 + "".join(f"\nnote: {n}" for n in notes))
-        info = format_info(text, "compare_sheet", labels=labels, label_sources=sources, files=files, footer=footer.strip(), notes=notes)
+        info = format_info(text, "compare_sheet", labels=labels, label_sources=sources, files=files, footer=footer.strip(), notes=notes,
+                           **({"blind_key": key, "blind_seed": blind_seed} if blind else {}))
         out = torch.from_numpy(np.stack([np.asarray(s, dtype=np.float32) / 255.0 for s in sheets]))
         return {"ui": {"images": results}, "result": (out, info)}
 

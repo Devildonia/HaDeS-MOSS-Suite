@@ -120,6 +120,7 @@ def main():
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--identity", type=float, default=0.1, help="share of samples trained as A + empty instruction -> A")
     p.add_argument("--hold-out", type=int, default=4, help="at least this many pairs kept out of training, whole scenes at a time, shown in the previews")
+    p.add_argument("--hold-out-ids", default="", help="comma-separated scene ids to hold out instead of a random draw (to compare runs on the same held-out scenes)")
     p.add_argument("--preview-pairs", type=int, default=4, help="training pairs shown in the previews, beside the held-out ones")
     p.add_argument("--preview-steps", type=int, default=20)
     p.add_argument("--preview-cfg", type=float, default=4.0)
@@ -200,6 +201,13 @@ def train(args):
         held_scenes = {p["scene_id"] for p in held}
         pairs_train = [p for p in pairs if not involved(p) and p["scene_id"] not in held_scenes]
         print(f"held-out objects: {sorted(held_objs)}", flush=True)
+    if args.hold_out_ids:
+        wanted = [i.strip() for i in args.hold_out_ids.split(",") if i.strip()]
+        missing = [i for i in wanted if i not in scenes]
+        if missing:
+            raise SystemExit(f"--hold-out-ids not in the pairs: {missing}")
+        scenes = wanted  # held out exactly these, in this order
+        args.hold_out = sum(1 for p in pairs if p["scene_id"] in set(wanted))
     for sc in [] if args.hold_out_objects else scenes:
         if len(held) >= args.hold_out:
             break

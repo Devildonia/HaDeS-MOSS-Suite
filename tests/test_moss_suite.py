@@ -932,6 +932,91 @@ class TestCompareSheet(unittest.TestCase):
         bad = cmp.HaDeSMossCompareSheet().compare(torch.rand(1, 32, 32, 3), "tests/compare_bad", False, False, info_A="HADES_META []")
         self.assertEqual(common.parse_info_meta(bad["result"][1])["labels"], ["A"])
 
+    def test_blind_shuffles_numbers_and_keeps_the_key_in_info(self):
+        cmp = importlib.import_module(f"{PACK}.moss_compare_nodes")
+        f = common.format_info
+        imgs = {f"image_{s}": torch.full((1, 16, 16, 3), k / 4.0) for k, s in enumerate("BCD", 1)}
+        infos = {f"info_{s}": f("x", "lora_block_weight", lora=f"lora_{s}.safetensors", strength_model=1.0, weights="") for s in "ABCD"}
+        run = lambda seed: cmp.HaDeSMossCompareSheet().compare(torch.zeros(1, 16, 16, 3), "tests/blind", False, False, footer="",
+                                                                blind=True, blind_seed=seed, **imgs, **infos)
+        out = run(5)
+        meta = common.parse_info_meta(out["result"][1])
+        key = meta["blind_key"]
+        self.assertEqual(sorted(key), ["1", "2", "3", "4"])
+        self.assertEqual(sorted(key.values()), [f"{s}: lora_{s}" for s in "ABCD"])
+        self.assertNotEqual(list(key.values()), [f"{s}: lora_{s}" for s in "ABCD"])  # seed 5 does not keep the order
+        # the panel shown as 1 is the image of the branch the key names, and the same seed gives the same order
+        first = "ABCD".index(key["1"][0])
+        self.assertAlmostEqual(float(out["result"][0][0, 50, 8, 0]), first / 4.0, places=2)
+        self.assertEqual(common.parse_info_meta(run(5)["result"][1])["blind_key"], key)
+        self.assertNotIn("blind_key", common.parse_info_meta(cmp.HaDeSMossCompareSheet().compare(
+            torch.zeros(1, 16, 16, 3), "tests/blind", False, False, footer="", **imgs, **infos)["result"][1]))
+
+
+class TestTextCheck(unittest.TestCase):
+    def setUp(self):
+        self.tc = importlib.import_module(f"{PACK}.moss_textcheck_nodes")
+
+    def test_compare_form_and_similarity(self):
+        tc = self.tc
+        self.assertEqual(tc.norm("  Northern-Lights! "), "northern lights")
+        self.assertEqual(tc.similarity("NORTHERN LIGHTS", "northern lights"), 1.0)
+        self.assertAlmostEqual(tc.similarity("NORTHERN", "NORTHEN"), 1 - 1 / 8)
+        self.assertEqual(tc.verdict(1.0), "exact")
+        self.assertEqual(tc.verdict(0.7), "close")
+        self.assertEqual(tc.verdict(0.2), "missing")
+        self.assertEqual(tc.clean_answer("NONE."), "")
+        self.assertEqual(tc.clean_answer('Text: "OPEN"'), "OPEN")
+
+    def test_layout_boxes_are_read_and_failures_masked(self):
+        tc = self.tc
+        layout = json.dumps({"width": 512, "height": 256, "items": [
+            {"label": "text", "caption": "title", "text": "NORTHERN LIGHTS", "bbox": [0, 0, 256, 64]},
+            {"label": "text", "caption": "sign", "text": "OPEN", "bbox": [256, 128, 512, 256]},
+            {"label": "object", "caption": "a lamp", "bbox": [0, 128, 128, 256]}]})
+        seen = []
+
+        def reader(clip, image, question, max_tokens):
+            seen.append((question, tuple(image.shape)))
+            if question == tc.READ_ALL:
+                return "NORTHERN LIGHTS\nOPEN"
+            return "NORTHERN LIGHTS" if len(seen) == 1 else "NONE"
+        # the image is twice the layout canvas: boxes scale with it
+        rows, mask, lines = tc.check(None, torch.rand(1, 512, 1024, 3), layout, "", 64, reader)
+        self.assertEqual([r["verdict"] for r in rows], ["exact", "outside its box"])
+        self.assertEqual(rows[1]["read_elsewhere"], "OPEN")
+        self.assertGreaterEqual(min(seen[0][1][1:3]), 384)  # small crops are upscaled for the reader
+        self.assertEqual(float(mask[0, 400, 800]), 1.0)  # the failed OPEN box, in image pixels
+        self.assertEqual(float(mask[0, 50, 100]), 0.0)   # the exact title box stays black
+
+    def test_a_typo_in_its_box_is_close_not_outside(self):
+        """Measured case: the box and the whole image both read 'Hello Worly'; the box also holding other text."""
+        tc = self.tc
+        layout = json.dumps({"width": 64, "height": 64, "items": [{"label": "text", "caption": "x", "text": "Hello World", "bbox": [0, 0, 64, 32]}]})
+        reader = lambda clip, image, question, max_tokens: "RELI STOR.\nHello Worly" if question == tc.READ_BOX else "Hello Worly"
+        rows, mask, _ = tc.check(None, torch.rand(1, 64, 64, 3), layout, "", 64, reader)
+        self.assertEqual(rows[0]["verdict"], "close")
+        self.assertEqual(rows[0]["read"], "Hello Worly")
+        self.assertEqual(float(mask[0, 10, 10]), 1.0)
+
+    def test_text_split_over_three_lines_is_exact(self):
+        """Measured case: MOSS painted GOOD / VIBES / ONLY on three lines of a t-shirt."""
+        tc = self.tc
+        reader = lambda clip, image, question, max_tokens: "GOOD\nVIBES\nONLY\nsize M"
+        rows, _, _ = tc.check(None, torch.rand(1, 64, 64, 3), "", "GOOD VIBES ONLY", 64, reader)
+        self.assertEqual(rows[0]["verdict"], "exact")
+
+    def test_expected_text_without_layout_and_errors(self):
+        tc = self.tc
+        reader = lambda clip, image, question, max_tokens: "CAFE LUNA\nOPEN 24H"
+        rows, mask, _ = tc.check(None, torch.rand(1, 64, 64, 3), "", "Cafe Luna\nCLOSED", 64, reader)
+        self.assertEqual([r["verdict"] for r in rows], ["exact", "missing"])
+        self.assertEqual(float(mask.sum()), 0.0)
+        with self.assertRaisesRegex(ValueError, "nothing to check"):
+            tc.check(None, torch.rand(1, 64, 64, 3), json.dumps({"caption": "a cup"}), "", 64, reader)
+        with self.assertRaisesRegex(ValueError, "cannot generate text"):
+            tc.HaDeSMossTextCheck().run(torch.rand(1, 64, 64, 3), object(), expected_text="X")
+
 
 class TestAuditFixes(unittest.TestCase):
     def test_ties_trim_keeps_exactly_k_with_ties(self):

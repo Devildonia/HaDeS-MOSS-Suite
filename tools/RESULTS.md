@@ -1905,6 +1905,80 @@ The VLM judge is not calibrated on real photographs. Maintainer's blind pairs (c
 - Same compositions in 10 / 10; small details change (a staff appears, a figure moves, invented beetle labels differ). "OPEN" and "VISIT THE FJORDS" right in both.
 - Time per image in this session (whole graph, models cached, the two files alternated twice on 3 prompts): int8 about 3.4 s, BF16 about 6.6 s. This is the opposite of the October measurement above (int8 slower); not investigated, so not claimed on the model card.
 
+## MOSS Text Check: reader on drawn text (2026-11-17)
+
+75 images (backgrounds from the user's own Forge images, about 1 MP), one layout text box each, text drawn with PIL so the right answer is known: 8 Windows fonts, 28 to 110 px, on a coloured plate (60 %) or straight on the picture with an outline. Read by `MOSS Text Check` with `qwen3.5_9b_int8_convrot`, max_tokens 96, through ComfyUI.
+
+| Group | Cases | Expected verdict | Result |
+|---|---|---|---|
+| Text drawn as expected | 40 | exact | 40 exact |
+| One letter changed in the drawn text | 20 | close | 20 close (read as drawn, never corrected) |
+| Nothing drawn in the box | 15 | missing | 15 missing |
+
+1.2 s per case on an RTX 5090. The first run gave the 20 typo cases "outside its box" through a rule bug (a rounded similarity compared with an unrounded one); the verdicts above are recomputed from the same readings with the fixed rule, which is the one in the node and has a regression test.
+
+Not measured in this set: sizes under 28 px (one case), non-Latin scripts, the w4a8 and hybrid text encoders. A drawn font is easier to read than generated lettering, so these numbers are an upper bound for generated images.
+
+### Text painted by MOSS-Image (2026-11-17)
+
+20 prompts asking for a given text (shop signs, posters, neon, a book cover, a t-shirt, a bus display, a cake, a wine label...), Base + Turbo 8-steps v1.0, 8 steps, CFG 1, euler / simple, 1024², seeds 2000-2019; `expected_text` mode (whole image). What MOSS really painted was then read by eye (the assistant) and compared with the node's verdict.
+
+- MOSS painted the asked text in 18 of 20 images; one book title came out as "THE SILENT GAADEN", and one wine label cut "Rouge" at the image edge.
+- **19 of 20 verdicts right**: the typo was caught ("close", read as painted).
+- The wrong verdict: the reader completed the cut "Roug(e)" and the node said "exact".
+- The first run gave three more wrong verdicts, all from the node's own matching. A text painted over three lines (GOOD / VIBES / ONLY, Happy / Birthday / Ana, Summer Festival / 2026) was only tried over two joined lines. The node now joins up to four consecutive read lines, and the 19/20 above is recomputed from the same readings with that rule (regression test `test_text_split_over_three_lines_is_exact`).
+- 3.9 s per image including the 8-step generation.
+
+Not measured: sizes under 28 px (one drawn case), non-Latin scripts, layout boxes on generated images, the w4a8 and hybrid text encoders. A text cut by the image edge can be completed by the reader.
+
+## LoRA atlas: block recipes on three LoRAs (2026-11-17)
+
+`tools/moss_lora_atlas.py`, three LoRAs trained on Base. Base template: 25 steps, CFG 2.5, er_sde / simple, 1024².
+
+**Calibration.** On 3 prompts x 2 seeds: no LoRA, the full LoRA, each 6-layer group alone, and each group left out.
+
+**Recipes.** Built from the calibration numbers only:
+- **full**: every group at 1;
+- **style**: the two groups with the most style over layout;
+- **keep_comp**: without the group whose removal takes the most layout change;
+- **half**: every group at 0.5.
+
+**Validation.** On 3 other prompts x 2 seeds. Each recipe is scored by the share of the full LoRA's change it keeps in style (texture, color, edges) and in layout (32 px luminance thumbnail).
+
+| LoRA | Recipe | Style kept | Layout kept | Ratio |
+|---|---|---|---|---|
+| Forge alpha s1500 (anime style) | without 30-35 | 0.87 | 0.94 | 0.93 |
+| | without 24-29 | 0.76 | 0.79 | 0.97 |
+| | half | 0.78 | 0.87 | 0.90 |
+| Manara v02 s1400 (comic style, private) | without 24-29 | 0.82 | 0.72 | **1.14** |
+| | style (12-17 + 24-29) | 0.73 | 0.71 | 1.03 |
+| | half | 0.55 | 0.65 | 0.85 |
+| User identity s600 | without 24-29 | 0.95 | 0.83 | 1.14 |
+| | without 30-35 | 1.06 | 0.91 | 1.16 |
+| | half | 0.87 | 0.73 | 1.19 |
+
+**Removing layers 24-29 took away the most layout change** in Forge (0.21, with 30-35 at 0.22) and in Manara (0.21).
+
+**Blind human checks (the maintainer):**
+- **Manara**, 6 comic sheets of none / full / without 24-29 / half. Picked as "most Manara", and the same as "like most": full 3, without 24-29 2, half 1, none 0.
+- **Identity**, 12 sheets (the 6 identity prompts x 2 seeds), resemblance scored 0-3, with the ArcFace similarity to the centroid of the 40 training photos (InsightFace buffalo_l, used locally for measurement only):
+
+| Recipe | Eye, mean 0-3 | Panels ≥ 2 | ArcFace |
+|---|---|---|---|
+| full | 1.75 | 7/12 | 0.55 |
+| without 24-29 | 0.25 | 1/12 | 0.14 |
+| without 30-35 | 0.08 | 0/12 | 0.38 |
+| half | 0.08 | 0/12 | 0.31 |
+| no LoRA | — | — | 0.01 |
+
+ArcFace and the eye correlate at 0.57 over 48 panels and agree on the winner. The eye says "it's me" only from about 0.5.
+
+**Conclusion.** Layers 24-29 carry much of what a LoRA adds: layout for the two style LoRAs, the face for the identity one. No block recipe gave the user something that a strength change or the full LoRA does not:
+- with a style LoRA, the user wants the whole style;
+- with an identity LoRA, any cut loses the face.
+
+The atlas stays a research tool in `tools/`, not a Suite node. The metrics are low-level statistics, and the numbers hold for these LoRAs, prompts and seeds only.
+
 ## AI-model reviews (qualitative, not measurements)
 
 Preferences given by AI models on the blind sheets of the four 2026-11-11 experiments above: GPT and Gemini (screenshots supplied by the maintainer) and the assistant that ran the experiments (sealed before each key was opened, but it had seen earlier images, so never fully blind). They are kept for the record, with their tables as decoded. They are **impressions, not measurements**: the criteria differ and are not verifiable from screenshots, AI judgments may be correlated, and the same pairs were judged repeatedly. No conclusion, default or model card in this repository relies on them.
