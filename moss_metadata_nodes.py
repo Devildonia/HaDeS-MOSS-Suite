@@ -33,8 +33,23 @@ _LAYER_MODULE_RES = [(n, _name_re(n)) for n in _LAYER_MODULES]
 _OTHER_MODULE_RES = [(n, _name_re(n)) for n in _OTHER_MODULES]
 
 
+_HEADERS = {}  # (path, size, mtime) -> parsed header: a recipe naming the same source many times reads it once
+
+
 def read_header(path):
-    """(metadata, tensor entries) from a safetensors header: only the first bytes of the file are read, never the weights."""
+    """(metadata, tensor entries) from a safetensors header: only the first bytes of the file are read, never the weights.
+    Cached while the file is unchanged (same size and modification time); callers get copies."""
+    st = os.stat(path)
+    key = (os.path.abspath(path), st.st_size, st.st_mtime_ns)
+    if key not in _HEADERS:
+        if len(_HEADERS) > 512:
+            _HEADERS.clear()
+        _HEADERS[key] = _read_header(path)
+    meta, header, start = _HEADERS[key]
+    return dict(meta), dict(header), start
+
+
+def _read_header(path):
     with open(path, "rb") as f:
         raw = f.read(8)
         n = struct.unpack("<Q", raw)[0] if len(raw) == 8 else 0
@@ -44,7 +59,11 @@ def read_header(path):
             header = json.loads(f.read(n))
         except (UnicodeDecodeError, json.JSONDecodeError) as e:
             raise ValueError(f"HaDeS MOSS Metadata Reader: '{os.path.basename(path)}' has an unreadable safetensors header ({e}).") from e
+    if not isinstance(header, dict):
+        raise ValueError(f"HaDeS MOSS Metadata Reader: '{os.path.basename(path)}' has a safetensors header that is not a JSON object.")
     meta = header.pop("__metadata__", None) or {}
+    if not isinstance(meta, dict):
+        meta = {}
     return {str(k): str(v) for k, v in meta.items()}, header, 8 + n
 
 
@@ -108,7 +127,8 @@ def model_summary(tensors):
     keys = [_strip(k) for k in tensors]
     s.update(moss_image=any(k.startswith("shared_block_modulation") for k in keys),
              fused_qkv=any(k.endswith("proj.qkv.weight") for k in keys),
-             int8_convrot=any(k.endswith("comfy_quant") for k in keys),
+             # comfy_quant marks any per-tensor format (fp8, nvfp4, int8...); ConvRot int8 files carry int8 weight_scale tensors
+             int8_convrot=any(k.endswith("comfy_quant") for k in keys) and any(t.get("dtype") == "I8" for t in tensors.values() if isinstance(t, dict)),
              text_embedder_blocks=len({k.split(".")[2] for k in keys if k.startswith("text_embedder.blocks.")}))
     return s
 

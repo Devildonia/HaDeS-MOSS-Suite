@@ -112,9 +112,13 @@ def ties_trim(tau, density):
         return tau
     if k <= 0:
         return torch.zeros_like(tau)
-    # The (n - k)-th smallest magnitude; a sort is ~40x faster than kthvalue on CUDA for these sizes
-    threshold = tau.abs().flatten().sort().values[tau.numel() - k - 1]
-    return tau * (tau.abs() > threshold)
+    # Exactly the k largest magnitudes: a magnitude threshold would drop every entry tied at the cut (all of a constant tensor).
+    # A stable sort breaks ties by position, so the result is reproducible; a sort is ~40x faster than kthvalue on CUDA here.
+    flat = tau.flatten()
+    keep = flat.abs().sort(descending=True, stable=True).indices[:k]
+    mask = torch.zeros_like(flat, dtype=torch.bool)
+    mask[keep] = True
+    return tau * mask.view_as(tau)
 
 
 def dare_drop(tau, density, generator):
@@ -252,7 +256,7 @@ class HaDeSMossMultiModelMerger:
         else:
             if base_model is None:
                 raise ValueError(f"HaDeS MOSS Multi-Model Merger: {method} needs base_model, the checkpoint the models were finetuned from.")
-            if sum(w for _, _, w in models) <= 0:
+            if method != "Model Stock" and sum(w for _, _, w in models) <= 0:
                 raise ValueError("HaDeS MOSS Multi-Model Merger: the model weights add up to 0.")
             anchor, anchor_name = base_model, "base_model"
 

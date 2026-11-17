@@ -45,8 +45,8 @@ def auto_label(metas):
     parts = []
     for m in metas:
         if m.get("node") == "multi_lora":
-            parts += [stem(r["name"]) + strength_text(r.get("strength", 1.0)) for r in m.get("loras", [])]
-        elif m.get("node") == "lora_block_weight":
+            parts += [stem(r["name"]) + strength_text(r.get("strength", 1.0)) for r in m.get("loras") or [] if isinstance(r, dict) and r.get("name")]
+        elif m.get("node") == "lora_block_weight" and m.get("lora"):
             parts.append(stem(m["lora"]) + strength_text(m.get("strength_model", 1.0)))
         elif m.get("node") == "ksampler" and m.get("turbo"):
             parts.append(stem(m["turbo"]) + strength_text(m.get("turbo_strength", 1.0)))
@@ -56,12 +56,55 @@ def auto_label(metas):
     return stem(loader.get("model_file") or loader.get("model", "")) if loader else ""
 
 
+def model_of(metas):
+    loader = next((m for m in metas if m.get("node") == "loader"), None)
+    return stem(loader.get("model_file") or loader.get("model", "")) if loader else ""
+
+
+def settings_of(metas):
+    """The sampling settings a branch ran with (its KSampler info), as ordered display fields."""
+    ks = next((m for m in metas if m.get("node") == "ksampler"), None)
+    if ks is None:
+        return {}
+    out = {}
+    if "seed" in ks:
+        out["seed"] = f"seed {ks['seed']}"
+    if "steps" in ks:
+        out["steps"] = f"{ks['steps']} steps"
+    if "cfg" in ks:
+        out["cfg"] = f"CFG {float(ks['cfg']):g}"
+    if ks.get("sampler") or ks.get("scheduler"):
+        out["sampler"] = f"{ks.get('sampler', '?')} / {ks.get('scheduler', '?')}"
+    if ks.get("width") and ks.get("height"):
+        out["size"] = f"{ks['width']}x{ks['height']}"
+    if float(ks.get("denoise", 1.0)) < 0.9999:
+        out["denoise"] = f"denoise {float(ks['denoise']):g}"
+    return out
+
+
+def prompt_of(metas):
+    return next((m.get("prompt") for m in metas if m.get("node") == "prompt_enhancer" and m.get("prompt")), "")
+
+
+def split_common(per_branch):
+    """(common fields shown once, {slot: fields that differ}) over the branches that carry the field."""
+    keys = list(dict.fromkeys(k for f in per_branch.values() for k in f))
+    common, differ = [], {s: [] for s in per_branch}
+    for k in keys:
+        vals = {s: f[k] for s, f in per_branch.items() if k in f}
+        if len(set(vals.values())) == 1 and len(vals) == len(per_branch):
+            common.append(next(iter(vals.values())))
+        else:
+            for s, v in vals.items():
+                differ[s].append(v)
+    return common, differ
+
+
 def auto_footer(metas):
-    """'seed N | prompt' from the first branch that carries them."""
-    seed = next((m["seed"] for m in metas if m.get("node") == "ksampler" and "seed" in m), None)
-    prompt = next((m.get("prompt") for m in metas if m.get("node") == "prompt_enhancer" and m.get("prompt")), "")
-    bits = ([f"seed {seed}"] if seed is not None else []) + ([prompt] if prompt else [])
-    return " | ".join(bits)
+    """'seed N | prompt' from one branch's infos (kept for single-branch use)."""
+    fields = settings_of(metas)
+    prompt = prompt_of(metas)
+    return " | ".join(([fields["seed"]] if "seed" in fields else []) + ([prompt] if prompt else []))
 
 
 def font(size):
@@ -159,14 +202,30 @@ class HaDeSMossCompareSheet:
         images = [(s, image_A if s == "A" else kw.get(f"image_{s}")) for s in SLOTS]
         images = [(s, im) for s, im in images if im is not None]
         metas = {s: branch_metas(kw.get(f"info_{s}")) for s, _ in images}
+        # what is the same in every branch goes in the footer once; what differs (model, seed, steps...) goes on that panel's label
+        slots = [s for s, _ in images]
+        fields = {s: settings_of(metas[s]) for s in slots}
+        models = {s: model_of(metas[s]) for s in slots}
+        known_models = {m for m in models.values() if m}
+        if len(known_models) > 1:
+            for s in slots:
+                if models[s]:
+                    fields[s] = {"model": models[s], **fields[s]}
+        common, differ = split_common({s: f for s, f in fields.items() if f})
         labels, sources = [], []
-        for s, _ in images:
+        for s in slots:
             given = (kw.get(f"label_{s}") or "").strip()
             auto = auto_label(metas[s])
-            labels.append(f"{s}: {given or auto or s}" if (given or auto) else s)
-            sources.append("label" if given else ("info" if auto else "slot"))
+            extra = [v for v in differ.get(s, []) if v != auto]
+            text = given or " · ".join([auto] * bool(auto) + extra)
+            labels.append(f"{s}: {text}" if text else s)
+            sources.append("label" if given else ("info" if (auto or extra) else "slot"))
         if not footer.strip():
-            footer = next((t for t in (auto_footer(metas[s]) for s, _ in images) if t), "")
+            prompts = {p for p in (prompt_of(metas[s]) for s in slots) if p}
+            prompt_text = next(iter(prompts)) if len(prompts) == 1 else ("prompts differ between branches" if prompts else "")
+            if len(known_models) == 1:
+                common.insert(0, next(iter(known_models)))
+            footer = " | ".join(common + ([prompt_text] if prompt_text else []))
         batch = min(im.shape[0] for _, im in images)
         sheets = [build_sheet([to_pil(im[b]) for _, im in images], labels, footer.strip()) for b in range(batch)]
 

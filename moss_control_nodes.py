@@ -72,6 +72,9 @@ class HaDeSMossControl:
     def apply(self, positive, negative, vae, latent, color_mode, colors, blur, strength, start_percent, end_percent, depth_map=None, color_map=None):
         if getattr(vae, "latent_channels", LATENT_CHANNELS) != LATENT_CHANNELS:
             raise ValueError(f"HaDeS MOSS Control: the VAE has {vae.latent_channels} latent channels; MOSS-Image needs the 128-channel FLUX.2 VAE.")
+        if not 0.0 <= start_percent < end_percent <= 1.0:
+            raise ValueError(f"HaDeS MOSS Control: start_percent ({start_percent:g}) must be below end_percent ({end_percent:g}); "
+                             "otherwise ComfyUI keeps the conditioning unchanged and no control is applied.")
         h, w = latent["samples"].shape[-2] * 16, latent["samples"].shape[-1] * 16
         use_color = color_map is not None and not color_mode.startswith("off")
         if depth_map is None and not use_color:

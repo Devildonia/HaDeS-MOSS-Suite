@@ -155,7 +155,10 @@ class HaDeSMossSuiteTelemetry:
                 metas.append(meta)
             else:
                 foreign += 1
-        findings = diagnose(metas)
+        try:
+            findings = diagnose(metas)
+        except (KeyError, TypeError, ValueError) as e:  # an incomplete or hand-made trailer: report it instead of stopping the workflow
+            findings = [("warning", f"a connected info trailer is incomplete ({type(e).__name__}: {e}); the checks were skipped")]
         counts = {lvl: sum(1 for l, _ in findings if l == lvl) for lvl in ("error", "warning", "note")}
 
         lines = [f"# {report_title}", "", f"Nodes read: {', '.join(NODE_NAMES[m['node']] for m in metas) or 'none'}"

@@ -55,6 +55,9 @@ VARIANTS = ("Remove the {}.", "Erase the {}.", "Get rid of the {}.", "Delete the
 
 
 def instructions(p, vary):
+    """Captions a pair can train with; one is drawn per step. A pair may list several in "captions" (e.g. tags and natural language)."""
+    if p.get("captions"):
+        return list(p["captions"])
     if vary and p["instruction"].startswith("Remove the ") and p.get("object"):
         return [v.format(p["object"]) for v in VARIANTS]
     return [p["instruction"]]

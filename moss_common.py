@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 
 import torch
@@ -29,14 +30,40 @@ def format_model_info(text, node, model_patcher, **meta):
 
 
 def parse_info_meta(text):
-    """Return the HADES_META trailer of an info string, or None for foreign strings."""
+    """Return the HADES_META trailer of an info string, or None for foreign strings (a trailer that is not a JSON object
+    with a string "node" counts as foreign)."""
     for line in reversed(str(text).splitlines()):
         if line.startswith(HADES_META_PREFIX):
             try:
-                return json.loads(line[len(HADES_META_PREFIX):])
+                meta = json.loads(line[len(HADES_META_PREFIX):])
             except json.JSONDecodeError:
                 return None
+            return meta if isinstance(meta, dict) and isinstance(meta.get("node"), str) else None
     return None
+
+
+def write_atomic(path, write):
+    """write(tmp_path) to a temporary file in the target's folder, then rename it onto `path`: an interrupted save never leaves a
+    partial file under the final name nor destroys the file it replaces."""
+    tmp = f"{path}.{os.getpid()}.part"
+    try:
+        write(tmp)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+
+
+def reserve_path(candidate_fn):
+    """The first free path from candidate_fn(0), candidate_fn(1), ..., created empty with O_EXCL so a concurrent export cannot pick it."""
+    i = 0
+    while True:
+        path = candidate_fn(i)
+        try:
+            os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+            return path
+        except FileExistsError:
+            i += 1
 
 
 # ==============================================================================

@@ -14,7 +14,9 @@ import sys
 
 from PIL import Image
 
-SAMPLING = ("seed", "steps", "cfg", "sampler", "scheduler", "flow_shift", "denoise", "width", "height", "slg")
+# denoise_mode / start_sigma / schedule_steps / steps_run: the schedule actually run (the same denoise runs differently in core and exact)
+SAMPLING = ("seed", "steps", "cfg", "sampler", "scheduler", "flow_shift", "denoise", "width", "height", "slg",
+            "denoise_mode", "start_sigma", "schedule_steps", "steps_run")
 PROMPT = ("prompt", "negative")
 ALLOWED = (("loader", "model_file"), ("multi_lora", "loras"), ("ksampler", "turbo"))
 PREFIX = "HADES_META "
@@ -75,6 +77,8 @@ def check_pair(reference, candidate, compare_prompt=True):
     for field, a, b in fields:
         if field not in a and field not in b:
             out["unverified"].append(field)
+        elif field in ("denoise_mode", "start_sigma") and (field not in a or field not in b):
+            out["unverified"].append(f"{field} (one side was saved before the Suite recorded it)")
         elif a.get(field) != b.get(field):
             out["mismatches"].append(f"{field}: {a.get(field)!r} against {b.get(field)!r}" if field not in PROMPT else f"{field} differs")
         else:

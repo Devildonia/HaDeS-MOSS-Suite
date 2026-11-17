@@ -7,6 +7,19 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+Audit of 0.8.0 (every finding checked first; details and tests in `docs/AUDIT_0.8.0.md`):
+- **`MOSS KSampler` turbo input:** a LoRA that changes no weight of the model (made for another model) is now an error; before, the few-step settings still ran and the metadata named the turbo. Strength 0 means no turbo.
+- **`MOSS KSampler` denoise:** denoise 0 no longer crashes (the latent passes through); in `exact` mode the reported start sigma and steps are those of the schedule actually run (they differed with schedulers that start below sigma max).
+- **`MOSS Image Saver`:** with several sampling stages in `metadata` and no `primary_stage_metadata`, the node now says that the A1111 parameters come from the first stage and the LoRA hashes from all of them.
+- **Saving weights:** Model Saver, LoRA Extractor, Merger and Resize write to a temporary file and rename it at the end, so an interrupted save leaves neither a partial file nor a lost one; a free name is reserved at once.
+- **`MOSS Compare Sheet`:** settings equal in every branch go in the footer once (model, steps, CFG, sampler / scheduler, size); what differs (model, seed, steps...) goes on each panel's label. One LoRA on two checkpoints no longer gives two identical labels.
+- **Prompt Enhancer layout mode:** an answer whose items all lack a usable box keeps a draft with them in `dropped` for the Layout Editor; a dropped text item without text comes back as an object.
+- **Multi-Model Merger TIES:** keeps exactly the planned share of entries when magnitudes tie at the cut (a constant tensor was zeroed); Model Stock no longer rejects weights summing to 0.
+- **Validation:** Multi-LoRA reads `"on": "false"` and rejects unknown group names; Control rejects start_percent ≥ end_percent; Metadata Reader caches headers, rejects a non-object header and no longer calls FP8 files int8 ConvRot; Telemetry and Compare Sheet ignore malformed HADES_META trailers instead of crashing.
+- **`tools/moss_pair_check.py`:** compares the schedule actually run (denoise mode, start sigma, schedule steps); its test runs in CI.
+- **`tools/moss_edit_train.py`:** a pair may list several captions (`captions`), one drawn per step.
+
 ## [0.8.0] - 2026-11-15
 
 A new node, `MOSS Compare Sheet`, for comparing LoRAs or checkpoints inside the Suite; the Layout Editor places layout items the Prompt Enhancer dropped.

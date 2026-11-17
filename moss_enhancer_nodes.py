@@ -200,6 +200,8 @@ def fit_draft(obj, width, height):
 
     def drop(it, reason):
         label = it.get("label") if it.get("label") in ("object", "character", "text") else "object"
+        if label == "text" and not str(it.get("text", "")).strip():
+            label = "object"  # a text item placed back without its text would fail the compiler (text: "")
         entry = {"label": label, "caption": str(it.get("caption", "")).strip() or str(it.get("text", "")).strip() or label}
         if str(it.get("text", "")).strip():
             entry["text"] = str(it["text"])
@@ -235,7 +237,7 @@ def fit_draft(obj, width, height):
             if isinstance(it.get(k), list):
                 item[k] = [str(v) for v in it[k] if str(v).strip()]
         items.append(item)
-    if not items:
+    if not items and not dropped:
         raise ValueError("MOSS Prompt Enhancer: the layout answer has no usable items")
     draft = {"width": width, "height": height, "bbox_coord_space": "abs", "bbox_format": "xyxy", "summary": summary, "items": items}
     if dropped:
@@ -441,7 +443,12 @@ class HaDeSMossPromptEnhancer:
                                  + answer[:400])
             draft_obj, notes = fit_draft(obj, width, height)
             draft = json.dumps(draft_obj, ensure_ascii=False, indent=2)
-            prompt = compile_layout(draft_obj)[0]
+            if draft_obj["items"]:
+                prompt = compile_layout(draft_obj)[0]
+            else:  # every item came without a usable box: encode the summary caption, keep the items for the Layout Editor's PLACE
+                prompt = draft_obj["summary"]["caption"]
+                notes.append(f"no item had a usable box: encoded the summary caption; {len(draft_obj['dropped'])} item(s) wait in the "
+                             "draft's dropped list for the Layout Editor (IMPORT, then PLACE)")
         info = format_info(f"HaDeS MOSS Prompt Enhancer | {mode}" + (f" | {width}x{height}" if mode == "layout" else "")
                            + (" | image" if images else "") + (f" | edit {edit_format}, reference {width}x{height}" if editing else "")
                            + (" | random: {} / {} / {}".format(*brief) if brief else "")

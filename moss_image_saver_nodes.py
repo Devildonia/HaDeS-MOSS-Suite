@@ -188,6 +188,12 @@ class HaDeSMossImageSaver:
             notes.append("primary stage has no MOSS Loader info: model and model hash are missing")
         if not metadata and primary is None:
             notes.insert(0, "metadata not connected: saved without sampling settings (connect Suite Telemetry's json for them)")
+        if primary is None:
+            stages = {n: sum(m.get("node") == n for m in metas) for n in ("ksampler", "loader")}
+            if stages["ksampler"] > 1 or stages["loader"] > 1:
+                # the first KSampler / Loader give steps, seed and model while the LoRA hashes come from every stage
+                notes.insert(0, f"{stages['ksampler']} KSamplers / {stages['loader']} Loaders in metadata: A1111 parameters and filename "
+                                "tokens take the first of each, LoRA hashes take every stage; connect primary_stage_metadata to pick one stage")
         prefix = expand_tokens(filename_prefix, selected)
         out_dir = folder_paths.get_output_directory()
         full_folder, filename, counter, subfolder, _ = folder_paths.get_save_image_path(prefix, out_dir, images[0].shape[1], images[0].shape[0])

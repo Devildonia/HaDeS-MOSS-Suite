@@ -11,6 +11,7 @@ import nodes
 from comfy_extras.nodes_slg import SkipLayerGuidanceDiTSimple
 
 from .moss_common import format_info, parse_info_meta
+from .moss_lora_nodes import load_lora_patches
 
 # single block, start / end of the negative-pass skip; "Base template" is SkipLayerGuidanceDiTSimple as the official
 # image_moss_image_base_t2i workflow sets it
@@ -72,9 +73,10 @@ def exact_sigmas(model_sampling, sampler_name, scheduler, steps, denoise):
 
 
 def start_sigma(model_sampling, sampler_name, scheduler, steps, denoise, mode):
-    """The first sigma the sampler runs from, in either mode."""
-    if mode == DENOISE_EXACT and denoise < 0.9999:
-        return float(model_sampling.percent_to_sigma(1.0 - denoise))
+    """The first sigma the sampler runs from, in either mode (exact: the first sigma of exact_sigmas, which is below the
+    requested point when the scheduler's own schedule starts below sigma max, e.g. ddim_uniform)."""
+    if mode == DENOISE_EXACT and 0.0 < denoise < 0.9999:
+        return float(exact_sigmas(model_sampling, sampler_name, scheduler, steps, denoise)[0])
     return float(full_sigmas(model_sampling, sampler_name, scheduler, core_schedule_steps(steps, denoise))[-(steps + 1)])
 
 
@@ -205,7 +207,12 @@ class HaDeSMossKSampler:
         # the image output connected without a VAE would reach the next node as None; say so here instead
         if vae is None and any(v == [str(unique_id), 1] for node in (prompt or {}).values() for v in node.get("inputs", {}).values()):
             raise ValueError("HaDeS MOSS KSampler: the image output is connected but no VAE is; connect the VAE input to decode.")
+        if turbo is not None and turbo["strength"] == 0.0:
+            turbo = None  # strength 0 applies nothing: sample with this node's own settings and record no turbo
         if turbo is not None:  # the stock LoraLoaderModelOnly path, then the settings the LoRA was trained at
+            # the core loads a LoRA for another model as nothing, with only a console warning; the few-step settings would then
+            # run on the untouched model and the metadata would name a turbo that was never applied
+            load_lora_patches(turbo["lora_name"], model)
             model = nodes.LoraLoaderModelOnly().load_lora_model_only(model, turbo["lora_name"], turbo["strength"])[0]
             steps, cfg, sampler_name, scheduler, slg = turbo["steps"], turbo["cfg"], turbo["sampler_name"], turbo["scheduler"], "off"
         m = with_shift(model, flow_shift)
@@ -215,11 +222,14 @@ class HaDeSMossKSampler:
         ms = m.get_model_object("model_sampling")
         exact = denoise_mode == DENOISE_EXACT and 0.0 < denoise < 0.9999
         if exact:
-            out = ksample_sigmas(m, seed, steps, cfg, sampler_name, scheduler, positive, negative, latent_image,
-                                 exact_sigmas(ms, sampler_name, scheduler, steps, denoise))
+            # the reported start sigma and step count come from the schedule actually handed to the sampler
+            sig = exact_sigmas(ms, sampler_name, scheduler, steps, denoise)
+            out = ksample_sigmas(m, seed, steps, cfg, sampler_name, scheduler, positive, negative, latent_image, sig)
+            sigma0, ran = float(sig[0]), len(sig) - 1
         else:
             out = nodes.common_ksampler(m, seed, steps, cfg, sampler_name, scheduler, positive, negative, latent_image, denoise=denoise)[0]
-        sigma0 = start_sigma(ms, sampler_name, scheduler, steps, denoise, denoise_mode) if denoise > 0.0 else 0.0
+            sigma0 = start_sigma(ms, sampler_name, scheduler, steps, denoise, denoise_mode) if denoise > 0.0 else 0.0
+            ran = steps if denoise > 0.0 else 0
         image = vae.decode(out["samples"]) if vae is not None else None
         if image is not None and image.ndim == 5:  # video-shaped VAE output
             image = image.reshape(-1, *image.shape[-3:])
@@ -228,7 +238,9 @@ class HaDeSMossKSampler:
         text = (f"HaDeS MOSS KSampler | {w}x{h} | {sampler_name} / {scheduler} | {steps} steps | CFG {cfg:.2f} | shift {shift:g} | "
                 f"denoise {denoise:.2f}{' exact' if exact else ''} (start sigma {sigma0:.3f}) | SLG {slg} | seed {seed}")
         extra = {"denoise_mode": "exact" if exact else "core", "start_sigma": round(sigma0, 4)}
-        if not exact and denoise < 0.9999:
+        if ran != steps:
+            extra["steps_run"] = ran  # e.g. a scheduler that merges duplicate sigmas, or denoise 0 (the latent passes through)
+        if not exact and 0.0 < denoise < 0.9999:
             extra["schedule_steps"] = core_schedule_steps(steps, denoise)
         if turbo is not None:
             text += f" | turbo {turbo['lora_name']} x {turbo['strength']:g}"

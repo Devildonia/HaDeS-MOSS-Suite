@@ -12,7 +12,7 @@ import comfy.model_management
 import comfy.utils
 import comfy.weight_adapter
 
-from .moss_common import (check_compatible, format_info, format_model_info, is_quantized, key_patches, key_patches_weight, key_slot, model_weights,
+from .moss_common import (reserve_path, write_atomic, check_compatible, format_info, format_model_info, is_quantized, key_patches, key_patches_weight, key_slot, model_weights,
                           rescale_for, residual_scale)
 from .moss_merger_nodes import GROUPS, layer_group
 
@@ -25,12 +25,9 @@ def lora_output_path(export_filename, default_name, overwrite_existing=False):
     os.makedirs(base_dir, exist_ok=True)
     name = os.path.basename(export_filename.strip()).removesuffix(".safetensors")
     name = _SAFE_FILENAME_RE.sub("_", name).strip(" .") or default_name
-    candidate = os.path.join(base_dir, f"{name}.safetensors")
-    counter = 1
-    while os.path.exists(candidate) and not overwrite_existing:
-        candidate = os.path.join(base_dir, f"{name}_{counter:03d}.safetensors")
-        counter += 1
-    return candidate
+    candidate = lambda i: os.path.join(base_dir, f"{name}.safetensors" if i == 0 else f"{name}_{i:03d}.safetensors")
+    # without overwriting, the free name is created empty at once so two exports cannot pick the same one
+    return candidate(0) if overwrite_existing else reserve_path(candidate)
 
 
 class HaDeSMossLoraExtractor:
@@ -105,10 +102,10 @@ class HaDeSMossLoraExtractor:
 
         path = lora_output_path(export_filename, "HaDeS_MOSS_Extracted_LoRA", overwrite_existing)
         mean_energy = sum(energy_kept) / len(energy_kept) if energy_kept else 1.0
-        safetensors.torch.save_file(lora_sd, path, metadata={"format": "pt", "ss_base_model_version": "moss_image",
-                                                              "hades/rank": str(rank), "hades/energy_kept": f"{mean_energy:.4f}",
-                                                              **({"hades/model_tuned": tuned_name.strip()} if tuned_name.strip() else {}),
-                                                              **({"hades/model_base": base_name.strip()} if base_name.strip() else {})})
+        meta = {"format": "pt", "ss_base_model_version": "moss_image", "hades/rank": str(rank), "hades/energy_kept": f"{mean_energy:.4f}",
+                **({"hades/model_tuned": tuned_name.strip()} if tuned_name.strip() else {}),
+                **({"hades/model_base": base_name.strip()} if base_name.strip() else {})}
+        write_atomic(path, lambda tmp: safetensors.torch.save_file(lora_sd, tmp, metadata=meta))
 
         lines = [
             f"HaDeS MOSS LoRA Extractor | {os.path.basename(path)} ({os.path.getsize(path) / 1024 ** 2:.1f} MB) | rank {rank} | {n_layers} layers",
@@ -228,10 +225,17 @@ def parse_lora_rows(text):
         if not isinstance(groups, dict):
             raise ValueError(f"HaDeS MOSS Multi-LoRA: row {i} 'groups' must be an object of group: weight.")
         strength = float(row.get("strength", 1.0))
+        raw_groups = groups
         groups = {g: float(groups[g]) for g in GROUPS + ["other_layers"] if g in groups}
         if not all(math.isfinite(v) for v in [strength, *groups.values()]):
             raise ValueError(f"HaDeS MOSS Multi-LoRA: row {i} strengths must be finite numbers.")
-        out.append({"name": row["name"], "on": bool(row.get("on", True)), "strength": strength, "groups": groups})
+        on = row.get("on", True)
+        on = on.strip().lower() not in ("false", "0", "off", "no", "") if isinstance(on, str) else bool(on)
+        unknown = [g for g in raw_groups if g not in GROUPS + ["other_layers"]]
+        if unknown:
+            raise ValueError(f"HaDeS MOSS Multi-LoRA: row {i} has unknown group(s) {', '.join(map(str, unknown))}; "
+                             f"groups are {', '.join(GROUPS + ['other_layers'])}.")
+        out.append({"name": row["name"], "on": on, "strength": strength, "groups": groups})
     return out
 
 
@@ -349,7 +353,7 @@ def save_lora(path, factors, diffs, max_rank, energy_target, metadata):
             up, down = factors[key]
             d = d + up @ down
         out[f"{key.removesuffix('.weight').removesuffix('.bias')}.{'diff_b' if key.endswith('.bias') else 'diff'}"] = d.cpu().to(torch.bfloat16).contiguous()
-    safetensors.torch.save_file(out, path, metadata={"format": "pt", "ss_base_model_version": "moss_image", **metadata})
+    write_atomic(path, lambda tmp: safetensors.torch.save_file(out, tmp, metadata={"format": "pt", "ss_base_model_version": "moss_image", **metadata}))
     return energies, ranks
 
 

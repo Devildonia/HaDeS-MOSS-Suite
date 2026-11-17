@@ -143,7 +143,8 @@ def compile_layout(draft):
     for key in ("meta", "palette"):
         if key in summary:
             _strings(summary[key], f"summary.{key}")
-    _check(isinstance(draft["items"], list) and draft["items"], "items must be a nonempty array")
+    _check(isinstance(draft["items"], list) and draft["items"], "items must be a nonempty array"
+           + (" (the items are in dropped: place them in the Layout Editor first)" if draft.get("dropped") else ""))
     items, texts = [], []
     for i, item in enumerate(draft["items"]):
         where = f"items[{i}]"

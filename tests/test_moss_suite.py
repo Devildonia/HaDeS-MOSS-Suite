@@ -636,7 +636,58 @@ class TestSaverAndSampler(unittest.TestCase):
         self.assertEqual((common.parse_info_meta(info)["cfg"], common.parse_info_meta(info)["sampler"]), (1.5, "er_sde"))
 
 
+    def test_turbo_checks_the_lora_and_strength_zero(self):
+        """Audit 0.8.0 #1: a LoRA for another model must not switch on the few-step settings; strength 0 means no turbo."""
+        safetensors.torch.save_file({"lora_unet_other_model.lora_up.weight": torch.ones(4, 2), "lora_unet_other_model.lora_down.weight": torch.ones(2, 4)},
+                                    os.path.join(TMP, "turbo_foreign.safetensors"))
+        seen = {}
+
+        def fake_ksampler(model, seed, steps, cfg, sampler_name, scheduler, positive, negative, latent, denoise=1.0):
+            seen.update(steps=steps, cfg=cfg)
+            return ({"samples": torch.zeros(1, 128, 4, 4)},)
+
+        original, sampler.nodes.common_ksampler = sampler.nodes.common_ksampler, fake_ksampler
+        try:
+            with self.assertRaisesRegex(ValueError, "changes no weight"):
+                sampler.HaDeSMossKSampler().sample(load(tiny_state_dict(10)), None, None, None, 7, 25, 2.5, "er_sde", "simple", 1.0, 0.0, "off",
+                                                   turbo=sampler.HaDeSMossTurbo().pick("turbo_foreign.safetensors", 1.0)[0])
+            self.assertEqual(seen, {})
+            info = sampler.HaDeSMossKSampler().sample(load(tiny_state_dict(10)), None, None, None, 7, 25, 2.5, "er_sde", "simple", 1.0, 0.0, "off",
+                                                      turbo=sampler.HaDeSMossTurbo().pick("turbo_foreign.safetensors", 0.0)[0])[2]
+        finally:
+            sampler.nodes.common_ksampler = original
+        meta = common.parse_info_meta(info)
+        self.assertEqual((seen["steps"], seen["cfg"], meta["steps"], "turbo" in meta), (25, 2.5, 25, False))
+
+    def test_denoise_zero_passes_the_latent_through(self):
+        """Audit 0.8.0 #4: denoise 0 used to raise ZeroDivisionError while building the metadata."""
+        def fake_ksampler(model, seed, steps, cfg, sampler_name, scheduler, positive, negative, latent, denoise=1.0):
+            return (latent,)
+
+        original, sampler.nodes.common_ksampler = sampler.nodes.common_ksampler, fake_ksampler
+        try:
+            for mode in (sampler.DENOISE_CORE, sampler.DENOISE_EXACT):
+                info = sampler.HaDeSMossKSampler().sample(load(tiny_state_dict(10)), None, None, {"samples": torch.zeros(1, 128, 4, 4)}, 7, 4, 1.0,
+                                                          "euler", "simple", 0.0, 0.0, "off", denoise_mode=mode)[2]
+                meta = common.parse_info_meta(info)
+                self.assertEqual((meta["start_sigma"], meta["steps_run"], "schedule_steps" in meta), (0.0, 0, False))
+        finally:
+            sampler.nodes.common_ksampler = original
+
+
 class TestImageSaver(unittest.TestCase):
+    def test_two_stages_without_primary_warn(self):
+        """Audit 0.8.0 #2: two KSamplers in metadata and no primary_stage_metadata is ambiguous; the node says so."""
+        isaver = importlib.import_module(f"{PACK}.moss_image_saver_nodes")
+        f = common.format_info
+        tel = json.dumps({"nodes": [common.parse_info_meta(f("x", "ksampler", seed=1, steps=4, cfg=1.0, sampler="euler", scheduler="simple",
+                                                             width=64, height=64, flow_shift=5.0)),
+                                    common.parse_info_meta(f("x", "ksampler", seed=22, steps=12, cfg=1.0, sampler="euler", scheduler="simple",
+                                                             width=64, height=64, flow_shift=5.0))]})
+        out = isaver.HaDeSMossImageSaver().save(torch.rand(1, 8, 8, 3), "tests/two_stage", False, False, metadata=tel, positive="A cat.")
+        self.assertIn("2 KSamplers", out["ui"]["text"][0])
+        self.assertIn("primary_stage_metadata", common.parse_info_meta(out["result"][1])["notes"][0])
+
     def test_disable_metadata_removes_all_png_text(self):
         from PIL import Image
         isaver = importlib.import_module(f"{PACK}.moss_image_saver_nodes")
@@ -839,7 +890,7 @@ class TestCompareSheet(unittest.TestCase):
         meta = common.parse_info_meta(out["result"][1])
         self.assertEqual(meta["labels"], ["A: style_s1500", "B: style_s1600 x0.8", "C"])
         self.assertEqual(meta["label_sources"], ["info", "info", "slot"])
-        self.assertEqual(meta["footer"], "seed 1001 | A terrace at sunset.")
+        self.assertEqual(meta["footer"], "seed 1001 | 8 steps | CFG 1 | A terrace at sunset.")
         self.assertTrue(any("scaled" in n for n in meta["notes"]))
         sheet = out["result"][0]
         self.assertEqual(sheet.shape[0], 1)
@@ -860,6 +911,72 @@ class TestCompareSheet(unittest.TestCase):
         self.assertEqual(out["result"][0].shape[0], 1)
         self.assertTrue(any("batch sizes differ" in n for n in meta["notes"]))
         self.assertEqual(out["ui"]["images"][0]["type"], "temp")
+
+
+    def test_same_lora_on_two_models_and_settings_per_branch(self):
+        """Audit 0.8.0 #6: one LoRA on two checkpoints gave two identical labels; settings that differ go on each label."""
+        cmp = importlib.import_module(f"{PACK}.moss_compare_nodes")
+        f = common.format_info
+
+        def branch(model, seed):
+            return json.dumps({"nodes": [common.parse_info_meta(f("x", "loader", model_file=model)),
+                                         common.parse_info_meta(f("x", "multi_lora", loras=[{"name": "shared.safetensors", "strength": 1.0}])),
+                                         common.parse_info_meta(f("x", "ksampler", seed=seed, steps=20, cfg=1.0, sampler="euler", scheduler="simple",
+                                                                  width=64, height=64))]})
+        out = cmp.HaDeSMossCompareSheet().compare(torch.rand(1, 32, 32, 3), "tests/compare_models", False, False,
+                                                   image_B=torch.rand(1, 32, 32, 3), info_A=branch("base.safetensors", 11),
+                                                   info_B=branch("sft.safetensors", 22), footer="")
+        meta = common.parse_info_meta(out["result"][1])
+        self.assertEqual(meta["labels"], ["A: shared · base · seed 11", "B: shared · sft · seed 22"])
+        self.assertEqual(meta["footer"], "20 steps | CFG 1 | euler / simple | 64x64")
+        bad = cmp.HaDeSMossCompareSheet().compare(torch.rand(1, 32, 32, 3), "tests/compare_bad", False, False, info_A="HADES_META []")
+        self.assertEqual(common.parse_info_meta(bad["result"][1])["labels"], ["A"])
+
+
+class TestAuditFixes(unittest.TestCase):
+    def test_ties_trim_keeps_exactly_k_with_ties(self):
+        """Audit 0.8.0 #10: a magnitude threshold dropped every entry tied at the cut."""
+        self.assertEqual(mergers.ties_trim(torch.ones(4), 0.5).tolist(), [1.0, 1.0, 0.0, 0.0])
+        t = torch.tensor([3.0, -1.0, 2.0, -5.0])
+        self.assertEqual(mergers.ties_trim(t, 0.5).tolist(), [3.0, 0.0, 0.0, -5.0])
+        self.assertEqual(mergers.ties_trim(t, 1.0).tolist(), t.tolist())
+
+    def test_write_atomic_keeps_the_old_file_on_failure(self):
+        """Audit 0.8.0 #3: a failed save must not leave a partial file nor destroy the previous one."""
+        path = os.path.join(TMP, "atomic.safetensors")
+        with open(path, "w") as fh:
+            fh.write("old")
+
+        def boom(tmp):
+            with open(tmp, "w") as fh:
+                fh.write("partial")
+            raise OSError("disk full")
+        with self.assertRaises(OSError):
+            common.write_atomic(path, boom)
+        self.assertEqual(open(path).read(), "old")
+        self.assertEqual([n for n in os.listdir(TMP) if n.startswith("atomic.") and n.endswith(".part")], [])
+        a = common.reserve_path(lambda i: os.path.join(TMP, f"reserved_{i}.bin"))
+        b = common.reserve_path(lambda i: os.path.join(TMP, f"reserved_{i}.bin"))
+        self.assertNotEqual(a, b)
+
+    def test_layout_answer_without_any_box_keeps_a_draft(self):
+        """Audit 0.8.0 #8: every item without a box raised before the draft could reach the Layout Editor."""
+        draft, notes = enhancer.fit_draft({"summary": {"caption": "A poster."}, "items": [{"label": "text", "caption": "Title", "text": "HELLO"},
+                                                                                          {"label": "text", "caption": "Subtitle"}]}, 512, 512)
+        self.assertEqual(draft["items"], [])
+        self.assertEqual([d["label"] for d in draft["dropped"]], ["text", "object"])  # a text item with no text comes back as object
+        with self.assertRaisesRegex(ValueError, "Layout Editor"):
+            pipeline.compile_layout(draft)
+
+    def test_multi_lora_row_validation(self):
+        """Audit 0.8.0 minor: "on": "false" stayed on, a misspelt group key was silently dropped."""
+        self.assertEqual(loras.parse_lora_rows('[{"name": "x", "on": "false"}]')[0]["on"], False)
+        with self.assertRaisesRegex(ValueError, "unknown group"):
+            loras.parse_lora_rows('[{"name": "x", "groups": {"layers_00_5": 1.0}}]')
+
+    def test_info_meta_must_be_an_object(self):
+        self.assertIsNone(common.parse_info_meta("HADES_META []"))
+        self.assertIsNone(common.parse_info_meta('HADES_META {"x": 1}'))
 
 
 class TestDenoiseSchedule(unittest.TestCase):
@@ -918,6 +1035,12 @@ class TestDenoiseSchedule(unittest.TestCase):
 
     def test_discard_penultimate_samplers_keep_length(self):
         self.assertEqual(len(sampler.exact_sigmas(self.ms, "dpm_2", "simple", 4, 0.7)), 5)
+
+    def test_exact_start_sigma_is_the_schedule_actually_run(self):
+        """Audit 0.8.0 #5: with schedulers starting below sigma max (ddim_uniform) the reported start was the requested point."""
+        for sched in ("ddim_uniform", "simple", "beta"):
+            s = sampler.exact_sigmas(self.ms, "euler", sched, 4, 0.7)
+            self.assertAlmostEqual(sampler.start_sigma(self.ms, "euler", sched, 4, 0.7, sampler.DENOISE_EXACT), float(s[0]), places=5)
 
 
 class TestTelemetry(unittest.TestCase):

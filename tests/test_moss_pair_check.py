@@ -33,6 +33,16 @@ class TestPairCheck(unittest.TestCase):
         self.assertEqual(pc.check_pair((stage(), None), (stage(prompt="A teapot"), None), compare_prompt=False)["mismatches"], [])
         self.assertIn("its KSampler 32x16", pc.check_pair((stage(), (64, 16)), (stage(), (32, 16)))["mismatches"][0])
 
+    def test_effective_schedule_is_compared(self):
+        """Audit 0.8.0 #7: the same denoise in core and exact mode runs a different schedule."""
+        a, b = stage(), stage()
+        a[-1].update(denoise=0.9, denoise_mode="core", start_sigma=1.0, schedule_steps=8)
+        b[-1].update(denoise=0.9, denoise_mode="exact", start_sigma=0.978)
+        mism = pc.check_pair((a, None), (b, None))["mismatches"]
+        self.assertTrue(any(m.startswith("denoise_mode") for m in mism) and any(m.startswith("start_sigma") for m in mism))
+        old = stage()  # saved before the Suite recorded the schedule
+        self.assertIn("denoise_mode (one side was saved before the Suite recorded it)", pc.check_pair((old, None), (b, None))["unverified"])
+
     def test_one_stage_per_side(self):
         with self.assertRaisesRegex(ValueError, "exactly one"):
             pc.check_pair((stage() + stage()[-1:], None), (stage(), None))
