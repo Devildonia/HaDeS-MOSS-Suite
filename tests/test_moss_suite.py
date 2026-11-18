@@ -659,6 +659,28 @@ class TestSaverAndSampler(unittest.TestCase):
         meta = common.parse_info_meta(info)
         self.assertEqual((seen["steps"], seen["cfg"], meta["steps"], "turbo" in meta), (25, 2.5, 25, False))
 
+    def test_turbo_switched_off_samples_with_the_ksampler_settings(self):
+        """enabled off: no LoRA applied (even a foreign one), the KSampler's own steps / CFG, no turbo in the metadata."""
+        seen = {}
+
+        def fake_ksampler(model, seed, steps, cfg, sampler_name, scheduler, positive, negative, latent, denoise=1.0):
+            seen.update(steps=steps, cfg=cfg, sampler=sampler_name)
+            return ({"samples": torch.zeros(1, 128, 4, 4)},)
+
+        turbo, tinfo = sampler.HaDeSMossTurbo().pick("turbo_foreign.safetensors", 0.25, 15, 2.5, "euler", "simple", enabled=False)
+        original, sampler.nodes.common_ksampler = sampler.nodes.common_ksampler, fake_ksampler
+        try:
+            info = sampler.HaDeSMossKSampler().sample(load(tiny_state_dict(10)), None, None, None, 7, 25, 3.0, "er_sde", "simple", 1.0, 0.0, "off",
+                                                      turbo=turbo)[2]
+        finally:
+            sampler.nodes.common_ksampler = original
+        meta = common.parse_info_meta(info)
+        self.assertEqual((seen, meta["steps"], "turbo" in meta), ({"steps": 25, "cfg": 3.0, "sampler": "er_sde"}, 25, False))
+        self.assertIs(common.parse_info_meta(tinfo)["enabled"], False)
+        self.assertIn("off: the KSampler uses its own settings", tinfo)
+        # enabled is added after cfg / sampler_name / scheduler, not in place of them (a second "optional" key once dropped them)
+        self.assertEqual(list(sampler.HaDeSMossTurbo.INPUT_TYPES()["optional"]), ["cfg", "sampler_name", "scheduler", "enabled"])
+
     def test_denoise_zero_passes_the_latent_through(self):
         """Audit 0.8.0 #4: denoise 0 used to raise ZeroDivisionError while building the metadata."""
         def fake_ksampler(model, seed, steps, cfg, sampler_name, scheduler, positive, negative, latent, denoise=1.0):

@@ -202,13 +202,18 @@ const INSTALLERS = {
         };
     },
     HaDeSMossKSampler(node) {
-        // a connected turbo input overrides these in the backend: draw them faded (still editable for when it is unplugged)
+        // a connected turbo input that is on overrides these in the backend: draw them faded (still editable for when it is off)
         const TURBO_OVERRIDES = new Set(["steps", "cfg", "sampler_name", "scheduler", "slg"]);
-        const turboLinked = () => node.inputs?.find((i) => i.name === "turbo")?.link != null;
-        // the steps widget of the MOSS Turbo LoRA node feeding the turbo input (4, its default, if it cannot be read)
+        // the MOSS Turbo LoRA node feeding the turbo input
         const turboNode = () => {
             const slot = node.inputs?.findIndex((i) => i.name === "turbo") ?? -1;
             return slot >= 0 ? node.getInputNode?.(slot) : null;
+        };
+        // linked and on: switched off (enabled) or at strength 0 the backend samples with this node's own settings
+        const turboLinked = () => {
+            if (node.inputs?.find((i) => i.name === "turbo")?.link == null) return false;
+            const t = turboNode();
+            return !t || (widget(t, "enabled")?.value !== false && Number(widget(t, "strength")?.value ?? 1) !== 0);
         };
         const turboSteps = () => {
             const slot = node.inputs?.findIndex((i) => i.name === "turbo") ?? -1;

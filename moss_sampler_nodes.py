@@ -109,8 +109,8 @@ class HaDeSMossTurbo:
                                "at CFG 1, euler / simple, strength 1.0. At 4 steps Turbo held text best (layout JSON 6 / 6, 16:9 poster 3 / 3) "
                                "and Turbo Diverse kept SFT's spread of faces on an open prompt; Turbo 8-steps at 8 steps beat akhaliq's 4-step "
                                "LoRA 18 to 5 in blind pairs and matched lodestones' Base / Kromoss 8-step LoRA run on SFT up to 1024 (tools/RESULTS.md)."}),
-                "strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
-                                       "tooltip": "1.0 is the only strength measured."}),
+                "strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.01,
+                                       "tooltip": "1.0 is the only strength measured. 0 applies nothing: the KSampler then uses its own settings."}),
                 "steps": ("INT", {"default": TURBO_SETTINGS["steps"], "min": 1, "max": 50,
                                   "tooltip": "4 for Turbo and Turbo Diverse, 8 for Turbo 8-steps: the counts measured. At 1024 Turbo and "
                                              "Turbo Diverse give 6-10% less colour than SFT at 4 steps (6-14% at 2048) and are back near it at 8 (only colour measured "
@@ -127,6 +127,11 @@ class HaDeSMossTurbo:
                                                                     "tooltip": "euler: what the turbo LoRAs were trained and measured with; er_sde was used in the CFG runs above."}),
                 "scheduler": (comfy.samplers.KSampler.SCHEDULERS, {"default": TURBO_SETTINGS["scheduler"],
                                                                    "tooltip": "simple: what the turbo LoRAs were trained and measured with."}),
+                # last, so saved workflows keep their widget order
+                "enabled": ("BOOLEAN", {"default": True, "label_on": "on", "label_off": "off",
+                                        "tooltip": "off: the KSampler applies no turbo and samples with its own steps, CFG, sampler, scheduler and "
+                                                   "SLG, as if the cable were unplugged; this node keeps its settings for when it is switched back on. "
+                                                   "Strength 0 does the same."}),
             },
         }
 
@@ -136,15 +141,16 @@ class HaDeSMossTurbo:
     CATEGORY = "HaDeS/MOSS Samplers"
     DESCRIPTION = ("Few-step LoRA for the MOSS KSampler's turbo input: the KSampler applies it to its model and samples at this node's "
                    "steps, CFG, sampler and scheduler (by default the settings the LoRAs were trained at: 4 steps, CFG 1, euler / simple), "
-                   "whatever its own widgets say.")
+                   "whatever its own widgets say. Switched off (enabled), the KSampler uses its own settings.")
 
     def pick(self, lora_name, strength, steps=TURBO_SETTINGS["steps"], cfg=TURBO_SETTINGS["cfg"], sampler_name=TURBO_SETTINGS["sampler_name"],
-             scheduler=TURBO_SETTINGS["scheduler"]):
+             scheduler=TURBO_SETTINGS["scheduler"], enabled=True):
+        state = "" if enabled else " | off: the KSampler uses its own settings"
         info = format_info(f"HaDeS MOSS Turbo LoRA | {lora_name} | strength {float(strength):g} | {int(steps)} steps, CFG {float(cfg):g}, "
-                           f"{sampler_name} / {scheduler}", "turbo", lora=lora_name, strength=float(strength), steps=int(steps), cfg=float(cfg),
-                           sampler=sampler_name, scheduler=scheduler)
+                           f"{sampler_name} / {scheduler}{state}", "turbo", lora=lora_name, strength=float(strength), steps=int(steps),
+                           cfg=float(cfg), sampler=sampler_name, scheduler=scheduler, enabled=bool(enabled))
         return ({"lora_name": lora_name, "strength": float(strength), "steps": int(steps), "cfg": float(cfg), "sampler_name": sampler_name,
-                 "scheduler": scheduler}, info)
+                 "scheduler": scheduler, "enabled": bool(enabled)}, info)
 
 
 class HaDeSMossKSampler:
@@ -189,7 +195,7 @@ class HaDeSMossKSampler:
                     "photographs became new scenes."}),
                 "turbo": ("MOSS_TURBO", {"tooltip": "Optional: a MOSS Turbo LoRA. When connected, the LoRA is applied to the model and the KSampler "
                                                     "samples with SLG off and the turbo node's steps, CFG, sampler and scheduler (4, 1, euler / simple "
-                                                    "by default), ignoring those widgets; "
+                                                    "by default), ignoring those widgets (unless the turbo node is switched off or at strength 0); "
                                                     "seed, denoise and flow_shift still apply. Measured at 4 or 8 steps, denoise 1.0 (Turbo 8-steps also at "
                                                     "0.25 / 0.40 on a 2x-upscaled image) and the model's shift 5.0 (tools/RESULTS.md)."}),
             },
@@ -207,8 +213,8 @@ class HaDeSMossKSampler:
         # the image output connected without a VAE would reach the next node as None; say so here instead
         if vae is None and any(v == [str(unique_id), 1] for node in (prompt or {}).values() for v in node.get("inputs", {}).values()):
             raise ValueError("HaDeS MOSS KSampler: the image output is connected but no VAE is; connect the VAE input to decode.")
-        if turbo is not None and turbo["strength"] == 0.0:
-            turbo = None  # strength 0 applies nothing: sample with this node's own settings and record no turbo
+        if turbo is not None and (turbo["strength"] == 0.0 or not turbo.get("enabled", True)):
+            turbo = None  # switched off or strength 0 applies nothing: sample with this node's own settings and record no turbo
         if turbo is not None:  # the stock LoraLoaderModelOnly path, then the settings the LoRA was trained at
             # the core loads a LoRA for another model as nothing, with only a console warning; the few-step settings would then
             # run on the untouched model and the metadata would name a turbo that was never applied

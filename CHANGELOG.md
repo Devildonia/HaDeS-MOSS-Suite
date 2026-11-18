@@ -14,6 +14,10 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 - **`MOSS Compare Sheet` blind mode:** `blind` shuffles the panels and numbers them 1 to 4 without names; the key goes to `info` and the PNG, never onto the sheet. `blind_seed` sets the order.
 - **`tools/moss_lora_atlas.py`:** per-group profile of a LoRA (each 6-layer group alone and left out), block recipes built from it, and their check on other prompts. Measured on three LoRAs (`tools/RESULTS.md`, LoRA atlas): layers 24-29 carry much of what a LoRA adds, but no recipe beat the full LoRA or a plain strength change for the user, so it stays a research tool.
 - **`tools/moss_edit_train.py --hold-out-ids`:** holds out the given scenes instead of a random draw, so two runs can be compared on the same held-out images.
+- **MOSS Turbo LoRA:** an `enabled` switch (optional, last, default on, so saved workflows keep their widget order). Off, the MOSS KSampler applies no turbo and samples with its own steps, CFG, sampler, scheduler and SLG, and draws those widgets at full strength again; before, its settings only came back by unplugging the cable or setting strength 0. The turbo node keeps its strength and settings, and its `info` says it is off.
+
+### Changed
+- **MOSS Turbo LoRA:** `strength` moves in steps of 0.01 (was 0.05), to try values such as 0.22 when the turbo is used at low strength over a LoRA; 1.0 stays the only strength measured.
 
 ### Fixed
 Audit of 0.8.0 (every finding checked first; details and tests in `docs/AUDIT_0.8.0.md`):
