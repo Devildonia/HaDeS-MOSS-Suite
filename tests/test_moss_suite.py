@@ -954,6 +954,19 @@ class TestCompareSheet(unittest.TestCase):
         bad = cmp.HaDeSMossCompareSheet().compare(torch.rand(1, 32, 32, 3), "tests/compare_bad", False, False, info_A="HADES_META []")
         self.assertEqual(common.parse_info_meta(bad["result"][1])["labels"], ["A"])
 
+    def test_model_in_footer_only_when_every_branch_names_it(self):
+        """0.8.1 acceptance: a branch without a model (a stock loader) left the other branch's model in the footer for the whole sheet."""
+        cmp = importlib.import_module(f"{PACK}.moss_compare_nodes")
+        f = common.format_info
+        ks = common.parse_info_meta(f("x", "ksampler", seed=1, steps=15, cfg=2.5, sampler="euler", scheduler="simple", width=64, height=64))
+        info_A = json.dumps({"nodes": [ks, common.parse_info_meta(f("x", "loader", model_file="base.safetensors"))]})
+        info_B = json.dumps({"nodes": [ks]})
+        out = cmp.HaDeSMossCompareSheet().compare(torch.rand(1, 32, 32, 3), "tests/compare_partial", False, False,
+                                                   image_B=torch.rand(1, 32, 32, 3), info_A=info_A, info_B=info_B, footer="")
+        meta = common.parse_info_meta(out["result"][1])
+        self.assertEqual(meta["labels"], ["A: base", "B"])
+        self.assertEqual(meta["footer"], "seed 1 | 15 steps | CFG 2.5 | euler / simple | 64x64")
+
     def test_blind_shuffles_numbers_and_keeps_the_key_in_info(self):
         cmp = importlib.import_module(f"{PACK}.moss_compare_nodes")
         f = common.format_info
@@ -1015,7 +1028,7 @@ class TestCompareSampler(unittest.TestCase):
             out, calls = self.run_sampler(models, footer="")
         meta = common.parse_info_meta(out["result"][2])
         self.assertEqual([c[1:] for c in calls], [(7, 15, 2.5)] * 4)  # every model sampled with the same seed and settings
-        self.assertEqual(meta["labels"], ["A: forge_mega_s5250 · mossImage_base_bf16", "B: mossImage_base_bf16", "C: merge: a + b", "D"])
+        self.assertEqual(meta["labels"], ["A: forge_mega_s5250 · mossImage_base_bf16", "B: mossImage_base_bf16", "C: merge: a + b", "D: unknown model"])
         self.assertTrue(any("model_D carries no HaDeS MOSS recipe" in n for n in meta["notes"]))
         self.assertEqual(tuple(out["result"][1].shape), (4, 16, 16, 3))
         self.assertEqual([m["node"] for m in meta["branches"]["A"]], ["multi_lora", "ksampler", "loader"])

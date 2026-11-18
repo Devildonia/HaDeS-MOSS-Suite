@@ -216,7 +216,9 @@ class HaDeSMossCompareSheet:
         fields = {s: settings_of(metas[s]) for s in slots}
         models = {s: model_of(metas[s]) for s in slots}
         known_models = {m for m in models.values() if m}
-        if len(known_models) > 1:
+        # the model goes in the footer only when every branch names the same one; a branch without it would be mislabelled
+        same_model = len(known_models) == 1 and all(models.values())
+        if not same_model:
             for s in slots:
                 if models[s]:
                     fields[s] = {"model": models[s], **fields[s]}
@@ -232,7 +234,7 @@ class HaDeSMossCompareSheet:
         if not footer.strip():
             prompts = {p for p in (prompt_of(metas[s]) for s in slots) if p}
             prompt_text = next(iter(prompts)) if len(prompts) == 1 else ("prompts differ between branches" if prompts else "")
-            if len(known_models) == 1:
+            if same_model:
                 common.insert(0, next(iter(known_models)))
             footer = " | ".join(common + ([prompt_text] if prompt_text else []))
         batch = min(im.shape[0] for _, im in images)
@@ -364,7 +366,8 @@ class HaDeSMossCompareSampler:
             # LoRAs in the order they were applied, then the KSampler (its turbo goes last on the label), the model, the prompt
             head = loras[::-1] + [parse_info_meta(ks_info)]
             branches[s] = head + ([base] if base else []) + extra  # the nodes' own trailers, for Suite Telemetry
-            metas = head + ([{"node": "loader", "model_file": model_name}] if model_name else []) + extra  # the sheet labels a merge too
+            # the sheet labels a merge too; a model without a recipe is named as such, so the turbo alone never reads as the model
+            metas = head + [{"node": "loader", "model_file": model_name or "unknown model"}] + extra
             images.append(image)
             sheet_kw[f"image_{s}" if s != "A" else "image_A"] = image
             sheet_kw[f"info_{s}"] = json.dumps({"nodes": metas})

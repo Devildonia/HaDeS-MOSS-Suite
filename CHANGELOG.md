@@ -7,7 +7,7 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.8.1] - 2026-11-17
+## [0.8.1] - 2026-11-18
 
 ### Added
 - **`MOSS Text Check`** (new node): reads the text in a generated image with MOSS-Image's own text encoder (Qwen3.5-9B, whose file holds the vision tower; no other model is loaded) and compares it with what was asked: each layout text item inside its box, or expected texts anywhere. Verdicts exact / close / missing / outside its box, a mask of the boxes that failed for a retry, `passed`, and `info`. On 75 images with text drawn in common fonts (28-110 px) every verdict was right (exact 40/40, a one-letter typo 20/20 close, empty box 15/15 missing; `tools/RESULTS.md`); on 20 texts painted by MOSS itself 19 verdicts were right (the miss: a word cut by the image edge read as whole). A text split over several lines is matched joined.
@@ -21,7 +21,7 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 - **MOSS Turbo LoRA:** `strength` moves in steps of 0.01 (was 0.05), to try values such as 0.22 when the turbo is used at low strength over a LoRA; 1.0 stays the only strength measured.
 
 ### Fixed
-- **`MOSS Compare Sheet` labels:** a branch with the turbo on and no LoRA of its own was labelled with the turbo alone; it now shows the model file and then the turbo. A merge's name holding ' + ' is no longer repeated on its label.
+- **`MOSS Compare Sheet` labels:** a branch with the turbo on and no LoRA of its own was labelled with the turbo alone; it now shows the model file and then the turbo. A merge's name holding ' + ' is no longer repeated on its label. A model named by only some branches no longer goes in the footer as if every panel used it (found in the three-view acceptance: a merge loaded with the stock loader was shown under the Base name); the Compare Sampler labels a model without a recipe `unknown model`.
 
 Audit of 0.8.0 (every finding checked first; details and tests in `docs/AUDIT_0.8.0.md`):
 - **`MOSS KSampler` turbo input:** a LoRA that changes no weight of the model (made for another model) is now an error; before, the few-step settings still ran and the metadata named the turbo. Strength 0 means no turbo.

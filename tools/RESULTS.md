@@ -1979,6 +1979,18 @@ ArcFace and the eye correlate at 0.57 over 48 panels and agree on the winner. Th
 
 The atlas stays a research tool in `tools/`, not a Suite node. The metrics are low-level statistics, and the numbers hold for these LoRAs, prompts and seeds only.
 
+## MOSS Text Check and MOSS Compare Sampler: three-view frontend acceptance (2026-11-18)
+
+Both 0.8.1 nodes were run with real models in the maintainer's ComfyUI **0.43.0 / frontend 1.57.4** (RTX 5090), from a separate workflow tab: MOSS Loader (`mossImage_base_bf16`, `qwen3.5_9b_int8_convrot`, `flux2-vae`) as model A, a merge loaded with the stock `Load Diffusion Model` as model B, MOSS Turbo LoRA (Turbo 8-steps v1.0 at 0.5, 15 steps, CFG 2.5), a 768 x 768 latent, the prompt asking for a sign that reads "HaDeS", Text Check on the sampler's `images` with `expected_text` HaDeS, and Suite Telemetry fed by both `info` outputs. The settings were restored to classic canvas / HaDeS widgets afterwards; sheets are in `output/HaDeS/acceptance_0.8.1/`.
+
+| View | Actual check | Result |
+|---|---|---|
+| Classic canvas, HaDeS widgets | Queue from the frontend; sheet saved; KSampler widgets dimmed under the turbo; Telemetry read both nodes | Passed; Text Check `1/1 exact` |
+| Classic canvas, standard ComfyUI widgets | All widgets of both nodes shown; changed seed and `label_B`; queue | Passed; `exact`; `label_B` on the sheet |
+| Nodes 2.0 / Vue | Changed seed and `blind`; queue; workflow serialized and reloaded | Passed; `exact`; panels numbered 1 and 2 with the key in `info` only; Turbo, Compare Sampler and Text Check values and the 13 links survived the reload |
+
+One defect was found and fixed: a branch without a model name (the stock loader carries no recipe) let the other branch's model go in the sheet footer as if every panel used it, so the merge read as `mossImage_base_bf16`, and in blind mode the footer named a model. The Compare Sheet now puts the model in the footer only when every branch names the same one, and the Compare Sampler labels a model without a recipe `unknown model`. After a restart the same graph gave `A: mossImage_base_bf16 + Turbo x0.5`, `B: unknown model + Turbo x0.5` and a footer without a model. Python suite: **99 tests passed, 1 opt-in CUDA test skipped** (one new test for this case); JS widget tests: **5 passed**. One prompt and one seed per view: this checks the UI and the wiring, not image quality or reading accuracy (see the Text Check sections above).
+
 ## AI-model reviews (qualitative, not measurements)
 
 Preferences given by AI models on the blind sheets of the four 2026-11-11 experiments above: GPT and Gemini (screenshots supplied by the maintainer) and the assistant that ran the experiments (sealed before each key was opened, but it had seen earlier images, so never fully blind). They are kept for the record, with their tables as decoded. They are **impressions, not measurements**: the criteria differ and are not verifiable from screenshots, AI judgments may be correlated, and the same pairs were judged repeatedly. No conclusion, default or model card in this repository relies on them.
