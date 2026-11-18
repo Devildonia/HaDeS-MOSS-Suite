@@ -10,7 +10,8 @@ import comfy.model_patcher
 import comfy.quant_ops
 import comfy.utils
 
-from .moss_common import count_layers, format_info, key_patches, key_patches_float, key_patches_weight, model_weights, stochastic_round_bf16, write_atomic
+from .moss_common import (count_layers, format_info, key_patches, key_patches_float, key_patches_live, key_patches_weight, model_weights,
+                          stochastic_round_bf16, write_atomic)
 
 # The layout of Comfy-Org's moss_image_*_int8_convrot files: the four linears of every layer in int8 with ConvRot,
 # int8 attention in every layer, everything else (text_embedder, modulations, embedders, head, norms) in bfloat16.
@@ -44,9 +45,11 @@ class HaDeSMossModelSaver:
                 "rounding": (ROUNDINGS, {"default": ROUNDINGS[0], "tooltip":
                     "bfloat16 output, weights with merge / LoRA patches. stochastic: each one rounded up or down with probability by "
                     "distance (seeded per weight, so the file is reproducible); keeps changes smaller than a bfloat16 step. nearest: "
-                    "ComfyUI's own saving; such changes are partly lost. Measured with two subtle LoRAs baked into a merge: nearest kept "
-                    "about 80-85% of their effect, stochastic all of it, with renders as close to the float32 result as two equally "
-                    "valid roundings are to each other (tools/RESULTS.md). Unpatched weights are copied unchanged either way."}),
+                    "the weights ComfyUI uses when it loads the model with these LoRAs whole in VRAM, so the file renders like the live "
+                    "LoRAs; changes smaller than a bfloat16 step are partly lost, as they are live. Measured with two subtle LoRAs baked "
+                    "into a merge: nearest kept about 80-85% of their effect, stochastic all of it (tools/RESULTS.md). When ComfyUI loads "
+                    "a model only partly in VRAM it applies LoRAs another way and live renders can differ a little from the file. "
+                    "Unpatched weights are copied unchanged either way."}),
                 "recipe": ("STRING", {"default": "", "multiline": True, "tooltip":
                     "Optional. How this model was made, written into the file as hades/recipe (with include_metadata). Link the info "
                     "output of the MOSS Loader, Multi-LoRA or a merger here (several joined with the core Concatenate node), or type notes. "
@@ -89,8 +92,13 @@ class HaDeSMossModelSaver:
         # float32 output: patched weights computed in float32 here; the core's lazy saving applies patches in the model's own
         # dtype (bfloat16), which would round them before they reach the float32 file
         exact = dtype == torch.float32
+        # bfloat16 nearest: the weights ComfyUI computes when it loads this model whole in VRAM, whatever else is loaded (the
+        # core's lazy saving follows how much of the model is in VRAM and gave a different file inside a busy server, tools/RESULTS.md)
+        live = not stochastic and not exact and not int8
 
         def baked(pk):
+            if live:
+                return key_patches_live(key_patches(model, pk), quant_device, pk).to(dtype).cpu().contiguous()
             w32 = key_patches_float(key_patches(model, pk), quant_device, pk)
             return (w32 if exact else stochastic_round_bf16(w32, comfy.utils.string_to_seed(pk))).cpu().contiguous()
 
@@ -118,8 +126,7 @@ class HaDeSMossModelSaver:
             if module in preserved:
                 sd[k] = v.to("cpu").contiguous()
                 continue
-            if (stochastic or exact) and pk in model.patches:
-                # the core's saving rounds bfloat16 to nearest (its stochastic_rounding() is stochastic for fp8 only)
+            if (stochastic or exact or live) and pk in model.patches:
                 sd[k] = baked(pk)
                 continue
             tensor = v.to("cpu").contiguous()

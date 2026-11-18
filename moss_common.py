@@ -4,6 +4,7 @@ import os
 import re
 
 import torch
+import comfy.float
 import comfy.lora
 import comfy.model_management
 import comfy.model_patcher
@@ -139,6 +140,19 @@ def key_patches_weight(key_patches, device, key):
     Quantized weights are dequantized first, so the result is the rounded (lossy) weight, not the pre-quantization one."""
     w = key_patches[0][0]
     return key_patches_float(key_patches, device, key).to(torch.bfloat16 if isinstance(w, QuantizedTensor) else w.dtype).float()
+
+
+def key_patches_live(key_patches, device, key):
+    """One key_patches() entry patched the way ModelPatcher.patch_weight_to_device does when the model is loaded on `device`:
+    the stored weight cast to the LoRA compute dtype of that device (float16 on most GPUs, float32 on CPU), the patches
+    applied, rounded back to the stored dtype. A model loaded whole in VRAM gets these weights element for element.
+    Quantized weights keep the float32 path of key_patches_weight()."""
+    (w, convert), patches = key_patches[0], key_patches[1:]
+    if isinstance(w, QuantizedTensor):
+        return key_patches_weight(key_patches, device, key)
+    temp = comfy.model_management.cast_to_device(w, device, comfy.model_management.lora_compute_dtype(device), copy=True)
+    out = comfy.lora.calculate_weight(patches, convert(temp, inplace=True), key)
+    return comfy.float.stochastic_rounding(out, w.dtype, seed=comfy.utils.string_to_seed(key))
 
 
 def stochastic_round_bf16(x, seed):

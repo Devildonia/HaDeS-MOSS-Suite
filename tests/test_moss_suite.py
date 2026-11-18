@@ -586,6 +586,34 @@ class TestSaverAndSampler(unittest.TestCase):
         self.assertLess(coef["nearest"], 0.5)
         self.assertAlmostEqual(coef["stochastic"], 1.0, delta=0.1)
 
+    def test_saver_nearest_matches_live_lora_weights(self):
+        """Two stacked LoRAs baked with rounding nearest: the file holds the weights ComfyUI computes when it loads the model
+        with the LoRAs (ModelPatcher.patch_weight_to_device), element for element. float16 LoRA compute, as on most GPUs."""
+        dev = comfy.model_management.get_torch_device()
+        with patch.dict(comfy.model_management.LORA_COMPUTE_DTYPES, {dev: torch.float16}):
+            self._saver_nearest_matches_live(dev)
+
+    def _saver_nearest_matches_live(self, dev):
+        sd = tiny_state_dict(10)
+        g = torch.Generator().manual_seed(4)
+        keys = ("layers.1.proj.ffn_up_gate.weight", "layers.2.proj.qkv.weight")
+        m = load(sd, torch.bfloat16)
+        for strength in (0.5, 0.8):
+            lora = {}
+            for key in keys:
+                base = f"diffusion_model.{key[:-len('.weight')]}"
+                lora[f"{base}.lora_up.weight"] = torch.randn(sd[key].shape[0], 4, generator=g) * 0.01
+                lora[f"{base}.lora_down.weight"] = torch.randn(4, sd[key].shape[1], generator=g)
+                lora[f"{base}.alpha"] = torch.tensor(4.0)
+            m, _ = comfy.sd.load_lora_for_models(m, None, lora, strength, 0)
+        # the weights loading would give, taken before the Saver loads (and so patches) the model
+        live = {key: m.patch_weight_to_device(f"diffusion_model.{key}", device_to=dev, return_weight=True).to("cpu", torch.bfloat16) for key in keys}
+        path = saver.HaDeSMossModelSaver().save(m, "tests/live_nearest", "bfloat16", False, rounding="nearest")["result"][1]
+        with safetensors.safe_open(path, "pt") as f:
+            for key in keys:
+                torch.testing.assert_close(f.get_tensor(key), live[key], rtol=0, atol=0)
+            torch.testing.assert_close(f.get_tensor("layers.3.proj.qkv.weight"), sd["layers.3.proj.qkv.weight"], rtol=0, atol=0)
+
     def test_image_output_without_vae_is_reported(self):
         prompt = {"9": {"class_type": "HaDeSMossKSampler", "inputs": {}}, "10": {"class_type": "SaveImage", "inputs": {"images": ["9", 1]}}}
         with self.assertRaisesRegex(ValueError, "no VAE"):

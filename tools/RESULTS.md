@@ -1991,6 +1991,30 @@ Both 0.8.1 nodes were run with real models in the maintainer's ComfyUI **0.43.0 
 
 One defect was found and fixed: a branch without a model name (the stock loader carries no recipe) let the other branch's model go in the sheet footer as if every panel used it, so the merge read as `mossImage_base_bf16`, and in blind mode the footer named a model. The Compare Sheet now puts the model in the footer only when every branch names the same one, and the Compare Sampler labels a model without a recipe `unknown model`. After a restart the same graph gave `A: mossImage_base_bf16 + Turbo x0.5`, `B: unknown model + Turbo x0.5` and a footer without a model. Python suite: **99 tests passed, 1 opt-in CUDA test skipped** (one new test for this case); JS widget tests: **5 passed**. One prompt and one seed per view: this checks the UI and the wiring, not image quality or reading accuracy (see the Text Check sections above).
 
+## Model Saver nearest and live LoRAs (2026-11-18)
+
+Bake: `preview_test` (SFT + 30% Base in layers 24-29, bfloat16) + Turbo 8-steps v1.0 x0.5 + forge_mega_s5250 x0.8, compared with the same
+LoRAs loaded live in the running server (15 steps, CFG 2.5, euler / simple, 896x1152, two prompts, seed 5102). RTX 5090, ComfyUI
+`lora_compute_dtype` float16.
+
+| Weights in the file | Mean pixel difference to the live render (0-255), two prompts |
+|---|---|
+| Saver 0.8.1 `nearest` run inside the server (core lazy saving) | 37.8 / 33.7 |
+| float32 sum of the patches, rounded once | 39.6 / 32.9 |
+| weight cast to float16, patches applied, rounded once (ComfyUI's whole-in-VRAM load) | 40.3 / 33.8 |
+| patches computed in bfloat16 (ComfyUI's on-the-fly path) | 17.1 / 15.2 |
+
+- With Turbo at 15 steps the sampler is chaotic: two files that differ only by rounding render about 21/255 apart, so only bit-identical
+  weights reproduce a live render pixel for pixel. A repeated live render gave 0.00.
+- Run alone (`load_models_gpu`, model whole in VRAM), both the 0.8.1 Saver and the fixed one write exactly the float16-path weights:
+  0 differing elements in 12 of the 168 patched tensors, against `ModelPatcher.patch_weight_to_device`. Inside the server the 0.8.1
+  Saver's file differed from that (6.5% of the patched elements differed from the float32 sum): the core's lazy saving follows how much
+  of the model is in VRAM. The fixed Saver computes the float16 path itself, so the file is the same either way.
+- The server's live renders were closest to the bfloat16 on-the-fly path: with the 9.75 GB text encoder also loaded, part of the model
+  seems to be patched on the fly, so which weights a live render uses depends on the memory state. Not measured further.
+- Test: `test_saver_nearest_matches_live_lora_weights` (two stacked LoRAs, float16 LoRA compute forced) checks the file against
+  `ModelPatcher.patch_weight_to_device`. The 0.8.1 Saver passes it too (on the CPU nothing is patched on the fly); it guards the new path.
+
 ## AI-model reviews (qualitative, not measurements)
 
 Preferences given by AI models on the blind sheets of the four 2026-11-11 experiments above: GPT and Gemini (screenshots supplied by the maintainer) and the assistant that ran the experiments (sealed before each key was opened, but it had seen earlier images, so never fully blind). They are kept for the record, with their tables as decoded. They are **impressions, not measurements**: the criteria differ and are not verifiable from screenshots, AI judgments may be correlated, and the same pairs were judged repeatedly. No conclusion, default or model card in this repository relies on them.
