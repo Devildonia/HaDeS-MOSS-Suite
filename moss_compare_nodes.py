@@ -13,7 +13,10 @@ from PIL.PngImagePlugin import PngInfo
 import folder_paths
 from comfy.cli_args import args
 
+import comfy.samplers
+
 from .moss_common import format_info, parse_info_meta
+from .moss_sampler_nodes import DENOISE_CORE, SLG_MODES, HaDeSMossKSampler
 
 SLOTS = "ABCD"
 GAP, PAD = 16, 12
@@ -42,19 +45,18 @@ def strength_text(s):
 
 
 def auto_label(metas):
-    """The LoRAs of the branch (Multi-LoRA rows, LoRA Block Weight, KSampler turbo), else its model file, else ''."""
-    parts = []
+    """The LoRAs of the branch (Multi-LoRA rows, LoRA Block Weight), else its model file; then the KSampler's turbo. '' if none."""
+    parts, turbo = [], []
     for m in metas:
         if m.get("node") == "multi_lora":
             parts += [stem(r["name"]) + strength_text(r.get("strength", 1.0)) for r in m.get("loras") or [] if isinstance(r, dict) and r.get("name")]
         elif m.get("node") == "lora_block_weight" and m.get("lora"):
             parts.append(stem(m["lora"]) + strength_text(m.get("strength_model", 1.0)))
         elif m.get("node") == "ksampler" and m.get("turbo"):
-            parts.append(stem(m["turbo"]) + strength_text(m.get("turbo_strength", 1.0)))
-    if parts:
-        return " + ".join(parts)
-    loader = next((m for m in metas if m.get("node") == "loader"), None)
-    return stem(loader.get("model_file") or loader.get("model", "")) if loader else ""
+            turbo.append(stem(m["turbo"]) + strength_text(m.get("turbo_strength", 1.0)))
+    if not parts:  # no LoRA of its own (a Multi-LoRA switched off): the model, so a turbo alone never hides which model ran
+        parts = [p for p in [model_of(metas)] if p]
+    return " + ".join(parts + turbo)
 
 
 def model_of(metas):
@@ -223,7 +225,7 @@ class HaDeSMossCompareSheet:
         for s in slots:
             given = (kw.get(f"label_{s}") or "").strip()
             auto = auto_label(metas[s])
-            extra = [v for v in differ.get(s, []) if v != auto]
+            extra = [v for v in differ.get(s, []) if v != auto and v not in auto.split(" + ")]
             text = given or " · ".join([auto] * bool(auto) + extra)
             labels.append(f"{s}: {text}" if text else s)
             sources.append("label" if given else ("info" if (auto or extra) else "slot"))
@@ -285,5 +287,99 @@ class HaDeSMossCompareSheet:
         return {"ui": {"images": results}, "result": (out, info)}
 
 
-NODE_CLASS_MAPPINGS = {"HaDeSMossCompareSheet": HaDeSMossCompareSheet}
-NODE_DISPLAY_NAME_MAPPINGS = {"HaDeSMossCompareSheet": "MOSS Compare Sheet"}
+MERGERS = ("model_block_merger", "multi_model_merger")
+LORA_NODES = ("multi_lora", "lora_block_weight")
+
+
+def recipe_chain(recipe):
+    """(LoRA-node metas along the model's own line, model name, the Loader or merger meta it starts from) from a model's
+    hades_moss_recipe attachment. The LoRA nodes are those on the path to the model file; a merge is named after its inputs."""
+    loras = []
+    while isinstance(recipe, dict):
+        node = recipe.get("node")
+        if node == "loader":
+            return loras, stem(recipe.get("model_file") or recipe.get("model", "")), recipe
+        if node in MERGERS:
+            names = [recipe_chain(v)[1] or "?" for k, v in (recipe.get("sources") or {}).items() if k != "base_model"]
+            return loras, "merge: " + " + ".join(names), recipe
+        if node in LORA_NODES:
+            loras.append(recipe)
+        recipe = (recipe.get("sources") or {}).get("model")
+    return loras, "", None
+
+
+class HaDeSMossCompareSampler:
+    @classmethod
+    def INPUT_TYPES(cls):
+        ks = HaDeSMossKSampler.INPUT_TYPES()
+        req, opt = ks["required"], ks["optional"]
+        sheet = HaDeSMossCompareSheet.INPUT_TYPES()
+        optional = {f"model_{s}": ("MODEL", {"tooltip": f"Model {s}; leave empty to compare fewer."}) for s in SLOTS[1:]}
+        optional["turbo"] = opt["turbo"]
+        optional["prompt_info"] = ("STRING", {"forceInput": True, "tooltip": "Optional: the Prompt Enhancer's info, for the prompt under the sheet."})
+        optional["flow_shift"], optional["slg"] = req["flow_shift"], req["slg"]
+        for s in SLOTS:
+            optional[f"label_{s}"] = ("STRING", {"default": "", "tooltip": f"Label over image {s}. Empty: the LoRAs model_{s} carries (and strength "
+                                                                            "when not 1), else its model file; the turbo is added when on."})
+        for k in ("blind", "blind_seed", "footer"):
+            optional[k] = sheet["optional"][k]
+        return {
+            "required": {
+                "model_A": ("MODEL", {"tooltip": "Model A, the leftmost. Labels are read from what each model carries (Loader, Multi-LoRA, "
+                                                 "LoRA Block Weight, mergers), not from the wiring: a Multi-LoRA switched off shows its model."}),
+                "positive": req["positive"], "negative": req["negative"], "latent_image": req["latent_image"],
+                "vae": ("VAE", {"tooltip": "Decodes every image for the sheet."}),
+                "seed": req["seed"], "steps": req["steps"], "cfg": req["cfg"], "sampler_name": req["sampler_name"], "scheduler": req["scheduler"],
+                "filename_prefix": ("STRING", {"default": "MOSS/compare/sheet", "tooltip": sheet["required"]["filename_prefix"][1]["tooltip"]}),
+                "save": sheet["required"]["save"], "embed_workflow": sheet["required"]["embed_workflow"],
+            },
+            "optional": optional,
+            "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},
+        }
+
+    RETURN_TYPES = ("IMAGE", "IMAGE", "STRING")
+    RETURN_NAMES = ("sheet", "images", "info")
+    OUTPUT_TOOLTIPS = ("The labelled sheet.", "The images A to D as one batch.",
+                       "Labels, files and every branch's settings, for Suite Telemetry (one cable for the whole comparison).")
+    FUNCTION = "compare"
+    OUTPUT_NODE = True
+    CATEGORY = "HaDeS/MOSS Samplers"
+    DESCRIPTION = ("Samples up to four models with the same prompt, latent, seed and settings (each exactly as the MOSS KSampler would, "
+                   "turbo included) and saves them as one labelled sheet, as the MOSS Compare Sheet does. Labels come from each model's "
+                   "own recipe, so switching a Multi-LoRA off compares the bare model without rewiring.")
+
+    def compare(self, model_A, positive, negative, latent_image, vae, seed, steps, cfg, sampler_name, scheduler, filename_prefix, save,
+                embed_workflow, prompt=None, extra_pnginfo=None, turbo=None, prompt_info=None, flow_shift=0.0, slg="off", footer="",
+                blind=False, blind_seed=0, **kw):
+        models = [(s, model_A if s == "A" else kw.get(f"model_{s}")) for s in SLOTS]
+        models = [(s, m) for s, m in models if m is not None]
+        extra = [m for m in [parse_info_meta(prompt_info)] if m and m.get("node") == "prompt_enhancer"] if prompt_info else []
+        images, branches, notes, sheet_kw = [], {}, [], {}
+        for s, model in models:
+            _, image, ks_info = HaDeSMossKSampler().sample(model, positive, negative, latent_image, seed, steps, cfg, sampler_name, scheduler,
+                                                           1.0, flow_shift, slg, vae=vae, turbo=turbo, denoise_mode=DENOISE_CORE)
+            loras, model_name, base = recipe_chain(model.get_attachment("hades_moss_recipe"))
+            if not model_name and not (kw.get(f"label_{s}") or "").strip():
+                notes.append(f"model_{s} carries no HaDeS MOSS recipe (not from a MOSS Loader): name it with label_{s}")
+            # LoRAs in the order they were applied, then the KSampler (its turbo goes last on the label), the model, the prompt
+            head = loras[::-1] + [parse_info_meta(ks_info)]
+            branches[s] = head + ([base] if base else []) + extra  # the nodes' own trailers, for Suite Telemetry
+            metas = head + ([{"node": "loader", "model_file": model_name}] if model_name else []) + extra  # the sheet labels a merge too
+            images.append(image)
+            sheet_kw[f"image_{s}" if s != "A" else "image_A"] = image
+            sheet_kw[f"info_{s}"] = json.dumps({"nodes": metas})
+            sheet_kw[f"label_{s}"] = kw.get(f"label_{s}", "")
+        out = HaDeSMossCompareSheet().compare(filename_prefix=filename_prefix, save=save, embed_workflow=embed_workflow, prompt=prompt,
+                                              extra_pnginfo=extra_pnginfo, footer=footer, blind=blind, blind_seed=blind_seed, **sheet_kw)
+        sheet_out, sheet_info = out["result"]
+        sm = parse_info_meta(sheet_info)
+        text = sheet_info.split("\nHADES_META", 1)[0].replace("HaDeS MOSS Compare Sheet", "HaDeS MOSS Compare Sampler", 1)
+        text += "".join(f"\nnote: {n}" for n in notes)
+        info = format_info(text, "compare_sampler", labels=sm["labels"], files=sm["files"], footer=sm["footer"], notes=sm["notes"] + notes,
+                           branches=branches, **({"blind_key": sm["blind_key"], "blind_seed": blind_seed} if blind else {}))
+        batch = torch.cat([im[:1] for im in images]) if len({tuple(im.shape[1:]) for im in images}) == 1 else images[0]
+        return {"ui": out["ui"], "result": (sheet_out, batch, info)}
+
+
+NODE_CLASS_MAPPINGS = {"HaDeSMossCompareSheet": HaDeSMossCompareSheet, "HaDeSMossCompareSampler": HaDeSMossCompareSampler}
+NODE_DISPLAY_NAME_MAPPINGS = {"HaDeSMossCompareSheet": "MOSS Compare Sheet", "HaDeSMossCompareSampler": "MOSS Compare Sampler"}

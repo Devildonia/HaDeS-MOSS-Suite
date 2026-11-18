@@ -14,12 +14,15 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 - **`MOSS Compare Sheet` blind mode:** `blind` shuffles the panels and numbers them 1 to 4 without names; the key goes to `info` and the PNG, never onto the sheet. `blind_seed` sets the order.
 - **`tools/moss_lora_atlas.py`:** per-group profile of a LoRA (each 6-layer group alone and left out), block recipes built from it, and their check on other prompts. Measured on three LoRAs (`tools/RESULTS.md`, LoRA atlas): layers 24-29 carry much of what a LoRA adds, but no recipe beat the full LoRA or a plain strength change for the user, so it stays a research tool.
 - **`tools/moss_edit_train.py --hold-out-ids`:** holds out the given scenes instead of a random draw, so two runs can be compared on the same held-out images.
+- **`MOSS Compare Sampler`** (new node): samples up to four models with the same prompt, latent, seed and settings (each as the MOSS KSampler would, turbo included) and saves the labelled sheet, with one `info` for Suite Telemetry, which checks every branch from it. Labels come from the recipe each model carries, not from the wiring: a Multi-LoRA switched off shows the bare model, a merge shows `merge: a + b`.
 - **MOSS Turbo LoRA:** an `enabled` switch (optional, last, default on, so saved workflows keep their widget order). Off, the MOSS KSampler applies no turbo and samples with its own steps, CFG, sampler, scheduler and SLG, and draws those widgets at full strength again; before, its settings only came back by unplugging the cable or setting strength 0. The turbo node keeps its strength and settings, and its `info` says it is off.
 
 ### Changed
 - **MOSS Turbo LoRA:** `strength` moves in steps of 0.01 (was 0.05), to try values such as 0.22 when the turbo is used at low strength over a LoRA; 1.0 stays the only strength measured.
 
 ### Fixed
+- **`MOSS Compare Sheet` labels:** a branch with the turbo on and no LoRA of its own was labelled with the turbo alone; it now shows the model file and then the turbo. A merge's name holding ' + ' is no longer repeated on its label.
+
 Audit of 0.8.0 (every finding checked first; details and tests in `docs/AUDIT_0.8.0.md`):
 - **`MOSS KSampler` turbo input:** a LoRA that changes no weight of the model (made for another model) is now an error; before, the few-step settings still ran and the metadata named the turbo. Strength 0 means no turbo.
 - **`MOSS KSampler` denoise:** denoise 0 no longer crashes (the latent passes through); in `exact` mode the reported start sigma and steps are those of the schedule actually run (they differed with schedulers that start below sigma max).

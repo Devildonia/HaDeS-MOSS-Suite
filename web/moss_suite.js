@@ -201,7 +201,7 @@ const INSTALLERS = {
             this.setDirtyCanvas(true, true);
         };
     },
-    HaDeSMossKSampler(node) {
+    HaDeSMossKSampler(node, title = "MOSS KSAMPLER") {
         // a connected turbo input that is on overrides these in the backend: draw them faded (still editable for when it is off)
         const TURBO_OVERRIDES = new Set(["steps", "cfg", "sampler_name", "scheduler", "slg"]);
         // the MOSS Turbo LoRA node feeding the turbo input
@@ -222,7 +222,7 @@ const INSTALLERS = {
             return Number.isFinite(steps) ? steps : 4;
         };
         banner(node, {
-            title: "MOSS KSAMPLER",
+            title,
             getStatusText: () => {
                 const shift = ` · shift ${num(node, "flow_shift") > 0 ? num(node, "flow_shift") : "model"}`;
                 // a connected turbo input overrides steps / CFG / sampler / scheduler / SLG in the backend
@@ -237,6 +237,10 @@ const INSTALLERS = {
             },
         });
         styleWidgets(node, { sliders: { cfg: [1, 8], denoise: [0, 1], flow_shift: [0, 12] }, dimmed: (name) => TURBO_OVERRIDES.has(name) && turboLinked() });
+    },
+    // same rows as the KSampler: a turbo that is on draws steps / CFG / sampler / scheduler / SLG faded
+    HaDeSMossCompareSampler(node) {
+        INSTALLERS.HaDeSMossKSampler(node, "COMPARE SAMPLER · A B C D");
     },
     HaDeSMossPromptEnhancer(node) {
         const mode = () => widget(node, "mode")?.value;

@@ -9,7 +9,7 @@ NODE_NAMES = {
     "latent": "Latent", "layout": "Layout Compiler", "ksampler": "KSampler", "prompt_enhancer": "Prompt Enhancer",
     "multi_lora": "Multi-LoRA", "layout_editor": "Layout Editor", "loader": "Loader", "metadata_reader": "Metadata Reader", "control": "Control",
     "turbo": "Turbo LoRA", "sampler_metadata": "Sampler Metadata", "image_saver": "Image Saver", "compare_sheet": "Compare Sheet", "telemetry": "Suite Telemetry",
-    "layout_regions": "Layout Regions", "image_audit": "Image Audit", "text_check": "Text Check",
+    "layout_regions": "Layout Regions", "image_audit": "Image Audit", "text_check": "Text Check", "compare_sampler": "Compare Sampler",
 }
 
 
@@ -153,12 +153,16 @@ class HaDeSMossSuiteTelemetry:
             meta = parse_info_meta(text)
             if meta is not None and meta.get("node") in NODE_NAMES:
                 metas.append(meta)
+                # a Compare Sampler's branches carry the KSampler, LoRA and model settings of every model it sampled
+                for branch in (meta.get("branches") or {}).values() if meta["node"] == "compare_sampler" else ():
+                    metas += [m for m in branch if isinstance(m, dict) and m.get("node") in NODE_NAMES and m not in metas]
             else:
                 foreign += 1
         try:
             findings = diagnose(metas)
         except (KeyError, TypeError, ValueError) as e:  # an incomplete or hand-made trailer: report it instead of stopping the workflow
             findings = [("warning", f"a connected info trailer is incomplete ({type(e).__name__}: {e}); the checks were skipped")]
+        findings = list(dict.fromkeys(findings))  # four branches with the same settings give the same note once
         counts = {lvl: sum(1 for l, _ in findings if l == lvl) for lvl in ("error", "warning", "note")}
 
         lines = [f"# {report_title}", "", f"Nodes read: {', '.join(NODE_NAMES[m['node']] for m in metas) or 'none'}"

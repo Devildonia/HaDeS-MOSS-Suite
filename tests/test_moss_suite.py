@@ -975,6 +975,66 @@ class TestCompareSheet(unittest.TestCase):
             torch.zeros(1, 16, 16, 3), "tests/blind", False, False, footer="", **imgs, **infos)["result"][1]))
 
 
+class TestCompareSampler(unittest.TestCase):
+    class Model:
+        def __init__(self, recipe):
+            self.recipe = recipe
+
+        def get_attachment(self, key):
+            return self.recipe if key == "hades_moss_recipe" else None
+
+    def run_sampler(self, models, turbo=None, **kw):
+        cmp = importlib.import_module(f"{PACK}.moss_compare_nodes")
+        f = common.format_info
+        calls = []
+
+        def fake_sample(_self, model, positive, negative, latent, seed, steps, cfg, sampler_name, scheduler, denoise, flow_shift, slg,
+                        vae=None, turbo=None, denoise_mode=None, **_):
+            calls.append((model, seed, steps, cfg))
+            on = turbo is not None and turbo["strength"] != 0 and turbo.get("enabled", True)
+            t = dict(turbo=turbo["lora_name"], turbo_strength=turbo["strength"]) if on else {}
+            info = f("x", "ksampler", seed=seed, steps=steps, cfg=cfg, sampler=sampler_name, scheduler=scheduler, width=64, height=64,
+                     denoise=1.0, flow_shift=5.0, slg="off", **t)
+            return ({"samples": None}, torch.full((1, 16, 16, 3), len(calls) / 8.0), info)
+
+        named = {f"model_{s}": m for s, m in zip("BCD", models[1:])}
+        with patch.object(cmp.HaDeSMossKSampler, "sample", fake_sample):
+            out = cmp.HaDeSMossCompareSampler().compare(models[0], None, None, None, None, 7, 15, 2.5, "euler", "simple", "tests/csampler",
+                                                         False, False, turbo=turbo, **named, **kw)
+        return out, calls
+
+    def test_labels_come_from_what_each_model_carries(self):
+        loader = lambda name: {"node": "loader", "model": name, "model_file": f"MOSS/{name}", "precision": "bf16", "weight_dtype": "default"}
+        lora_on = {"node": "multi_lora", "enabled": True, "loras": [{"name": "MOSS/forge_mega/forge_mega_s5250.safetensors", "strength": 1.0}],
+                   "turbo": [], "sources": {"model": loader("mossImage_base_bf16.safetensors")}}
+        merge = {"node": "multi_model_merger", "sources": {"model_1": loader("a.safetensors"), "model_2": loader("b.safetensors"),
+                                                             "base_model": loader("base.safetensors")}}
+        # A: LoRA on; B: Multi-LoRA off (the loader's model passed through); C: a merge; D: a model from outside the Suite
+        models = [self.Model(lora_on), self.Model(loader("mossImage_base_bf16.safetensors")), self.Model(merge), self.Model(None)]
+        with patch.object(importlib.import_module(f"{PACK}.moss_compare_nodes").folder_paths, "get_temp_directory", return_value=TMP):
+            out, calls = self.run_sampler(models, footer="")
+        meta = common.parse_info_meta(out["result"][2])
+        self.assertEqual([c[1:] for c in calls], [(7, 15, 2.5)] * 4)  # every model sampled with the same seed and settings
+        self.assertEqual(meta["labels"], ["A: forge_mega_s5250 · mossImage_base_bf16", "B: mossImage_base_bf16", "C: merge: a + b", "D"])
+        self.assertTrue(any("model_D carries no HaDeS MOSS recipe" in n for n in meta["notes"]))
+        self.assertEqual(tuple(out["result"][1].shape), (4, 16, 16, 3))
+        self.assertEqual([m["node"] for m in meta["branches"]["A"]], ["multi_lora", "ksampler", "loader"])
+
+    def test_turbo_on_and_off_and_one_cable_to_telemetry(self):
+        loader = {"node": "loader", "model": "base.safetensors", "model_file": "base.safetensors", "precision": "bf16", "weight_dtype": "default"}
+        sampler = importlib.import_module(f"{PACK}.moss_sampler_nodes")
+        turbo, _ = sampler.HaDeSMossTurbo().pick("MOSS/turbo/T8.safetensors", 0.25, 15, 2.5, "euler", "simple")
+        with patch.object(importlib.import_module(f"{PACK}.moss_compare_nodes").folder_paths, "get_temp_directory", return_value=TMP):
+            on, _ = self.run_sampler([self.Model(loader), self.Model(loader)], turbo=turbo, footer="")
+            off, _ = self.run_sampler([self.Model(loader), self.Model(loader)], turbo=dict(turbo, enabled=False), footer="")
+        self.assertEqual(common.parse_info_meta(on["result"][2])["labels"], ["A: base + T8 x0.25", "B: base + T8 x0.25"])
+        self.assertEqual(common.parse_info_meta(off["result"][2])["labels"], ["A: base", "B: base"])
+        report = telemetry.HaDeSMossSuiteTelemetry().audit("T", info_1=on["result"][2])["result"]
+        findings = json.loads(report[1])["findings"]
+        self.assertIn("Compare Sampler", report[0])
+        self.assertEqual(sum("strength 0.25" in x["message"] for x in findings), 1)  # two branches, the same note once
+
+
 class TestTextCheck(unittest.TestCase):
     def setUp(self):
         self.tc = importlib.import_module(f"{PACK}.moss_textcheck_nodes")
