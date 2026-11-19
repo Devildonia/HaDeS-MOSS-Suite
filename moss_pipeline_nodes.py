@@ -100,8 +100,8 @@ def _fields(value, allowed, required, where):
     _check(not required - value.keys(), f"{where}: missing fields {sorted(required - value.keys())}")
 
 
-def _text(value, where):
-    _check(isinstance(value, str) and value.strip(), f"{where} must be nonempty text")
+def _text(value, where, hint=""):
+    _check(isinstance(value, str) and value.strip(), f"{where} must be nonempty text{hint}")
 
 
 def _strings(value, where):
@@ -150,10 +150,11 @@ def compile_layout(draft):
         where = f"items[{i}]"
         _fields(item, _ITEM_FIELDS, {"label", "caption", "bbox"}, where)
         _check(item["label"] in ("object", "character", "text"), f"{where}.label must be object, character or text")
-        _text(item["caption"], f"{where}.caption")
-        _check(item["label"] != "text" or "text" in item, f"{where}: text items need the literal text")
+        box = f" (box {i + 1} in the Layout Editor: select it and write its {{}}, or delete it)"
+        _text(item["caption"], f"{where}.caption", box.format("caption"))
+        _check(item["label"] != "text" or "text" in item, f"{where}: text items need the literal text" + box.format("text"))
         if "text" in item:
-            _text(item["text"], f"{where}.text")
+            _text(item["text"], f"{where}.text", box.format("text"))
         for key in ("tags", "palette"):
             if key in item:
                 _strings(item[key], f"{where}.{key}")
@@ -243,24 +244,39 @@ class HaDeSMossLayoutEditor:
                    "with an optional background image. Its draft goes to the Layout Compiler.")
 
     def edit(self, draft, draft_in=None, image=None):
+        # An unfinished draft (a box without its caption, broken JSON) does not stop the editor: it still sends draft_in, so DRAFT
+        # LAYOUT can replace it, and says what is missing; the Layout Compiler refuses to generate from it with the same message.
+        problem, data = None, None
         try:
             data = json.loads(draft)
         except json.JSONDecodeError as e:
-            raise ValueError(f"HaDeS MOSS Layout Editor: the draft is not valid JSON ({e}).") from e
-        _check(isinstance(data, dict) and "items" in data, "the editor needs a layout draft (width, height, summary, items), not a caption draft")
-        _, width, height, texts = compile_layout(data)  # same validation as the Layout Compiler
-        counts = {label: sum(1 for item in data["items"] if item["label"] == label) for label in ("object", "character", "text")}
-        text = (f"HaDeS MOSS Layout Editor | {width}x{height} | {len(data['items'])} boxes: "
+            problem = f"the draft is not valid JSON ({e})"
+        if data is not None and not (isinstance(data, dict) and "items" in data):
+            problem, data = "the editor needs a layout draft (width, height, summary, items), not a caption draft", None
+        width = height = None
+        if data is not None:
+            try:
+                _, width, height, _ = compile_layout(data)  # same validation as the Layout Compiler
+            except (ValueError, KeyError, TypeError) as e:
+                problem = str(e).removeprefix("HaDeS MOSS Layout: ")
+        if not (isinstance(width, int) and isinstance(height, int)):
+            w, h = (data or {}).get("width"), (data or {}).get("height")
+            width, height = (w, h) if isinstance(w, int) and isinstance(h, int) and w > 0 and h > 0 else (1024, 1024)
+        items = data["items"] if data is not None and isinstance(data.get("items"), list) else []
+        counts = {label: sum(1 for it in items if isinstance(it, dict) and it.get("label") == label) for label in ("object", "character", "text")}
+        text = (f"HaDeS MOSS Layout Editor | {width}x{height} | {len(items)} boxes: "
                 + ", ".join(f"{n} {label}" for label, n in counts.items() if n))
-        n_dropped = len(data.get("dropped", []))
+        n_dropped = len(data["dropped"]) if data is not None and isinstance(data.get("dropped"), list) else 0
         if n_dropped:
             text += f"\n{n_dropped} dropped item(s) not placed (no box, so not sent to the model): place them on the canvas or discard them"
+        if problem:
+            text += f"\nnot ready to generate: {problem}"
         ui = {"draft_in": [draft_in] if draft_in is not None else []}  # always sent, so an unplugged draft_in clears IMPORT
         if image is not None:
             ui["images"] = nodes.PreviewImage().save_images(image[:1], filename_prefix="hades_moss_layout_bg")["ui"]["images"]
-        out = json.dumps(data, ensure_ascii=False, indent=2)
-        return {"ui": ui, "result": (out, width, height, format_info(text, "layout_editor", width=width, height=height, items=len(data["items"]),
-                                                                       dropped=n_dropped))}
+        out = json.dumps(data, ensure_ascii=False, indent=2) if data is not None else draft
+        return {"ui": ui, "result": (out, width, height, format_info(text, "layout_editor", width=width, height=height, items=len(items),
+                                                                       dropped=n_dropped, **({"problem": problem} if problem else {})))}
 
 
 NODE_CLASS_MAPPINGS = {"HaDeSMossLatent": HaDeSMossLatent, "HaDeSMossLayoutCompiler": HaDeSMossLayoutCompiler,

@@ -371,10 +371,19 @@ class TestLoras(unittest.TestCase):
         self.assertEqual(common.parse_info_meta(info)["items"], 2)
         empty_caption = json.loads(pipeline.EXAMPLE_DRAFT)
         empty_caption["items"].append({"label": "object", "caption": "", "bbox": [0, 0, 64, 64]})
-        with self.assertRaisesRegex(ValueError, r"items\[2\]\.caption"):
-            node.edit(json.dumps(empty_caption))
-        with self.assertRaises(ValueError):
-            node.edit('{"caption": "a cat"}')
+        # an unfinished box no longer stops the editor (DRAFT LAYOUT must be able to replace it): info says what is missing and
+        # draft_in still goes to the UI; the Layout Compiler refuses it, naming the box (user report 2026-11-19)
+        out = node.edit(json.dumps(empty_caption), draft_in='{"caption": "new"}')
+        self.assertEqual(out["ui"]["draft_in"], ['{"caption": "new"}'])
+        meta = common.parse_info_meta(out["result"][3])
+        self.assertIn("items[2].caption", meta["problem"])
+        self.assertIn("not ready to generate", out["result"][3])
+        with self.assertRaisesRegex(ValueError, r"items\[2\]\.caption must be nonempty text \(box 3 in the Layout Editor"):
+            pipeline.HaDeSMossLayoutCompiler().compile(out["result"][0], 1)
+        for broken in ('{"caption": "a cat"}', "{not json"):
+            out = node.edit(broken, draft_in="x")
+            self.assertEqual(out["ui"]["draft_in"], ["x"])
+            self.assertIn("problem", common.parse_info_meta(out["result"][3]))
 
     def test_merger_and_resize_files_load_in_core(self):
         merged_path = loras.HaDeSMossLoraMerger().merge(self.model, "split.safetensors", 1.0, "fused.safetensors", 1.0, 64, "merged", overwrite_existing=True)["result"][0]
