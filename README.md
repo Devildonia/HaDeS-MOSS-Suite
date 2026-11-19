@@ -296,7 +296,7 @@ Dev Tools and tool checks (CPU, no model loading): `python custom_nodes/HaDeS-MO
 
 Every new node also requires real frontend acceptance in classic HaDeS, classic standard widgets, and Nodes 2.0 / Vue. The Dev Tools were checked in all three on frontend 1.57.4; mode-switch fixes and execution evidence are in [`tools/RESULTS.md`](tools/RESULTS.md#three-view-frontend-acceptance-2026-11-11).
 
-Set `HADES_MOSS_TEST_CUDA=1` to include the CUDA quantized-export checks; the default run uses CPU. CI tests ComfyUI v0.43.0 on Linux and Windows, and upstream master on Linux. These checks use small synthetic weights; they do not measure image quality or full-model VRAM. Audit-fix evidence: [`docs/AUDIT_0.6.1.md`](docs/AUDIT_0.6.1.md).
+Set `HADES_MOSS_TEST_CUDA=1` to include the CUDA quantized-export checks; the default run uses CPU. CI tests ComfyUI v0.43.0 on Linux and Windows, and upstream master on Linux. A second CI job checks the Comfy Registry package as a user gets it: `comfy node pack` builds the zip from the commit, `tests/check_package.py contents` checks what ships and what must not (tests, CI, docs, the other tools, the Dev Tools), and a clean ComfyUI with only the unpacked zip must register exactly the distributed nodes, serve their frontend files, log no import failure and know every node of every example with its widget count (`tests/check_package.py server`). These checks use small synthetic weights; they do not measure image quality or full-model VRAM. Audit-fix evidence: [`docs/AUDIT_0.6.1.md`](docs/AUDIT_0.6.1.md).
 
 ## Tools
 
