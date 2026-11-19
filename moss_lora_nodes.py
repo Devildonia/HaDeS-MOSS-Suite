@@ -12,7 +12,7 @@ import comfy.model_management
 import comfy.utils
 import comfy.weight_adapter
 
-from .moss_common import (reserve_path, write_atomic, check_compatible, format_info, format_model_info, is_quantized, key_patches, key_patches_weight, key_slot, model_weights,
+from .moss_common import (reserve_path, reserved, write_atomic, check_compatible, format_info, format_model_info, is_quantized, key_patches, key_patches_weight, key_slot, model_weights,
                           rescale_for, residual_scale)
 from .moss_merger_nodes import GROUPS, layer_group
 
@@ -105,7 +105,8 @@ class HaDeSMossLoraExtractor:
         meta = {"format": "pt", "ss_base_model_version": "moss_image", "hades/rank": str(rank), "hades/energy_kept": f"{mean_energy:.4f}",
                 **({"hades/model_tuned": tuned_name.strip()} if tuned_name.strip() else {}),
                 **({"hades/model_base": base_name.strip()} if base_name.strip() else {})}
-        write_atomic(path, lambda tmp: safetensors.torch.save_file(lora_sd, tmp, metadata=meta))
+        with reserved(path):
+            write_atomic(path, lambda tmp: safetensors.torch.save_file(lora_sd, tmp, metadata=meta))
 
         lines = [
             f"HaDeS MOSS LoRA Extractor | {os.path.basename(path)} ({os.path.getsize(path) / 1024 ** 2:.1f} MB) | rank {rank} | {n_layers} layers",
@@ -336,7 +337,13 @@ def compress(up, down, max_rank, energy_target):
 
 
 def save_lora(path, factors, diffs, max_rank, energy_target, metadata):
-    """Compresses every factor pair and writes diffusion_model.* keys. Returns (energies, ranks)."""
+    """Compresses every factor pair and writes diffusion_model.* keys. Returns (energies, ranks). A failure removes the empty
+    placeholder of a reserved path."""
+    with reserved(path):
+        return _save_lora(path, factors, diffs, max_rank, energy_target, metadata)
+
+
+def _save_lora(path, factors, diffs, max_rank, energy_target, metadata):
     out, energies, ranks = {}, [], []
     for key, (up, down) in factors.items():
         if key in diffs:
@@ -395,6 +402,10 @@ class HaDeSMossLoraResize:
         device = comfy.model_management.get_torch_device()
         factors, diffs = lora_factors(lora_name, model, 1.0, device)
         if not factors:
+            # tell the two cases apart (audit 0.8.1): full diffs apply but have no low-rank factors to compress
+            if diffs:
+                raise ValueError(f"HaDeS MOSS LoRA Resize: '{lora_name}' holds only full weight differences ({len(diffs)} .diff weights, "
+                                 "no low-rank lora_up / lora_down pairs), so there is no rank to reduce. Use it as it is.")
             raise ValueError(f"HaDeS MOSS LoRA Resize: '{lora_name}' has no LoRA layer that applies to this model.")
         src = folder_paths.get_full_path_or_raise("loras", lora_name)
         path = lora_output_path(export_filename, "HaDeS_MOSS_Resized_LoRA", overwrite_existing)

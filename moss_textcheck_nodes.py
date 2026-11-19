@@ -37,11 +37,21 @@ def levenshtein(a, b):
     return prev[-1]
 
 
+def literal(text):
+    """The text as written, only whitespace collapsed: what the `literal` flag of an item compares."""
+    return " ".join(unicodedata.normalize("NFKC", text).split())
+
+
 def similarity(expected, read):
-    """1 - edit distance / longer length, on the comparison form; 1.0 is an exact match."""
+    """1 - edit distance / longer length, on the comparison form; 1.0 is an exact match. A text made only of punctuation or
+    symbols ("!!!", "?") has an empty comparison form, so it is compared as written; an empty read never matches visible text."""
     a, b = norm(expected), norm(read)
+    if not a:
+        a, b = literal(expected).casefold(), literal(read).casefold()
     if not a and not b:
         return 1.0
+    if not a or not b:
+        return 0.0
     return 1.0 - levenshtein(a, b) / max(len(a), len(b))
 
 
@@ -80,9 +90,9 @@ def layout_items(layout):
     return w, h, out
 
 
-def crop_box(image, box, canvas, margin=0.12, min_side=384):
+def crop_box(image, box, canvas, margin=0.12, min_side=384, max_side=2048):
     """The box (canvas pixels) on the image, grown by `margin` of its size, upscaled so its short side is at least
-    `min_side`; returns (crop, (x1, y1, x2, y2) in image pixels)."""
+    `min_side` (its long side at most `max_side`); returns (crop, (x1, y1, x2, y2) in image pixels)."""
     ih, iw = int(image.shape[1]), int(image.shape[2])
     sx, sy = iw / canvas[0], ih / canvas[1]
     x1, y1, x2, y2 = box[0] * sx, box[1] * sy, box[2] * sx, box[3] * sy
@@ -92,9 +102,11 @@ def crop_box(image, box, canvas, margin=0.12, min_side=384):
     if x2 - x1 < 2 or y2 - y1 < 2:
         raise ValueError(f"MOSS Text Check: box {box} is outside the image")
     crop = image[:1, y1:y2, x1:x2, :3]
-    short = min(x2 - x1, y2 - y1)
+    short, long = min(x2 - x1, y2 - y1), max(x2 - x1, y2 - y1)
     if short < min_side:
-        k = min_side / short
+        # a thin box is upscaled at most until its long side is max_side: the reader resizes to about 1 MP anyway, and an unbounded
+        # factor made a 1024 x 4 box a 98304 x 384 tensor (audit 0.8.1)
+        k = max(1.0, min(min_side / short, max_side / long))
         crop = comfy.utils.common_upscale(crop.movedim(-1, 1), round((x2 - x1) * k), round((y2 - y1) * k), "bicubic",
                                           "disabled").movedim(1, -1).clamp(0.0, 1.0)
     return crop, (x1, y1, x2, y2)
@@ -122,7 +134,8 @@ def check(clip, image, layout="", expected_text="", max_tokens=96, reader=read):
             got = reader(clip, crop, READ_BOX, max_tokens)
             # the box may hold other text too: the best read line (or the whole answer) counts
             sim, got = max(best_line(text, [ln.strip() for ln in got.splitlines() if ln.strip()]), (similarity(text, got), got))
-            rows.append({"text": text, "read": got, "similarity": round(sim, 3), "verdict": verdict(sim), "box": list(box)})
+            rows.append({"text": text, "read": got, "similarity": round(sim, 3), "verdict": verdict(sim), "box": list(box),
+                         "literal": literal(text) == literal(got)})
             boxes.append(pix)
     expected = [t.strip() for t in expected_text.splitlines() if t.strip()]
     if not rows and not expected:
@@ -138,7 +151,8 @@ def check(clip, image, layout="", expected_text="", max_tokens=96, reader=read):
             mask[0, y1:y2, x1:x2] = 1.0
     for text in expected:
         sim, line = best_line(text, lines)
-        rows.append({"text": text, "read": line, "similarity": round(sim, 3), "verdict": verdict(sim), "box": None})
+        rows.append({"text": text, "read": line, "similarity": round(sim, 3), "verdict": verdict(sim), "box": None,
+                     "literal": literal(text) == literal(line)})
     return rows, mask, lines
 
 
@@ -171,8 +185,8 @@ class HaDeSMossTextCheck:
     OUTPUT_NODE = True
     CATEGORY = "HaDeS/MOSS Pipeline"
     DESCRIPTION = ("Reads the text in the image with MOSS-Image's own text encoder and compares it with the text asked for: each "
-                   "layout text item inside its box, or expected texts anywhere. Verdicts: exact, close (some letters differ), "
-                   "missing, or outside its box. Measured: 75 of 75 right verdicts on text drawn in common fonts (28-110 px), 19 of 20 on "
+                   "layout text item inside its box, or expected texts anywhere. Verdicts: exact (letters and digits, case and punctuation "
+                   "folded; the report says when the literal text differs), close (some letters differ), missing, or outside its box. Measured: 75 of 75 right verdicts on text drawn in common fonts (28-110 px), 19 of 20 on "
                    "text MOSS painted itself; a word cut by the image edge can be read as whole (tools/RESULTS.md).")
 
     def run(self, image, clip, layout="", expected_text="", max_tokens=96):
@@ -180,7 +194,9 @@ class HaDeSMossTextCheck:
             raise ValueError("MOSS Text Check: this CLIP cannot generate text; use MOSS-Image's text encoder (type moss_image)")
         rows, mask, lines = check(clip, image, layout or "", expected_text or "", max_tokens)
         passed = all(r["verdict"] == "exact" for r in rows)
+        # exact compares letters and digits with case and punctuation folded; the report says when the literal text differs
         report = "\n".join(f"[{r['verdict']}] {r['text']!r} -> read {r['read']!r} ({r['similarity']:.2f})"
+                           + ("; case or punctuation differ" if r["verdict"] == "exact" and not r.get("literal", True) else "")
                            + (f"; found elsewhere: {r['read_elsewhere']!r}" if "read_elsewhere" in r else "") for r in rows)
         n_ok = sum(r["verdict"] == "exact" for r in rows)
         text = f"HaDeS MOSS Text Check | {n_ok}/{len(rows)} exact | " + ("passed" if passed else "not passed") + "\n" + report

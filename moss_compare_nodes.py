@@ -222,7 +222,9 @@ class HaDeSMossCompareSheet:
             for s in slots:
                 if models[s]:
                     fields[s] = {"model": models[s], **fields[s]}
-        common, differ = split_common({s: f for s, f in fields.items() if f})
+        # every branch counts, also one without settings (an image from disk or another pack): a value goes in the footer only
+        # when every panel carries it, otherwise it stays on the labels of the panels that do (audit 0.8.1 #1)
+        common, differ = split_common(fields)
         labels, sources = [], []
         for s in slots:
             given = (kw.get(f"label_{s}") or "").strip()
@@ -232,8 +234,11 @@ class HaDeSMossCompareSheet:
             labels.append(f"{s}: {text}" if text else s)
             sources.append("label" if given else ("info" if (auto or extra) else "slot"))
         if not footer.strip():
-            prompts = {p for p in (prompt_of(metas[s]) for s in slots) if p}
-            prompt_text = next(iter(prompts)) if len(prompts) == 1 else ("prompts differ between branches" if prompts else "")
+            per_slot = [prompt_of(metas[s]) for s in slots]
+            prompts = {p for p in per_slot if p}
+            # one prompt for the sheet only when every branch carries it; a branch without one may have used any prompt
+            prompt_text = (next(iter(prompts)) if len(prompts) == 1 and all(per_slot) else
+                           "prompts differ between branches" if len(prompts) > 1 else "")
             if same_model:
                 common.insert(0, next(iter(known_models)))
             footer = " | ".join(common + ([prompt_text] if prompt_text else []))
@@ -341,7 +346,7 @@ class HaDeSMossCompareSampler:
 
     RETURN_TYPES = ("IMAGE", "IMAGE", "STRING")
     RETURN_NAMES = ("sheet", "images", "info")
-    OUTPUT_TOOLTIPS = ("The labelled sheet.", "The images A to D as one batch.",
+    OUTPUT_TOOLTIPS = ("The labelled sheet.", "Every image of every model as one batch: model A's whole batch first, then B's, C's and D's.",
                        "Labels, files and every branch's settings, for Suite Telemetry (one cable for the whole comparison).")
     FUNCTION = "compare"
     OUTPUT_NODE = True
@@ -380,7 +385,8 @@ class HaDeSMossCompareSampler:
         text += "".join(f"\nnote: {n}" for n in notes)
         info = format_info(text, "compare_sampler", labels=sm["labels"], files=sm["files"], footer=sm["footer"], notes=sm["notes"] + notes,
                            branches=branches, **({"blind_key": sm["blind_key"], "blind_seed": blind_seed} if blind else {}))
-        batch = torch.cat([im[:1] for im in images]) if len({tuple(im.shape[1:]) for im in images}) == 1 else images[0]
+        # every image, A's batch first (audit 0.8.1: only the first of each batch came out); one shared latent gives one size
+        batch = torch.cat(images) if len({tuple(im.shape[1:]) for im in images}) == 1 else images[0]
         return {"ui": out["ui"], "result": (sheet_out, batch, info)}
 
 

@@ -191,16 +191,22 @@ const INSTALLERS = {
         if (draft?.element) draft.element.style.display = "none"; // the multi-line editor is a DOM element; the classic toggle shows the JSON
         banner(node, { title: "LAYOUT EDITOR", getStatusText: () => layoutEditorStatus(draft) });
         node.addCustomWidget(createLayoutEditorWidget(node, draft));
+        // the same two buttons for the standard ComfyUI widgets, where the canvas gives way to the draft's JSON: shown only there
+        // (marked as backing widgets), never saved with the workflow
+        const run = node._hadesDraftRun;
+        for (const [label, action] of [["DRAFT LAYOUT", "draftLayout"], ["GENERATE", "generate"]]) {
+            const button = node.addWidget("button", label, null, () => run?.[action](), { serialize: false });
+            if (button) {
+                button.serialize = false;
+                hideBackingWidget(button);
+            }
+        }
         // after a run: the draft_in text (for IMPORT) and the background image the backend saw
         const origOnExecuted = node.onExecuted;
         node.onExecuted = function (message) {
             origOnExecuted?.apply(this, arguments);
+            // offered with IMPORT; the DRAFT LAYOUT run's own draft is imported by attachDraftRun from its executed message
             this._hadesDraftIn = message?.draft_in?.[0] ?? null;
-            // a DRAFT LAYOUT run imports the boxes it brought; any other run only offers them with IMPORT
-            if (this._hadesAutoImport) {
-                this._hadesAutoImport = false;
-                if (this._hadesDraftIn) this._hadesImportDraftIn?.();
-            }
             const img = message?.images?.[0];
             this._hadesLayoutBgUrl = img ? api.apiURL(`/view?filename=${encodeURIComponent(img.filename)}&type=${img.type}&subfolder=${encodeURIComponent(img.subfolder || "")}`) : null;
             this.setDirtyCanvas(true, true);

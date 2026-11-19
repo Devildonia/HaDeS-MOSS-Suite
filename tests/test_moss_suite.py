@@ -398,6 +398,13 @@ class TestLoras(unittest.TestCase):
             self.assertNotIn(f"{prefix}.lora_up.weight", f.keys())
             self.assertIn(f"{prefix}.diff", f.keys())
 
+    def test_resize_of_a_diff_only_lora_says_why(self):
+        """Audit 0.8.1: a LoRA of full diffs only was rejected as 'no LoRA layer applies to this model'."""
+        prefix = "diffusion_model.layers.0.proj.o"
+        safetensors.torch.save_file({f"{prefix}.diff": torch.full((DIM, DIM), 0.125)}, os.path.join(TMP, "only_diff.safetensors"))
+        with self.assertRaisesRegex(ValueError, "only full weight differences"):
+            loras.HaDeSMossLoraResize().resize(self.model, "only_diff.safetensors", 4, "only_diff_resized", overwrite_existing=True)
+
     def test_diff_only_merge_loads_and_reports_no_compression(self):
         key = "diffusion_model.layers.0.proj.o.weight"
         prefix = key[:-len(".weight")]
@@ -903,6 +910,11 @@ class TestCanvasCheck(unittest.TestCase):
         self.assertEqual([x for x in audit(enh, editor, f("x", "ksampler", width=1024, height=1024, **ks)) if x["level"] == "error"], [])
         # the editor's canvas against the KSampler's is still checked
         self.assertTrue(any(x["level"] == "error" for x in audit(enh, editor, f("x", "ksampler", width=1024, height=1536, **ks))))
+        # one incomplete trailer is named and left out; the other checks still run (audit 0.8.1)
+        broken = "x\nHADES_META " + json.dumps({"node": "ksampler", "steps": 25})
+        found = audit(editor, f("x", "latent", width=512, height=512, batch=1), broken)
+        self.assertTrue(any(x["level"] == "warning" and "KSampler info is incomplete" in x["message"] for x in found))
+        self.assertTrue(any(x["level"] == "error" and "Canvas mismatch" in x["message"] for x in found))
         # caption mode carries no canvas
         cap = f("x", "prompt_enhancer", mode="caption", width=1024, height=1536, image=False, decode_fallback=False, notes=[])
         self.assertEqual([x for x in audit(cap, f("x", "ksampler", width=1024, height=1024, **ks)) if x["level"] == "error"], [])
@@ -945,9 +957,10 @@ class TestCompareSheet(unittest.TestCase):
                                                    image_B=torch.rand(1, 32, 24, 3), image_C=torch.rand(1, 64, 48, 3),
                                                    info_A=multi, info_B=blockw, info_C=tel, label_C="", footer="")
         meta = common.parse_info_meta(out["result"][1])
-        self.assertEqual(meta["labels"], ["A: style_s1500", "B: style_s1600 x0.8", "C"])
-        self.assertEqual(meta["label_sources"], ["info", "info", "slot"])
-        self.assertEqual(meta["footer"], "seed 1001 | 8 steps | CFG 1 | A terrace at sunset.")
+        # only C carries settings and a prompt: they stay on its label, the footer names nothing A and B may not share (audit 0.8.1 #1)
+        self.assertEqual(meta["labels"], ["A: style_s1500", "B: style_s1600 x0.8", "C: seed 1001 · 8 steps · CFG 1"])
+        self.assertEqual(meta["label_sources"], ["info", "info", "info"])
+        self.assertEqual(meta["footer"], "")
         self.assertTrue(any("scaled" in n for n in meta["notes"]))
         sheet = out["result"][0]
         self.assertEqual(sheet.shape[0], 1)
@@ -988,6 +1001,22 @@ class TestCompareSheet(unittest.TestCase):
         self.assertEqual(meta["footer"], "20 steps | CFG 1 | euler / simple | 64x64")
         bad = cmp.HaDeSMossCompareSheet().compare(torch.rand(1, 32, 32, 3), "tests/compare_bad", False, False, info_A="HADES_META []")
         self.assertEqual(common.parse_info_meta(bad["result"][1])["labels"], ["A"])
+
+    def test_footer_only_with_what_every_branch_carries(self):
+        """Audit 0.8.1 #1: B without info (an image from disk) let A's seed, steps and prompt into the footer of the whole sheet."""
+        cmp = importlib.import_module(f"{PACK}.moss_compare_nodes")
+        f = common.format_info
+        info_A = json.dumps({"nodes": [common.parse_info_meta(f("x", "ksampler", seed=123, steps=15, cfg=2.5)),
+                                     common.parse_info_meta(f("x", "prompt_enhancer", prompt="A lighthouse."))]})
+        out = cmp.HaDeSMossCompareSheet().compare(torch.rand(1, 32, 32, 3), "tests/compare_one_info", False, False,
+                                                   image_B=torch.rand(1, 32, 32, 3), info_A=info_A, footer="")
+        meta = common.parse_info_meta(out["result"][1])
+        self.assertEqual(meta["footer"], "")
+        self.assertEqual(meta["labels"], ["A: seed 123 · 15 steps · CFG 2.5", "B"])
+        # both branches with the same settings and prompt: in the footer once
+        out = cmp.HaDeSMossCompareSheet().compare(torch.rand(1, 32, 32, 3), "tests/compare_two_info", False, False,
+                                                   image_B=torch.rand(1, 32, 32, 3), info_A=info_A, info_B=info_A, footer="")
+        self.assertEqual(common.parse_info_meta(out["result"][1])["footer"], "seed 123 | 15 steps | CFG 2.5 | A lighthouse.")
 
     def test_model_in_footer_only_when_every_branch_names_it(self):
         """0.8.1 acceptance: a branch without a model (a stock loader) left the other branch's model in the footer for the whole sheet."""
@@ -1031,7 +1060,7 @@ class TestCompareSampler(unittest.TestCase):
         def get_attachment(self, key):
             return self.recipe if key == "hades_moss_recipe" else None
 
-    def run_sampler(self, models, turbo=None, **kw):
+    def run_sampler(self, models, turbo=None, batch=1, **kw):
         cmp = importlib.import_module(f"{PACK}.moss_compare_nodes")
         f = common.format_info
         calls = []
@@ -1043,7 +1072,7 @@ class TestCompareSampler(unittest.TestCase):
             t = dict(turbo=turbo["lora_name"], turbo_strength=turbo["strength"]) if on else {}
             info = f("x", "ksampler", seed=seed, steps=steps, cfg=cfg, sampler=sampler_name, scheduler=scheduler, width=64, height=64,
                      denoise=1.0, flow_shift=5.0, slg="off", **t)
-            return ({"samples": None}, torch.full((1, 16, 16, 3), len(calls) / 8.0), info)
+            return ({"samples": None}, torch.full((batch, 16, 16, 3), len(calls) / 8.0), info)
 
         named = {f"model_{s}": m for s, m in zip("BCD", models[1:])}
         with patch.object(cmp.HaDeSMossKSampler, "sample", fake_sample):
@@ -1067,6 +1096,16 @@ class TestCompareSampler(unittest.TestCase):
         self.assertTrue(any("model_D carries no HaDeS MOSS recipe" in n for n in meta["notes"]))
         self.assertEqual(tuple(out["result"][1].shape), (4, 16, 16, 3))
         self.assertEqual([m["node"] for m in meta["branches"]["A"]], ["multi_lora", "ksampler", "loader"])
+
+    def test_images_output_keeps_every_batch_item(self):
+        """Audit 0.8.1: the sheets showed whole batches but `images` gave only the first image of each model."""
+        loader = {"node": "loader", "model": "base.safetensors", "model_file": "base.safetensors", "precision": "bf16", "weight_dtype": "default"}
+        with patch.object(importlib.import_module(f"{PACK}.moss_compare_nodes").folder_paths, "get_temp_directory", return_value=TMP):
+            out, _ = self.run_sampler([self.Model(loader), self.Model(loader)], batch=3, footer="")
+        images = out["result"][1]
+        self.assertEqual(tuple(images.shape), (6, 16, 16, 3))
+        self.assertEqual([round(float(images[i, 0, 0, 0]) * 8) for i in range(6)], [1, 1, 1, 2, 2, 2])  # A's batch first, then B's
+        self.assertEqual(out["result"][0].shape[0], 3)  # one sheet per batch index
 
     def test_turbo_on_and_off_and_one_cable_to_telemetry(self):
         loader = {"node": "loader", "model": "base.safetensors", "model_file": "base.safetensors", "precision": "bf16", "weight_dtype": "default"}
@@ -1119,6 +1158,35 @@ class TestTextCheck(unittest.TestCase):
         self.assertEqual(float(mask[0, 400, 800]), 1.0)  # the failed OPEN box, in image pixels
         self.assertEqual(float(mask[0, 50, 100]), 0.0)   # the exact title box stays black
 
+    def test_empty_read_never_passes_and_literal_flag(self):
+        """Audit 0.8.1 #2: '!!!' against an empty read was exact (both comparison forms empty), so passed was True."""
+        tc = self.tc
+        self.assertEqual(tc.similarity("!!!", ""), 0.0)
+        self.assertEqual(tc.similarity("!!!", "!!!"), 1.0)
+        self.assertLess(tc.similarity("!!!", "?"), 1.0)
+        self.assertEqual(tc.similarity("HaDeS", ""), 0.0)
+        layout = json.dumps({"width": 64, "height": 64, "items": [{"label": "text", "caption": "x", "text": "!!!", "bbox": [0, 0, 64, 32]},
+                                                                  {"label": "text", "caption": "y", "text": "12.50", "bbox": [0, 32, 64, 64]}]})
+        reads = iter(["NONE", "12 50", "12 50"])
+        rows, mask, _ = tc.check(None, torch.rand(1, 64, 64, 3), layout, "", 64, lambda *a: next(reads))
+        self.assertEqual(rows[0]["verdict"], "missing")
+        self.assertEqual(float(mask[0, 10, 10]), 1.0)
+        # the comparison form folds punctuation: exact, flagged as not literal and said so in the report
+        self.assertEqual((rows[1]["verdict"], rows[1]["literal"]), ("exact", False))
+        node = tc.HaDeSMossTextCheck()
+        clip = type("C", (), {"generate": None})()
+        check = tc.check
+        with patch.object(tc, "check", lambda clip, image, layout, expected, mt: check(clip, image, layout, expected, mt, lambda *a: "12 50")):
+            report = node.run(torch.rand(1, 64, 64, 3), clip, expected_text="12.50")["result"][0]
+        self.assertIn("case or punctuation differ", report)
+
+    def test_thin_box_upscale_is_bounded(self):
+        """Audit 0.8.1: a 1024 x 4 box was upscaled to 98304 x 384 before the reader's 1 MP limit."""
+        crop, _ = self.tc.crop_box(torch.rand(1, 64, 1024, 3), (0, 30, 1024, 34), (1024, 64), margin=0.0)
+        self.assertLessEqual(max(crop.shape[1:3]), 2048)
+        crop, _ = self.tc.crop_box(torch.rand(1, 64, 64, 3), (0, 0, 64, 32), (64, 64), margin=0.0)
+        self.assertEqual(min(crop.shape[1:3]), 384)  # small boxes still reach the reader's minimum
+
     def test_a_typo_in_its_box_is_close_not_outside(self):
         """Measured case: the box and the whole image both read 'Hello Worly'; the box also holding other text."""
         tc = self.tc
@@ -1170,9 +1238,32 @@ class TestAuditFixes(unittest.TestCase):
             common.write_atomic(path, boom)
         self.assertEqual(open(path).read(), "old")
         self.assertEqual([n for n in os.listdir(TMP) if n.startswith("atomic.") and n.endswith(".part")], [])
+        # a failed export removes its empty placeholder; a file with content is left alone (audit 0.8.1)
+        empty = common.reserve_path(lambda i: os.path.join(TMP, f"failed_{i}.safetensors"))
+        with self.assertRaises(RuntimeError):
+            with common.reserved(empty):
+                raise RuntimeError("compression failed")
+        self.assertFalse(os.path.exists(empty))
+        with self.assertRaises(RuntimeError):
+            with common.reserved(path):
+                raise RuntimeError("later failure")
+        self.assertEqual(open(path).read(), "old")
         a = common.reserve_path(lambda i: os.path.join(TMP, f"reserved_{i}.bin"))
         b = common.reserve_path(lambda i: os.path.join(TMP, f"reserved_{i}.bin"))
         self.assertNotEqual(a, b)
+
+    def test_two_saves_with_the_same_counter_get_two_files(self):
+        """Audit 0.8.1 #3: the counter was read from the folder before the weights were ready, so two exports to the same prefix
+        (two ComfyUI instances) could pick the same name and the second replaced the first."""
+        model = load_int8(tiny_state_dict(22))
+        real = saver.folder_paths.get_save_image_path
+        frozen = lambda prefix, out_dir, *a: (*real(prefix, out_dir, *a)[:2], 1, *real(prefix, out_dir, *a)[3:])
+        with patch.object(saver.folder_paths, "get_save_image_path", frozen):  # both see counter 1, as two instances would
+            a = saver.HaDeSMossModelSaver().save(model, "tests/same_counter", saver.PRECISIONS[1], False)["result"][1]
+            b = saver.HaDeSMossModelSaver().save(model, "tests/same_counter", saver.PRECISIONS[1], False)["result"][1]
+        self.assertNotEqual(a, b)
+        self.assertGreater(os.path.getsize(a), 0)
+        self.assertGreater(os.path.getsize(b), 0)
 
     def test_layout_answer_without_any_box_keeps_a_draft(self):
         """Audit 0.8.0 #8: every item without a box raised before the draft could reach the Layout Editor."""

@@ -2030,6 +2030,19 @@ The enhancer also adds elements the idea did not give: in a first run through th
 
 The two Layout Editor buttons were checked once in the classic canvas view (ComfyUI 0.43.0 / frontend 1.57.4): DRAFT LAYOUT ran only the Prompt Enhancer and the editor (history outputs `2`, `4`; partial target `4`) and imported its 5 boxes; after one box was moved, GENERATE ran the graph with the Prompt Enhancer served from the cache and the moved box unchanged, and the moon was drawn inside it. Nodes 2.0 / Vue view not checked.
 
+## Layout Editor DRAFT LAYOUT / GENERATE: acceptance in four views (2026-11-19, after audit 0.8.1)
+
+ComfyUI 0.43.0, frontend 1.57.4, RTX 5090. The `Layout from a Sentence` example with the stock SFT file; the buttons pressed with the mouse in the built-in browser pane, the queue state read from `/queue` and `/history`.
+
+| View | DRAFT LAYOUT | Edit | GENERATE |
+|---|---|---|---|
+| Classic canvas, HaDeS widgets | With a GENERATE job already running and the enhancer seed changed, the DRAFT LAYOUT job queued behind it with its own `prompt_id`; the canvas got that job's draft (5 boxes), not the running job's older one. Pressed again with the mouse: its draft imported | a box moved | the run used the moved box; enhancer from the cache; Text Check `exact` on "HaDeS" |
+| Classic canvas, standard widgets | buttons shown under the draft's JSON; the draft imported into the JSON box | the JSON's text item edited to "DONIA" | the run used "DONIA"; Text Check `exact`, *case or punctuation differ* (read "Donia") |
+| Nodes 2.0 (Vue), HaDeS widgets | canvas and buttons drawn in the Vue node; draft imported | a box dragged with the mouse (x 64 → 240) | the run used the dragged box; Text Check `exact` |
+| Nodes 2.0 (Vue), standard widgets | Vue buttons under the JSON; draft imported into the textarea | the textarea's text item edited to "MOSS" | the run used "MOSS"; Text Check `exact`, *case or punctuation differ* |
+
+Saved and reloaded: the editor's `widgets_values` hold only the draft (the buttons are not saved) and the reloaded draft is the same. An editor added and removed again cleared its run state. In Vue, an empty image preview under the editor came from another open workflow tab whose node 3 was a Load Image (the frontend keeps node outputs by node id across tabs); with that tab closed it did not appear. One workflow, one run per view: this checks the UI and the queue handling, not image quality.
+
 ## AI-model reviews (qualitative, not measurements)
 
 Preferences given by AI models on the blind sheets of the four 2026-11-11 experiments above: GPT and Gemini (screenshots supplied by the maintainer) and the assistant that ran the experiments (sealed before each key was opened, but it had seen earlier images, so never fully blind). They are kept for the record, with their tables as decoded. They are **impressions, not measurements**: the criteria differ and are not verifiable from screenshots, AI judgments may be correlated, and the same pairs were judged repeatedly. No conclusion, default or model card in this repository relies on them.

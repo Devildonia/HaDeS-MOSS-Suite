@@ -11,7 +11,7 @@ import comfy.quant_ops
 import comfy.utils
 
 from .moss_common import (count_layers, format_info, key_patches, key_patches_float, key_patches_live, key_patches_weight, model_weights,
-                          stochastic_round_bf16, write_atomic)
+                          stochastic_round_bf16, reserve_path, reserved, write_atomic)
 
 # The layout of Comfy-Org's moss_image_*_int8_convrot files: the four linears of every layer in int8 with ConvRot,
 # int8 attention in every layer, everything else (text_embedder, modulations, embedders, head, norms) in bfloat16.
@@ -67,7 +67,6 @@ class HaDeSMossModelSaver:
     def save(self, model, filename_prefix, precision, include_metadata, custom_author="HaDeS", custom_model_title="", rounding="stochastic", recipe=""):
         full_output_folder, filename, counter, _, _ = folder_paths.get_save_image_path(filename_prefix, folder_paths.get_output_directory())
         os.makedirs(full_output_folder, exist_ok=True)
-        out_path = os.path.join(full_output_folder, f"{filename}_{counter:05}_.safetensors")
 
         # Same path as comfy.sd.save_checkpoint: with dynamic VRAM the patches are applied at cast time and never
         # live in the raw state_dict, so the weights go through the lazy patching casters.
@@ -157,7 +156,11 @@ class HaDeSMossModelSaver:
             }
             if recipe.strip():
                 metadata["hades/recipe"] = recipe.strip()
-        write_atomic(out_path, lambda tmp: comfy.utils.save_torch_file(sd, tmp, metadata=metadata))
+        # the free name is created with O_EXCL only now, when the weights are ready: another export to the same folder and prefix
+        # (a second ComfyUI) gets the next number instead of replacing this file (audit 0.8.1 #3)
+        out_path = reserve_path(lambda i: os.path.join(full_output_folder, f"{filename}_{counter + i:05}_.safetensors"))
+        with reserved(out_path):
+            write_atomic(out_path, lambda tmp: comfy.utils.save_torch_file(sd, tmp, metadata=metadata))
 
         size_gb = os.path.getsize(out_path) / 1024 ** 3
         info = format_info(f"HaDeS MOSS Model Saver | {os.path.basename(out_path)} | {precision}{', stochastic rounding' if stochastic else ''} | "

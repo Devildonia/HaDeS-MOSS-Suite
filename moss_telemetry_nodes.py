@@ -160,10 +160,20 @@ class HaDeSMossSuiteTelemetry:
                     metas += [m for m in branch if isinstance(m, dict) and m.get("node") in NODE_NAMES and m not in metas]
             else:
                 foreign += 1
+        # an incomplete or hand-made trailer is reported by name and left out; the checks still run on the others (audit 0.8.1)
+        bad = []
+        for m in metas:
+            try:
+                diagnose([m])
+            except (KeyError, TypeError, ValueError) as e:
+                bad.append((m, e))
+        good = [m for m in metas if all(m is not b for b, _ in bad)]
         try:
-            findings = diagnose(metas)
-        except (KeyError, TypeError, ValueError) as e:  # an incomplete or hand-made trailer: report it instead of stopping the workflow
-            findings = [("warning", f"a connected info trailer is incomplete ({type(e).__name__}: {e}); the checks were skipped")]
+            findings = diagnose(good)
+        except (KeyError, TypeError, ValueError) as e:
+            findings = [("warning", f"the connected infos could not be checked together ({type(e).__name__}: {e}); the checks were skipped")]
+        findings = [("warning", f"the {NODE_NAMES[m['node']]} info is incomplete ({type(e).__name__}: {e}); left out of the checks")
+                    for m, e in bad] + findings
         findings = list(dict.fromkeys(findings))  # four branches with the same settings give the same note once
         counts = {lvl: sum(1 for l, _ in findings if l == lvl) for lvl in ("error", "warning", "note")}
 

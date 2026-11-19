@@ -1,3 +1,4 @@
+import contextlib
 import json
 import logging
 import os
@@ -53,6 +54,19 @@ def write_atomic(path, write):
     finally:
         if os.path.exists(tmp):
             os.remove(tmp)
+
+
+@contextlib.contextmanager
+def reserved(path):
+    """Around the work that fills a path reserve_path() created: if it fails, the empty placeholder is removed, so a failed
+    export leaves no empty .safetensors under the final name (audit 0.8.1). A file with content is never touched."""
+    try:
+        yield path
+    except BaseException:
+        with contextlib.suppress(OSError):
+            if os.path.getsize(path) == 0:
+                os.remove(path)
+        raise
 
 
 def reserve_path(candidate_fn):

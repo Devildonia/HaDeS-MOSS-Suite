@@ -112,6 +112,81 @@ function upstreamImageUrl(node) {
     return api.apiURL(`/view?filename=${encodeURIComponent(file)}&type=input&subfolder=${encodeURIComponent(parts.join("/"))}`);
 }
 
+// ---- DRAFT LAYOUT / GENERATE: shared by the canvas buttons and the standard-widget buttons ----
+// DRAFT LAYOUT runs only the nodes this editor needs (the Prompt Enhancer writing the boxes) through the frontend's own Run selected,
+// and imports the draft_in of THAT run only: the prompt_id the server gave it is kept, and an `executed` message from another
+// prompt (a job already in the queue, an earlier run of this editor) neither imports nor cancels it (audit 0.8.1 #4).
+const sameNode = (detail, node) => [detail?.display_node, detail?.node].some((id) => id != null && (String(id) === String(node.id) || String(id).endsWith(`:${node.id}`)));
+
+export function attachDraftRun(node, importDraftIn) {
+    if (node._hadesDraftRun) return node._hadesDraftRun;
+    let pending = null; // the prompt_id of this editor's DRAFT LAYOUT run, until it ends
+    const early = new Map(); // this editor's results by prompt_id, in case one arrives before the queue request returns its id
+    const take = (detail) => {
+        pending = null;
+        const text = detail.output?.draft_in?.[0];
+        if (text) importDraftIn(text);
+    };
+    const onExecuted = ({ detail }) => {
+        if (!detail?.prompt_id || !sameNode(detail, node)) return;
+        if (pending && detail.prompt_id === pending) return take(detail);
+        early.set(detail.prompt_id, detail);
+        if (early.size > 8) early.delete(early.keys().next().value);
+    };
+    const setPending = (id) => {
+        pending = id;
+        if (early.has(id)) take(early.get(id));
+        early.clear();
+    };
+    const onEnd = ({ detail }) => { if (pending && detail?.prompt_id === pending) pending = null; };
+    const listeners = [["executed", onExecuted], ["execution_success", onEnd], ["execution_error", onEnd], ["execution_interrupted", onEnd]];
+    for (const [ev, fn] of listeners) api.addEventListener(ev, fn);
+    const origRemoved = node.onRemoved;
+    node.onRemoved = function () {
+        for (const [ev, fn] of listeners) api.removeEventListener(ev, fn);
+        node._hadesDraftRun = null;
+        return origRemoved?.apply(this, arguments);
+    };
+
+    const hasDraftInput = () => {
+        const slot = node.inputs?.findIndex((i) => i.name === "draft_in") ?? -1;
+        return slot >= 0 && node.inputs[slot].link != null;
+    };
+    const runCommand = async (id) => {
+        const commands = app.extensionManager?.command;
+        if (commands?.execute) return commands.execute(id);
+        throw new Error(`the ComfyUI frontend has no command ${id}`);
+    };
+    const draftLayout = async () => {
+        // the prompt_id of the request whose partial targets are this editor, read from the API while the command queues it
+        const orig = api.queuePrompt;
+        let restored = false;
+        const restore = () => { if (!restored) { restored = true; api.queuePrompt = orig; } };
+        api.queuePrompt = async function (number, data, options) {
+            const res = await orig.apply(this, arguments);
+            const targets = (options?.partialExecutionTargets || []).map(String);
+            if (res?.prompt_id && targets.some((t) => t === String(node.id) || t.endsWith(`:${node.id}`))) {
+                restore();
+                setPending(res.prompt_id);
+            }
+            return res;
+        };
+        setTimeout(restore, 15000); // a request queued behind another frontend batch: give up waiting for it
+        try {
+            app.canvas.selectNode(node, false);
+            await runCommand("Comfy.QueueSelectedOutputNodes");
+        } catch (e) {
+            restore();
+            console.error("HaDeS MOSS Layout Editor: DRAFT LAYOUT could not queue", e);
+        }
+    };
+    const generate = async () => {
+        try { await runCommand("Comfy.QueuePrompt"); } catch (e) { console.error("HaDeS MOSS Layout Editor: GENERATE could not queue", e); }
+    };
+    node._hadesDraftRun = { draftLayout, generate, hasDraftInput, pendingPrompt: () => pending };
+    return node._hadesDraftRun;
+}
+
 export function createLayoutEditorWidget(node, backing) {
     const state = { sel: -1, tool: "object", drag: null, hover: null, showBg: true, place: -1 };
     const images = new Map(); // url -> HTMLImageElement
@@ -167,48 +242,16 @@ export function createLayoutEditorWidget(node, backing) {
         d.width = W; d.height = H;
     };
 
-    // items the Prompt Enhancer left out for lack of a box: one row each under the canvas, placed again by drawing a box
-    const importDraftIn = () => {
-        const imported = parseDraft(node._hadesDraftIn);
+    const importDraftIn = (text = node._hadesDraftIn) => {
+        const imported = parseDraft(text);
         if (!(imported.draft || imported.caption !== undefined)) return false;
         state.sel = -1;
         state.place = -1;
-        setWidgetValue(backing, imported.draft ? JSON.stringify(imported.draft, null, 2) : node._hadesDraftIn, node);
+        setWidgetValue(backing, imported.draft ? JSON.stringify(imported.draft, null, 2) : text, node);
         fit();
         return true;
     };
-    // after a DRAFT LAYOUT run (and only then) the boxes the run brought are imported at once
-    node._hadesImportDraftIn = importDraftIn;
-    // the run that DRAFT LAYOUT queued has ended (an error before this node, an interrupt): a later run must not import
-    for (const ev of ["execution_success", "execution_error", "execution_interrupted"]) {
-        api.addEventListener(ev, () => { node._hadesAutoImport = false; });
-    }
-
-    // run buttons: DRAFT LAYOUT runs only the nodes this editor needs (the Prompt Enhancer writing the boxes), GENERATE the whole graph
-    const hasDraftInput = () => {
-        const slot = node.inputs?.findIndex((i) => i.name === "draft_in") ?? -1;
-        return slot >= 0 && node.inputs[slot].link != null;
-    };
-    const runCommand = async (id) => {
-        const commands = app.extensionManager?.command;
-        if (commands?.execute) return commands.execute(id);
-        throw new Error(`the ComfyUI frontend has no command ${id}`);
-    };
-    const draftLayout = async () => {
-        node._hadesAutoImport = true;
-        try {
-            // the frontend's own Run selected, so nodes inside subgraphs get their execution path
-            app.canvas.selectNode(node, false);
-            await runCommand("Comfy.QueueSelectedOutputNodes");
-        } catch (e) {
-            node._hadesAutoImport = false;
-            console.error("HaDeS MOSS Layout Editor: DRAFT LAYOUT could not queue", e);
-        }
-    };
-    const generate = async () => {
-        node._hadesAutoImport = false;
-        try { await runCommand("Comfy.QueuePrompt"); } catch (e) { console.error("HaDeS MOSS Layout Editor: GENERATE could not queue", e); }
-    };
+    const { draftLayout, generate, hasDraftInput } = attachDraftRun(node, importDraftIn);
     const drawRunRow = (ctx, x, y, w, zones) => {
         const buttons = hasDraftInput() ? [["draft_run", "DRAFT LAYOUT"], ["generate", "GENERATE"]] : [["generate", "GENERATE"]];
         const gap = 6, bw = (w - gap * (buttons.length - 1)) / buttons.length;
