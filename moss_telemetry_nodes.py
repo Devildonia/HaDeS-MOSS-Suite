@@ -23,7 +23,9 @@ def diagnose(metas):
     # a layout prompt places its boxes on its own canvas: with a layout in the pipeline, every canvas must match it. Without one,
     # a latent and a KSampler of different sizes are normal (img2img, an upscale pass) and are not compared.
     layouts = [(NODE_NAMES[k], m) for k in ("layout_editor", "layout") for m in by_node.get(k, [])[:1]]
-    layouts += [("Prompt Enhancer (layout)", m) for m in by_node.get("prompt_enhancer", []) if m.get("mode") == "layout"][:1]
+    # a Layout Editor holds the canvas actually used (its own, resizable); a Prompt Enhancer whose draft it edits only gave the start
+    if "layout_editor" not in by_node:
+        layouts += [("Prompt Enhancer (layout)", m) for m in by_node.get("prompt_enhancer", []) if m.get("mode") == "layout"][:1]
     if layouts:
         canvases = layouts + [(NODE_NAMES[k], m) for k in ("latent", "ksampler") for m in by_node.get(k, [])[:1]]
         sizes = {n: (m["width"], m["height"]) for n, m in canvases}

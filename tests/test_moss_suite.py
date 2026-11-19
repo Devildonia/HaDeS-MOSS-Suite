@@ -898,6 +898,11 @@ class TestCanvasCheck(unittest.TestCase):
         # the Prompt Enhancer's layout canvas against the KSampler's -> error
         enh = f("x", "prompt_enhancer", mode="layout", width=1024, height=1536, image=False, decode_fallback=False, notes=[])
         self.assertTrue(any(x["level"] == "error" for x in audit(enh, f("x", "ksampler", width=1024, height=1024, **ks))))
+        # with a Layout Editor, its canvas is the one used: the enhancer that wrote the first draft is not compared
+        editor = f("x", "layout_editor", width=1024, height=1024, items=2, dropped=0)
+        self.assertEqual([x for x in audit(enh, editor, f("x", "ksampler", width=1024, height=1024, **ks)) if x["level"] == "error"], [])
+        # the editor's canvas against the KSampler's is still checked
+        self.assertTrue(any(x["level"] == "error" for x in audit(enh, editor, f("x", "ksampler", width=1024, height=1536, **ks))))
         # caption mode carries no canvas
         cap = f("x", "prompt_enhancer", mode="caption", width=1024, height=1536, image=False, decode_fallback=False, notes=[])
         self.assertEqual([x for x in audit(cap, f("x", "ksampler", width=1024, height=1024, **ks)) if x["level"] == "error"], [])
