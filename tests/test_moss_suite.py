@@ -1210,8 +1210,19 @@ class TestTextCheck(unittest.TestCase):
         rows, mask, _ = tc.check(None, torch.rand(1, 64, 64, 3), "", "Cafe Luna\nCLOSED", 64, reader)
         self.assertEqual([r["verdict"] for r in rows], ["exact", "missing"])
         self.assertEqual(float(mask.sum()), 0.0)
-        with self.assertRaisesRegex(ValueError, "nothing to check"):
-            tc.check(None, torch.rand(1, 64, 64, 3), json.dumps({"caption": "a cup"}), "", 64, reader)
+        # a caption draft with no quoted text: nothing to read, no error, the workflow goes on (user report 2026-11-19)
+        rows, mask, lines = tc.check(None, torch.rand(1, 64, 64, 3), json.dumps({"caption": "a cup"}), "", 64, reader)
+        self.assertEqual((rows, float(mask.sum()), lines), ([], 0.0, []))
+        clip = type("C", (), {"generate": None})()
+        out = tc.HaDeSMossTextCheck().run(torch.rand(1, 64, 64, 3), clip, layout=json.dumps({"caption": "a cup"}))["result"]
+        self.assertTrue(out[2])
+        self.assertIn("nothing to check", out[0])
+        self.assertTrue(common.parse_info_meta(out[3])["nothing_to_check"])
+        # a caption draft (detailed / caption mode): its quoted texts are the texts asked for, anywhere in the image
+        draft = json.dumps({"caption": 'A bakery whose sign reads "Cafe Luna", a chalkboard with “OPEN 24H” and "!!" in pencil.'})
+        self.assertEqual(tc.quoted_texts(draft), ["Cafe Luna", "OPEN 24H"])
+        rows, _, _ = tc.check(None, torch.rand(1, 64, 64, 3), draft, "", 64, reader)
+        self.assertEqual([(r["text"], r["verdict"]) for r in rows], [("Cafe Luna", "exact"), ("OPEN 24H", "exact")])
         with self.assertRaisesRegex(ValueError, "cannot generate text"):
             tc.HaDeSMossTextCheck().run(torch.rand(1, 64, 64, 3), object(), expected_text="X")
 

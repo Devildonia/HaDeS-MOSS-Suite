@@ -10,6 +10,10 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - **CI: the published package checked as a user gets it** (suggested by audit 0.8.1): `comfy node pack` builds the zip, `tests/check_package.py` checks its files and loads it in a clean ComfyUI (no git checkout), which must register exactly the distributed nodes, serve their frontend, log no import failure and know every example's nodes and widget counts. Run locally on the 0.9.0 tree, with a stand-in for comfy node pack (git-tracked files minus .comfyignore) and a clean CPU ComfyUI 0.43.0: 37 files, 23 nodes, 4 frontend files, 10 examples, all checks passed.
 
+### Fixed
+- **MOSS Layout Editor, picking a box:** a click takes the smallest box under the pointer (the topmost of equal sizes). A box covering the whole canvas, drawn on top, made the boxes inside it impossible to select, move or resize; it is now picked where no other box is.
+- **MOSS Text Check with a caption prompt:** a caption draft (the Prompt Enhancer in `caption` / `detailed` mode) on `layout` stopped the workflow with *nothing to check*. Its texts in quotes (`a sign that reads "OPEN"`) are now the texts looked for; with no text asked for at all, the node says so, `passed` is true and the workflow goes on.
+
 ## [0.9.0] - 2026-11-19
 
 ### Added

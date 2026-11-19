@@ -90,6 +90,23 @@ def layout_items(layout):
     return w, h, out
 
 
+QUOTED = re.compile(r'"([^"\n]{1,80})"|“([^”\n]{1,80})”|«([^»\n]{1,80})»')
+
+
+def quoted_texts(draft):
+    """The texts in quotes of a caption draft ({"caption": ...}, as the Prompt Enhancer writes in caption / detailed mode): how a
+    MOSS-Image prompt asks for visible text (`a sign that reads "OPEN"`). [] for anything else."""
+    try:
+        data = json.loads(draft)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    caption = data.get("caption") if isinstance(data, dict) else None
+    if not isinstance(caption, str):
+        return []
+    found = [next(g for g in m.groups() if g is not None).strip() for m in QUOTED.finditer(caption)]
+    return list(dict.fromkeys(f for f in found if any(c.isalnum() for c in f)))
+
+
 def crop_box(image, box, canvas, margin=0.12, min_side=384, max_side=2048):
     """The box (canvas pixels) on the image, grown by `margin` of its size, upscaled so its short side is at least
     `min_side` (its long side at most `max_side`); returns (crop, (x1, y1, x2, y2) in image pixels)."""
@@ -138,8 +155,10 @@ def check(clip, image, layout="", expected_text="", max_tokens=96, reader=read):
                          "literal": literal(text) == literal(got)})
             boxes.append(pix)
     expected = [t.strip() for t in expected_text.splitlines() if t.strip()]
-    if not rows and not expected:
-        raise ValueError("MOSS Text Check: nothing to check; connect a layout with text items or write the expected text")
+    if not parsed and layout and layout.strip():  # a caption draft: its quoted texts are the texts asked for
+        expected += [q for q in quoted_texts(layout) if q not in expected]
+    if not rows and not expected:  # no text asked for: nothing to read, and the workflow goes on
+        return [], mask, []
     whole = reader(clip, image, READ_ALL, max_tokens * 2) if (expected or any(r["verdict"] != "exact" for r in rows)) else ""
     lines = [ln.strip(" -*•\t") for ln in whole.splitlines() if ln.strip(" -*•\t")]
     for r, pix in zip(rows, boxes):
@@ -168,7 +187,8 @@ class HaDeSMossTextCheck:
             "optional": {
                 "layout": ("STRING", {"forceInput": True, "tooltip": "Layout draft JSON (Prompt Enhancer, Layout Editor or Layout "
                                                                       "Compiler): each text item is read inside its box, scaled from the "
-                                                                      "layout canvas to the image."}),
+                                                                      "layout canvas to the image. A caption draft (Prompt Enhancer in "
+                                                                      "caption / detailed mode): the texts in quotes are looked for anywhere."}),
                 "expected_text": ("STRING", {"default": "", "multiline": True, "tooltip": "Texts to look for anywhere in the image, one "
                                                                                             "per line (for prompts without a layout)."}),
                 "max_tokens": ("INT", {"default": 96, "min": 16, "max": 512, "tooltip": "Longest answer per reading, in tokens."}),
@@ -194,6 +214,11 @@ class HaDeSMossTextCheck:
             raise ValueError("MOSS Text Check: this CLIP cannot generate text; use MOSS-Image's text encoder (type moss_image)")
         rows, mask, lines = check(clip, image, layout or "", expected_text or "", max_tokens)
         passed = all(r["verdict"] == "exact" for r in rows)
+        if not rows:
+            text = ("HaDeS MOSS Text Check | nothing to check: no text item in the layout, no quoted text in the caption draft, "
+                    "no expected_text")
+            info = format_info(text, "text_check", passed=True, items=[], read_whole=[], nothing_to_check=True)
+            return {"ui": {"text": [text]}, "result": (text, mask, True, info)}
         # exact compares letters and digits with case and punctuation folded; the report says when the literal text differs
         report = "\n".join(f"[{r['verdict']}] {r['text']!r} -> read {r['read']!r} ({r['similarity']:.2f})"
                            + ("; case or punctuation differ" if r["verdict"] == "exact" and not r.get("literal", True) else "")

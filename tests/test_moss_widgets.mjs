@@ -106,3 +106,15 @@ test("style switch keeps native output previews visible", () => {
     context.setNodeClassicUI(target, false, true);
     assert.equal(preview.hidden, undefined);
 });
+
+test("layout editor picks the smallest box under the pointer, so a full-canvas box does not hide the others", () => {
+    const source = readFileSync(new URL("../web/moss_layout_editor.js", import.meta.url), "utf8");
+    const fn = source.match(/export function pickBox[\s\S]*?\n}\r?\n/)[0].replace("export ", "");
+    const pickBox = vm.runInNewContext(`(${fn.replace("function pickBox", "function")})`);
+    const background = [0, 0, 1024, 1024], moon = [700, 100, 900, 300];
+    assert.equal(pickBox([moon, background], 800, 200), 0);  // the background drawn on top of the moon
+    assert.equal(pickBox([background, moon], 800, 200), 1);
+    assert.equal(pickBox([moon, background], 50, 900), 1);   // where only the background is
+    assert.equal(pickBox([moon, background], 2000, 2000), -1);
+    assert.equal(pickBox([[0, 0, 10, 10], [0, 0, 10, 10]], 5, 5), 1);  // equal sizes: the topmost
+});

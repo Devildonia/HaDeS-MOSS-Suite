@@ -40,6 +40,18 @@ function parseDraft(text) {
     }
 }
 
+// index of the smallest box containing (px, py), the topmost of equal sizes; -1 when none
+export function pickBox(boxes, px, py) {
+    let best = -1, bestArea = Infinity;
+    for (let i = boxes.length - 1; i >= 0; i--) {
+        const b = boxes[i];
+        if (!Array.isArray(b) || px < b[0] || px > b[2] || py < b[1] || py > b[3]) continue;
+        const area = (b[2] - b[0]) * (b[3] - b[1]);
+        if (area < bestArea) { best = i; bestArea = area; }
+    }
+    return best;
+}
+
 function newDraft(caption = "") {
     return { width: 1024, height: 1024, bbox_coord_space: "abs", bbox_format: "xyxy", summary: { canvas: "single", caption }, items: [] };
 }
@@ -731,14 +743,15 @@ export function createLayoutEditorWidget(node, backing) {
                             }
                         }
                     }
-                    for (let i = boxes.length - 1; i >= 0; i--) {
+                    // the smallest box under the pointer (the topmost among equal sizes): a box covering the whole canvas, such as a
+                    // background, no longer hides the boxes inside it; it is picked where no other box is
+                    const i = pickBox(boxes, px, py);
+                    if (i >= 0) {
                         const b = boxes[i];
-                        if (Array.isArray(b) && px >= b[0] && px <= b[2] && py >= b[1] && py <= b[3]) {
-                            state.sel = i;
-                            state.drag = { kind: "move", i, orig: [...b], startX: px, startY: py, moved: false };
-                            fit();
-                            return true;
-                        }
+                        state.sel = i;
+                        state.drag = { kind: "move", i, orig: [...b], startX: px, startY: py, moved: false };
+                        fit();
+                        return true;
                     }
                     state.drag = { kind: "draw", orig: [0, 0, 0, 0], startX: px, startY: py, moved: false };
                     return true;
