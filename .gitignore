@@ -16,6 +16,7 @@ Thumbs.db
 *.zip
 
 # Notes and internal docs
+docs/
 Claude.md
 Moss.md
 AGENTS.md

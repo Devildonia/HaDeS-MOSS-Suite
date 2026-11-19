@@ -1,0 +1,56 @@
+[
+ {
+  "file": "cover.jpg",
+  "source_png": "HaDeS_MOSS 1200_00349_.png",
+  "seed": 1200,
+  "size": "1344x1792",
+  "settings": "Steps: 15, Sampler: euler, Schedule type: sgm_uniform, CFG scale: 3, Seed: 1200, Size: 1344x1792, Model hash: 6eb2884797, Model: HaDeS_MOSS_preview_beta, Shift: 5, VAE: flux2-vae, Text encoder: qwen3.5_9b_int8_convrot, Hashes: {\"model\": \"6eb2884797\"}, Version: ComfyUI, HaDeS MOSS Suite",
+  "prompt": "Official character art rendered in a highly detailed 2D european digital painting style with cel shading and volumetric shadows. A mature woman with long, flowing black hair and glowing light blue eyes stands alone on a windswept mesa during a desert storm, viewed from behind in a dynamic close-up over-the-shoulder shot. She wears a textured light brown hooded robe with a cape that billows violently in the wind, while a scarf floats around her head, partially obscuring her mouth as she reaches back to adjust it against the biting sand and ash. The scene is defined by high contrast lighting where shafts of sun pierce through the dust, casting deep, dramatic shadows across the uneven terrain of the desert. Superimposed prominently in the upper frame is the bold Spanish title \"BULLE D'ENCRE A MOSS-IMAGE PREVIEW\" featuring spectacular purple borders and a striking, legible font that commands attention against the chaotic background.",
+  "negative_prompt": "worst quality, bad anatomy, jpeg artifact, colorful"
+ },
+ {
+  "file": "knight_bw_page.jpg",
+  "source_png": "HaDeS_MOSS 1200_00323_.png",
+  "seed": 1200,
+  "size": "1344x1792",
+  "settings": "Steps: 15, Sampler: euler, Schedule type: sgm_uniform, CFG scale: 2.5, Seed: 1200, Size: 1344x1792, Model hash: 6eb2884797, Model: HaDeS_MOSS_preview_beta, Shift: 5, VAE: flux2-vae, Text encoder: qwen3.5_9b_int8_convrot, Hashes: {\"model\": \"6eb2884797\"}, Version: ComfyUI, HaDeS MOSS Suite",
+  "prompt": "Strictly monochrome: only black ink on white paper, no color at all, no gray tones; sparks and sunlight are drawn as white shapes outlined in black ink.\n\nA black and white page from a 1950s Franco-Belgian adventure comic, printed on slightly yellowed paper. Pure black ink line art with confident brush strokes, solid black shadows and fine cross-hatching, no color and no gray gradients, in the clear-line tradition of classic European comics. The page is divided into six rectangular panels in three rows of two, separated by white gutters, each panel framed by a thin black border. Hand-lettered speech balloons and caption boxes in capital letters.\n\nThe story follows a tall knight in his thirties with long flowing silver hair, piercing light eyes and a short beard, wearing intricate engraved silver armor and a torn cloak. He looks the same in every panel.\n\nPanel 1: a wide shot of a dramatic battlefield under a stormy sky, broken banners and fallen shields, the knight standing alone on a hill with his sword planted in the ground. Caption box: \"THE VALLEY OF ASH, AT DUSK.\"\n\nPanel 2: a close-up of the knight's face, rain running down his cheeks, eyes fixed on the horizon. Speech balloon: \"THEY ARE COMING.\"\n\nPanel 3: an army of dark riders charging over the ridge, lightning splitting the clouds behind them.\n\nPanel 4: the knight raises his sword in a battle stance, his cloak whipped by the wind. Speech balloon: \"NOT ONE STEP FURTHER!\"\n\nPanel 5: the knight fight against a black-helmeted rider, sparks flying from the blades, one horse rearing behind them.\n\nPanel 6: dawn after the storm, the knight kneeling exhausted among the fallen, a ray of light breaking through the clouds onto his armor. Caption box: \"BUT THE WAR HAD ONLY BEGUN...\"",
+  "negative_prompt": "worst quality, bad anatomy, jpeg artifact, colorful"
+ },
+ {
+  "file": "staircase_duel.jpg",
+  "source_png": "HaDeS_MOSS 1200_00276_.png",
+  "seed": 1200,
+  "size": "1344x1792",
+  "settings": "Steps: 15, Sampler: euler, Schedule type: sgm_uniform, CFG scale: 2.5, Seed: 1200, Size: 1344x1792, Model hash: 6eb2884797, Model: HaDeS_MOSS_preview_beta, Shift: 5, VAE: flux2-vae, Text encoder: qwen3.5_9b_int8_convrot, Hashes: {\"model\": \"6eb2884797\"}, Version: ComfyUI, HaDeS MOSS Suite",
+  "prompt": "European comic illustration rendered in bold, confident ink lines and vibrant watercolor washes depicts a climactic duel on the grand marble staircase of a candlelit Venetian palace. Towering columns frame the scene where flickering torchlight casts huge, dramatic shadows against the walls, illuminating shattered glass and a toppled candelabra scattered at the base of the steps. In the lower foreground, a heavy-bearded man clad in a crimson doublet lunges upward, his broad cutlass clashing violently against the rapier of a slender woman descending from above; sparks fly from the precise point of contact between their blades. This woman, appearing to be in her forties with silver-streaked black hair tied back in a practical knot, wears a crisp white shirt under a fitted black corset vest, her expression fierce as she maintains perfect proportion and stance against her opponent. Two speech bubbles float near their heads: the man shouts \"A woman?\" and the woman retorts sharply \"You don't miss a thing!\" The composition emphasizes the epic scale of the confrontation through exaggerated perspective and the rich texture of wet-on-wet watercolor bleeding into the deep blacks of the ink outlines, ensuring the shadows retain their correct proportions relative to the light sources.",
+  "negative_prompt": "worst quality, bad anatomy, jpeg artifact, colorful"
+ },
+ {
+  "file": "fisherwoman.jpg",
+  "source_png": "HaDeS_MOSS 1200_00313_.png",
+  "seed": 1200,
+  "size": "1344x1792",
+  "settings": "Steps: 15, Sampler: euler, Schedule type: sgm_uniform, CFG scale: 2.5, Seed: 1200, Size: 1344x1792, Model hash: 6eb2884797, Model: HaDeS_MOSS_preview_beta, Shift: 5, VAE: flux2-vae, Text encoder: qwen3.5_9b_int8_convrot, Hashes: {\"model\": \"6eb2884797\"}, Version: ComfyUI, HaDeS MOSS Suite",
+  "prompt": "A watercolor and ink portrait in European comic style. An elderly West African fisherwoman with very dark skin, deep laugh lines and a bright yellow and blue patterned headwrap laughs out loud, her head tilted back, standing on a busy wooden pier at sunrise. She holds a woven basket full of silver fish against her hip. Behind her, colorful painted fishing boats rest on the shore and seagulls circle in the pink morning sky. Warm golden light on her face, loose expressive brushstrokes, crisp ink lines on the features.",
+  "negative_prompt": "worst quality, bad anatomy, jpeg artifact, colorful"
+ },
+ {
+  "file": "lionesses.jpg",
+  "source_png": "HaDeS_MOSS 1200_00362_.png",
+  "seed": 1200,
+  "size": "1344x1792",
+  "settings": "Steps: 15, Sampler: euler, Schedule type: sgm_uniform, CFG scale: 2.5, Seed: 1200, Size: 1344x1792, Model hash: 6eb2884797, Model: HaDeS_MOSS_preview_beta, Shift: 5, VAE: flux2-vae, Text encoder: qwen3.5_9b_int8_convrot, Hashes: {\"model\": \"6eb2884797\"}, Version: ComfyUI, HaDeS MOSS Suite",
+  "prompt": "American comic illustration rendered with crisp cel shading and clean line art depicts an adult woman in her twenties standing in a detailed locker room filled with hanging jerseys, stacked rubber mats, and rows of polished wooden lockers reflecting the light. She wears a white short-sleeved volleyball uniform shirt that is slightly lifted at the front to reveal part of her flat stomach, paired with blue athletic pants bearing the number 7 printed in bold black ink on the sleeve. Her entire head of hair is styled in intricate red rastas, gathered into a high, voluminous bun atop her head adorned with a delicate pink ribbon; center flap bangs and braided forelocks frame a face bearing a light blush, now without any fringe covering her forehead. A small team logo as a lioness head is visible on her chest with the name of the team \"LIONESSES\" written clearly below it. She holds a smartphone in both hands, her gaze fixed intently on the screen as she smiles with an open mouth, capturing a fleeting expression of joy or surprise. Dramatic cinematic lighting streams from a single high window above, casting deep volumetric shadows across the concrete floor and creating high-contrast highlights that emphasize the smooth texture of her skin and the woven fabric of her clothes, adding significant depth and three-dimensional volume to both the character and the background environment. The composition focuses entirely on her upper body against the stark white wall backdrop, ensuring every detail from the braid knots to the phone's reflective surface is finely detailed. In the background, several hanging jerseys also display the text \"LIONESSES\" clearly embroidered in red thread, reinforcing the team identity within the locker room setting.",
+  "negative_prompt": "worst quality, bad anatomy, jpeg artifact"
+ },
+ {
+  "file": "black_lighthouse.jpg",
+  "source_png": "HaDeS_MOSS 1200_00307_.png",
+  "seed": 1200,
+  "size": "1344x1792",
+  "settings": "Steps: 15, Sampler: euler, Schedule type: sgm_uniform, CFG scale: 2.5, Seed: 1200, Size: 1344x1792, Model hash: 6eb2884797, Model: HaDeS_MOSS_preview_beta, Shift: 5, VAE: flux2-vae, Text encoder: qwen3.5_9b_int8_convrot, Hashes: {\"model\": \"6eb2884797\"}, Version: ComfyUI, HaDeS MOSS Suite",
+  "prompt": "A vintage European adventure comic album cover with bold ink lines and flat saturated colors. At the top, the title in large hand-lettered capital letters reads exactly: \"THE SECRET OF THE BLACK LIGHTHOUSE\". Below the title, a tall black lighthouse stands on a rocky cliff in a violent storm at night, its beam cutting through the rain. In the foreground, at the bottom of the cover, a young sailor with a red beret and a yellow raincoat rows a small wooden boat toward the cliff, fighting huge waves, while his scruffy white dog stands at the bow barking at the lighthouse. Lightning splits the dark green sky.",
+  "negative_prompt": "worst quality, bad anatomy, jpeg artifact, colorful"
+ }
+]
