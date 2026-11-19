@@ -2043,6 +2043,40 @@ ComfyUI 0.43.0, frontend 1.57.4, RTX 5090. The `Layout from a Sentence` example 
 
 Saved and reloaded: the editor's `widgets_values` hold only the draft (the buttons are not saved) and the reloaded draft is the same. An editor added and removed again cleared its run state. In Vue, an empty image preview under the editor came from another open workflow tab whose node 3 was a Load Image (the frontend keeps node outputs by node id across tabs); with that tab closed it did not appear. One workflow, one run per view: this checks the UI and the queue handling, not image quality.
 
+## Bulle d'Encre: style phrases and text-rendering factors (2026-11-19)
+
+Bulle d'Encre (`HaDeS_MOSS_preview_beta`, BF16), 1024 x 1024, 15 steps, CFG 2.5, euler / sgm_uniform, negative `worst quality, bad anatomy, jpeg artifact, colorful`, plain CLIPTextEncode. Images and data: `I:/HaDeS_MOSS/style_text_tests` on the maintainer's machine.
+
+**Style phrases.** Each phrase was put in front of four neutral scenes (a woman reading at a café, an old fisherman, a fox in snow, a lantern market), 2 seeds, against the same scene and seed with no phrase. *Move* is the CLIP-ViT-H image distance (1 - cosine) to the no-phrase image, in units of the distance between the two seeds of a scene with no phrase (0.115); *coherence* is the mean cosine between the 8 shift vectors (high: the phrase pushes every scene the same way, i.e. a consistent look).
+
+| Phrase | Move (seed gaps) | Lowest move | Coherence | By eye (seed 101) |
+|---|---:|---:|---:|---|
+| black and white manga | 3.27 | 0.269 | 0.45 | grey-tone manga in all four |
+| vintage poster | 2.94 | 0.160 | 0.24 | not a style: a framed poster or invented text ("RODOLES CIEGORE…") added in the scene |
+| pencil sketch | 2.89 | 0.202 | 0.46 | graphite sketch in all four |
+| 1950s comic book | 2.76 | 0.200 | 0.43 | bolder ink and period faces |
+| ink line art | 2.76 | 0.211 | 0.40 | black line art on white |
+| flat cel shading | 2.60 | 0.155 | 0.38 | flatter colour, cleaner shapes |
+| European comic illustration | 2.54 | 0.157 | 0.43 | stronger ink outlines and saturation |
+| watercolor painting | 2.37 | 0.119 | 0.35 | lighter, softer colour; not a clear watercolour look |
+| anime style | 2.33 | 0.077 | 0.31 | close to the default |
+| oil painting | 2.01 | 0.027 | 0.27 | close to the default |
+| 3D render | 1.21 | 0.029 | 0.14 | close to the default |
+| photograph | 0.65 | 0.011 | 0.07 | almost no change: the default of these neutral prompts is already a soft realistic illustration |
+
+The phrases that change the medium (monochrome manga, pencil, ink) move furthest and most consistently; colour comic phrases (1950s comic, European comic, flat cel) move about as far in colour; anime, oil painting, 3D render and photograph barely move this model from its default. One phrase at the start of a short prompt, two seeds: a ranking for prompting, not a measure of style quality.
+
+**Text factors.** A bakery storefront at dusk with a hanging sign, 4 seeds per condition, read by `MOSS Text Check` (expected text anywhere). Writing conditions: 3 lengths (1, 3, 6 words) x 3 ways of writing (`reads "TEXT"`, `reads TEXT`, `with the words TEXT painted on it`) x 2 cases (upper, Title Case); count conditions: 1, 2 or 3 quoted texts (sign, chalkboard, window poster).
+
+| Factor | Exact (literal) |
+|---|---|
+| 1 / 3 / 6 words | 24/24, 24/24, 23/24 |
+| quoted / bare / "the words" | 24/24, 23/24, 24/24 |
+| UPPER / Title Case | 36/36, 35/36 (Title Case rendered as written) |
+| 1 / 2 / 3 texts | 4/4, 8/8, 11/12 |
+
+94 of 96 texts were exact and literal. The two misses: a 6-word Title Case text written bare repeated a word ("Baked Baked"), and with three texts the poster's "SALE" was missing. At this size and with up to 6 words, none of these factors made a measurable difference on Bulle d'Encre; longer texts, smaller text, more texts and other models were not tested.
+
 ## AI-model reviews (qualitative, not measurements)
 
 Preferences given by AI models on the blind sheets of the four 2026-11-11 experiments above: GPT and Gemini (screenshots supplied by the maintainer) and the assistant that ran the experiments (sealed before each key was opened, but it had seen earlier images, so never fully blind). They are kept for the record, with their tables as decoded. They are **impressions, not measurements**: the criteria differ and are not verifiable from screenshots, AI judgments may be correlated, and the same pairs were judged repeatedly. No conclusion, default or model card in this repository relies on them.
