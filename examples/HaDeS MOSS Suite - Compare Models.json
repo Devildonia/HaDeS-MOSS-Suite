@@ -1,0 +1,1081 @@
+{
+ "id": "3508b696-7e0f-50c1-9565-c25660b73861",
+ "revision": 0,
+ "last_node_id": 11,
+ "last_link_id": 28,
+ "nodes": [
+  {
+   "id": 1,
+   "type": "HaDeSMossLoader",
+   "pos": [
+    0,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "moss_image_sft_bf16.safetensors",
+    "qwen3.5_9b_int8_convrot.safetensors",
+    "flux2-vae.safetensors",
+    "default",
+    "default"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossLoader",
+    "models": [
+     {
+      "name": "moss_image_sft_bf16.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_sft_bf16.safetensors",
+      "directory": "diffusion_models"
+     },
+     {
+      "name": "qwen3.5_9b_int8_convrot.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_int8_convrot.safetensors",
+      "directory": "text_encoders"
+     },
+     {
+      "name": "flux2-vae.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae.safetensors",
+      "directory": "vae"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      2,
+      10,
+      15
+     ]
+    },
+    {
+     "name": "CLIP",
+     "type": "CLIP",
+     "links": [
+      1
+     ]
+    },
+    {
+     "name": "VAE",
+     "type": "VAE",
+     "links": [
+      6,
+      14,
+      19
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      24
+     ]
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "type": "UNETLoader",
+   "pos": [
+    0,
+    380
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 1,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "moss_image_base_bf16.safetensors",
+    "default"
+   ],
+   "properties": {
+    "Node name for S&R": "UNETLoader",
+    "models": [
+     {
+      "name": "moss_image_base_bf16.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_base_bf16.safetensors",
+      "directory": "diffusion_models"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      8
+     ]
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "type": "HaDeSMossPromptEnhancer",
+   "pos": [
+    450,
+    0
+   ],
+   "size": [
+    440,
+    100
+   ],
+   "flags": {},
+   "order": 3,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "clip",
+     "type": "CLIP",
+     "link": 1
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "Photograph of a street musician playing a battered accordion in a rainy square at dusk, warm shop lights, puddles.",
+    "as written",
+    1024,
+    1024,
+    0.7,
+    1,
+    "fixed",
+    1024,
+    "",
+    "off",
+    1.0
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossPromptEnhancer"
+   },
+   "outputs": [
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "links": [
+      3,
+      11,
+      16
+     ]
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "links": [
+      4,
+      12,
+      17
+     ]
+    },
+    {
+     "name": "prompt",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "draft",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "width",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "height",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      9,
+      25
+     ]
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "type": "HaDeSMossLatent",
+   "pos": [
+    950,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 2,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "1:1",
+    1.0,
+    1024,
+    1024,
+    1,
+    1000,
+    "fixed"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossLatent"
+   },
+   "outputs": [
+    {
+     "name": "latent",
+     "type": "LATENT",
+     "links": [
+      5,
+      13,
+      18
+     ]
+    },
+    {
+     "name": "width",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "height",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      26
+     ]
+    },
+    {
+     "name": "seed",
+     "type": "INT",
+     "links": [
+      7
+     ]
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "type": "HaDeSMossCompareSampler",
+   "pos": [
+    1400,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 4,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "model_A",
+     "type": "MODEL",
+     "link": 2
+    },
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "link": 3
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "link": 4
+    },
+    {
+     "name": "latent_image",
+     "type": "LATENT",
+     "link": 5
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": 6
+    },
+    {
+     "name": "seed",
+     "type": "INT",
+     "link": 7,
+     "widget": {
+      "name": "seed"
+     }
+    },
+    {
+     "name": "model_B",
+     "type": "MODEL",
+     "link": 8,
+     "shape": 7
+    },
+    {
+     "name": "model_C",
+     "type": "MODEL",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "model_D",
+     "type": "MODEL",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "turbo",
+     "type": "MOSS_TURBO",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "prompt_info",
+     "type": "STRING",
+     "link": 9,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    0,
+    "fixed",
+    25,
+    2.5,
+    "er_sde",
+    "simple",
+    "MOSS/compare/HaDeS_MOSS_compare",
+    true,
+    true,
+    0.0,
+    "off",
+    "",
+    "",
+    "",
+    "",
+    false,
+    0,
+    ""
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossCompareSampler"
+   },
+   "outputs": [
+    {
+     "name": "sheet",
+     "type": "IMAGE",
+     "links": []
+    },
+    {
+     "name": "images",
+     "type": "IMAGE",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      27
+     ]
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "type": "HaDeSMossKSampler",
+   "pos": [
+    950,
+    900
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 5,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 10
+    },
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "link": 11
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "link": 12
+    },
+    {
+     "name": "latent_image",
+     "type": "LATENT",
+     "link": 13
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": 14,
+     "shape": 7
+    },
+    {
+     "name": "turbo",
+     "type": "MOSS_TURBO",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    1000,
+    "fixed",
+    25,
+    2.5,
+    "er_sde",
+    "simple",
+    1.0,
+    0.0,
+    "off",
+    "steps / denoise (core)"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossKSampler"
+   },
+   "outputs": [
+    {
+     "name": "latent",
+     "type": "LATENT",
+     "links": []
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "links": [
+      20
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      22
+     ]
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "type": "HaDeSMossKSampler",
+   "pos": [
+    1400,
+    900
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 6,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 15
+    },
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "link": 16
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "link": 17
+    },
+    {
+     "name": "latent_image",
+     "type": "LATENT",
+     "link": 18
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": 19,
+     "shape": 7
+    },
+    {
+     "name": "turbo",
+     "type": "MOSS_TURBO",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    1001,
+    "fixed",
+    25,
+    2.5,
+    "er_sde",
+    "simple",
+    1.0,
+    0.0,
+    "off",
+    "steps / denoise (core)"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossKSampler"
+   },
+   "outputs": [
+    {
+     "name": "latent",
+     "type": "LATENT",
+     "links": []
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "links": [
+      21
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      23
+     ]
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "type": "HaDeSMossCompareSheet",
+   "pos": [
+    1850,
+    900
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 7,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "image_A",
+     "type": "IMAGE",
+     "link": 20
+    },
+    {
+     "name": "image_B",
+     "type": "IMAGE",
+     "link": 21,
+     "shape": 7
+    },
+    {
+     "name": "image_C",
+     "type": "IMAGE",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "image_D",
+     "type": "IMAGE",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "info_A",
+     "type": "STRING",
+     "link": 22,
+     "shape": 7
+    },
+    {
+     "name": "info_B",
+     "type": "STRING",
+     "link": 23,
+     "shape": 7
+    },
+    {
+     "name": "info_C",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "info_D",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "MOSS/compare/HaDeS_MOSS_sheet",
+    true,
+    true,
+    "seed 1000",
+    "seed 1001",
+    "",
+    "",
+    false,
+    0,
+    ""
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossCompareSheet"
+   },
+   "outputs": [
+    {
+     "name": "sheet",
+     "type": "IMAGE",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "type": "HaDeSMossSuiteTelemetry",
+   "pos": [
+    1850,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 8,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "info_1",
+     "type": "STRING",
+     "link": 24,
+     "shape": 7
+    },
+    {
+     "name": "info_2",
+     "type": "STRING",
+     "link": 25,
+     "shape": 7
+    },
+    {
+     "name": "info_3",
+     "type": "STRING",
+     "link": 26,
+     "shape": 7
+    },
+    {
+     "name": "info_4",
+     "type": "STRING",
+     "link": 27,
+     "shape": 7
+    },
+    {
+     "name": "info_5",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "info_6",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "info_7",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "info_8",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "HaDeS MOSS Suite Telemetry"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossSuiteTelemetry"
+   },
+   "outputs": [
+    {
+     "name": "report",
+     "type": "STRING",
+     "links": [
+      28
+     ]
+    },
+    {
+     "name": "json",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "summary",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "type": "PreviewAny",
+   "pos": [
+    2300,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 9,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "source",
+     "type": "*",
+     "link": 28
+    }
+   ],
+   "widgets_values": [],
+   "properties": {
+    "Node name for S&R": "PreviewAny"
+   },
+   "outputs": [
+    {
+     "name": "STRING",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "type": "Note",
+   "pos": [
+    0,
+    -560
+   ],
+   "size": [
+    800,
+    520
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "widgets_values": [
+    "HaDeS MOSS Suite - Compare Models\n\n1. MOSS Compare Sampler (on): SFT (A) against Base (B) with the same prompt, latent, seed and settings,\n   saved as one sheet. Plug up to four models into model_A..model_D. Each column is labelled from what\n   the model carries (its file, merge or LoRAs), not from the wiring: a Multi-LoRA switched off shows the bare model.\n   A MOSS Turbo LoRA on the turbo input applies to every column. blind shuffles and numbers the columns;\n   the key goes to info and the PNG, never onto the sheet.\n\n2. MOSS Compare Sheet (muted, right-click > Mode > Always to use): puts any images side by side,\n   here two seeds of one model, each labelled from its sampler's info or from label_A..label_D."
+   ],
+   "properties": {}
+  }
+ ],
+ "links": [
+  [
+   1,
+   1,
+   1,
+   3,
+   0,
+   "CLIP"
+  ],
+  [
+   2,
+   1,
+   0,
+   5,
+   0,
+   "MODEL"
+  ],
+  [
+   3,
+   3,
+   0,
+   5,
+   1,
+   "CONDITIONING"
+  ],
+  [
+   4,
+   3,
+   1,
+   5,
+   2,
+   "CONDITIONING"
+  ],
+  [
+   5,
+   4,
+   0,
+   5,
+   3,
+   "LATENT"
+  ],
+  [
+   6,
+   1,
+   2,
+   5,
+   4,
+   "VAE"
+  ],
+  [
+   7,
+   4,
+   4,
+   5,
+   5,
+   "INT"
+  ],
+  [
+   8,
+   2,
+   0,
+   5,
+   6,
+   "MODEL"
+  ],
+  [
+   9,
+   3,
+   6,
+   5,
+   10,
+   "STRING"
+  ],
+  [
+   10,
+   1,
+   0,
+   6,
+   0,
+   "MODEL"
+  ],
+  [
+   11,
+   3,
+   0,
+   6,
+   1,
+   "CONDITIONING"
+  ],
+  [
+   12,
+   3,
+   1,
+   6,
+   2,
+   "CONDITIONING"
+  ],
+  [
+   13,
+   4,
+   0,
+   6,
+   3,
+   "LATENT"
+  ],
+  [
+   14,
+   1,
+   2,
+   6,
+   4,
+   "VAE"
+  ],
+  [
+   15,
+   1,
+   0,
+   7,
+   0,
+   "MODEL"
+  ],
+  [
+   16,
+   3,
+   0,
+   7,
+   1,
+   "CONDITIONING"
+  ],
+  [
+   17,
+   3,
+   1,
+   7,
+   2,
+   "CONDITIONING"
+  ],
+  [
+   18,
+   4,
+   0,
+   7,
+   3,
+   "LATENT"
+  ],
+  [
+   19,
+   1,
+   2,
+   7,
+   4,
+   "VAE"
+  ],
+  [
+   20,
+   6,
+   1,
+   8,
+   0,
+   "IMAGE"
+  ],
+  [
+   21,
+   7,
+   1,
+   8,
+   1,
+   "IMAGE"
+  ],
+  [
+   22,
+   6,
+   2,
+   8,
+   4,
+   "STRING"
+  ],
+  [
+   23,
+   7,
+   2,
+   8,
+   5,
+   "STRING"
+  ],
+  [
+   24,
+   1,
+   3,
+   9,
+   0,
+   "STRING"
+  ],
+  [
+   25,
+   3,
+   6,
+   9,
+   1,
+   "STRING"
+  ],
+  [
+   26,
+   4,
+   3,
+   9,
+   2,
+   "STRING"
+  ],
+  [
+   27,
+   5,
+   2,
+   9,
+   3,
+   "STRING"
+  ],
+  [
+   28,
+   9,
+   0,
+   10,
+   0,
+   "STRING"
+  ]
+ ],
+ "groups": [
+  {
+   "id": 1,
+   "title": "1. Compare Sampler",
+   "bounding": [
+    -30,
+    -80,
+    2740,
+    1170
+   ],
+   "color": "#335533",
+   "font_size": 24,
+   "flags": {}
+  },
+  {
+   "id": 2,
+   "title": "2. Compare Sheet (turn on to use)",
+   "bounding": [
+    920,
+    820,
+    1340,
+    840
+   ],
+   "color": "#553355",
+   "font_size": 24,
+   "flags": {}
+  }
+ ],
+ "config": {},
+ "extra": {},
+ "version": 0.4
+}

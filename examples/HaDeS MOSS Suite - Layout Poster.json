@@ -166,6 +166,12 @@
      "type": "IMAGE",
      "link": null,
      "shape": 7
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": null,
+     "shape": 7
     }
    ],
    "widgets_values": [
@@ -177,7 +183,9 @@
     1,
     "fixed",
     1024,
-    ""
+    "",
+    "off",
+    1.0
    ],
    "properties": {
     "Node name for S&R": "HaDeSMossPromptEnhancer"
@@ -283,7 +291,8 @@
     "simple",
     1.0,
     0.0,
-    "off"
+    "off",
+    "steps / denoise (core)"
    ],
    "properties": {
     "Node name for S&R": "HaDeSMossKSampler"
@@ -337,6 +346,12 @@
      "shape": 7
     },
     {
+     "name": "primary_stage_metadata",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
      "name": "positive",
      "type": "STRING",
      "link": null,
@@ -360,6 +375,11 @@
    "outputs": [
     {
      "name": "parameters",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "info",
      "type": "STRING",
      "links": []
     }
@@ -454,6 +474,11 @@
      "name": "summary",
      "type": "STRING",
      "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
     }
    ]
   },
@@ -462,7 +487,7 @@
    "type": "PreviewAny",
    "pos": [
     2000,
-    400
+    430
    ],
    "size": [
     380,

@@ -211,6 +211,70 @@ EXAMPLES = {
         "_layout": {"note": (0, -620), "load": (0, 0), "img": (0, 380), "draft": (450, 0), "editor": (950, 0), "layout": (1550, 0),
                     "enh": (1550, 600), "ks": (2050, 0), "save": (2500, 0), "tel": (2500, 480), "report": (2950, 480)},
     },
+    "HaDeS MOSS Suite - Layout from a Sentence": {
+        **loader(),
+        # 1. the idea in plain words, saying where each thing goes; the Prompt Enhancer in layout mode turns it into boxes
+        "draft": ("HaDeSMossPromptEnhancer", {"clip": ("load", 1), "idea": "A man seen from behind on the left side of a narrow street at night, "
+                                                                           "a full moon in the upper right, a small dog at the far end of the street, "
+                                                                           "part of an old brick building on the right, and the signature \"HaDeS\" "
+                                                                           "in the lower right corner.",
+                                              "mode": "layout", "width": 1024, "height": 1536, "temperature": 0.7, "seed": 1, "max_tokens": 1024,
+                                              "negative": ""}),
+        # 2. DRAFT LAYOUT brings the boxes onto the canvas; move them, then GENERATE
+        "editor": ("HaDeSMossLayoutEditor", {"draft": None, "draft_in": ("draft", 3)}),
+        "layout": ("HaDeSMossLayoutCompiler", {"draft": ("editor", 0), "batch_size": 1}),
+        "enh": prompt(("layout", 0)),
+        "ks": ksampler(("load", 0), ("layout", 1)),
+        # 3. the text boxes read back from the image
+        "check": ("HaDeSMossTextCheck", {"image": ("ks", 1), "clip": ("load", 1), "layout": ("editor", 0), "expected_text": "", "max_tokens": 96}),
+        "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_layout_sentence_%seed%", "hashes": True, "embed_workflow": True}),
+        # not the draft writer: the editor holds the canvas actually used
+        **telemetry(("load", 3), ("editor", 3), ("layout", 4), ("enh", 6), ("ks", 2), ("check", 3)),
+        "note": ("Note", {"text": "HaDeS MOSS Suite - Layout from a Sentence\n\n"
+                                  "1. Write the idea in the Prompt Enhancer on the left (layout mode), saying where each thing goes:\n"
+                                  "   left / right, upper / lower, in the centre, at the far end. Any language the text encoder reads.\n"
+                                  "   Give the exact words of any text (a title, a signature), or it may invent them.\n"
+                                  "2. Press DRAFT LAYOUT under the Layout Editor's canvas: only the enhancer and the editor run (no sampling)\n"
+                                  "   and the boxes it wrote appear on the canvas, one per thing, with its name and caption.\n"
+                                  "3. Move, resize, draw or delete boxes; select one to edit its caption or text.\n"
+                                  "4. Press GENERATE (the same as Run): the image is made with your boxes. The enhancer runs again only if\n"
+                                  "   its inputs changed; your boxes are never replaced by a normal run (it only offers the new draft with IMPORT).\n"
+                                  "5. MOSS Text Check reads each text box back from the image and says exact / close / missing.\n\n"
+                                  "Tried on 8 ideas, one seed each (tools/RESULTS.md, Layout mode): the enhancer put all 28 stated elements\n"
+                                  "in the stated region; MOSS drew 26 inside their boxes. Check the boxes before you press GENERATE."}),
+        "_layout": {"note": (0, -620), "load": (0, 0), "draft": (450, 0), "editor": (950, 0), "layout": (1550, 0),
+                    "enh": (1550, 600), "ks": (2050, 0), "check": (2050, 560), "save": (2500, 0), "tel": (2500, 480), "report": (2950, 480)},
+    },
+    "HaDeS MOSS Suite - Compare Models": {
+        **loader(),  # SFT, its text encoder and VAE
+        "base": ("UNETLoader", {"unet_name": BASE, "weight_dtype": "default"}),
+        "enh": prompt("Photograph of a street musician playing a battered accordion in a rainy square at dusk, warm shop lights, puddles."),
+        "latent": latent(),
+        # 1. MOSS Compare Sampler: every model sampled with the same prompt, latent, seed and settings, saved as one labelled sheet
+        "cmp": ("HaDeSMossCompareSampler", {"model_A": ("load", 0), "model_B": ("base", 0), "positive": ("enh", 0), "negative": ("enh", 1),
+                                            "latent_image": ("latent", 0), "vae": ("load", 2), "seed": ("latent", 4), "steps": 25, "cfg": 2.5,
+                                            "sampler_name": "er_sde", "scheduler": "simple", "filename_prefix": "MOSS/compare/HaDeS_MOSS_compare",
+                                            "save": True, "embed_workflow": True, "prompt_info": ("enh", 6), "blind": False, "blind_seed": 0}),
+        # 2. MOSS Compare Sheet (muted): any images side by side, here two seeds of one model, labelled from each sampler's info
+        "ks_a": ksampler(("load", 0), ("latent", 0), seed=1000) + (MUTED,),
+        "ks_b": ksampler(("load", 0), ("latent", 0), seed=1001) + (MUTED,),
+        "sheet": ("HaDeSMossCompareSheet", {"image_A": ("ks_a", 1), "image_B": ("ks_b", 1), "info_A": ("ks_a", 2), "info_B": ("ks_b", 2),
+                                            "label_A": "seed 1000", "label_B": "seed 1001", "filename_prefix": "MOSS/compare/HaDeS_MOSS_sheet",
+                                            "save": True, "embed_workflow": True, "blind": False, "blind_seed": 0}, MUTED),
+        **telemetry(("load", 3), ("enh", 6), ("latent", 3), ("cmp", 2)),
+        "note": ("Note", {"text": "HaDeS MOSS Suite - Compare Models\n\n"
+                                  "1. MOSS Compare Sampler (on): SFT (A) against Base (B) with the same prompt, latent, seed and settings,\n"
+                                  "   saved as one sheet. Plug up to four models into model_A..model_D. Each column is labelled from what\n"
+                                  "   the model carries (its file, merge or LoRAs), not from the wiring: a Multi-LoRA switched off shows the bare model.\n"
+                                  "   A MOSS Turbo LoRA on the turbo input applies to every column. blind shuffles and numbers the columns;\n"
+                                  "   the key goes to info and the PNG, never onto the sheet.\n\n"
+                                  "2. MOSS Compare Sheet (muted, right-click > Mode > Always to use): puts any images side by side,\n"
+                                  "   here two seeds of one model, each labelled from its sampler's info or from label_A..label_D."}),
+        "_layout": {"note": (0, -560), "load": (0, 0), "base": (0, 380), "enh": (450, 0), "latent": (950, 0), "cmp": (1400, 0),
+                    "tel": (1850, 0), "report": (2300, 0), "ks_a": (950, 900), "ks_b": (1400, 900), "sheet": (1850, 900)},
+        "_groups": [("1. Compare Sampler", ["load", "base", "enh", "latent", "cmp", "tel", "report"], "#335533"),
+                    ("2. Compare Sheet (turn on to use)", ["ks_a", "ks_b", "sheet"], "#553355")],
+    },
     "HaDeS MOSS Suite - Turbo": {
         **loader(),
         # the turbo LoRA and the settings it was trained at (4 steps, CFG 1, euler / simple), applied by the KSampler
@@ -220,6 +284,9 @@ EXAMPLES = {
         "latent": latent(),
         "ks": with_turbo(ksampler(("load", 0), ("latent", 0), seed=("latent", 4))),
         "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_turbo_%seed%", "hashes": True, "embed_workflow": True}),
+        # the settings the KSampler actually sampled with (the turbo's, not its own widgets), for other image savers
+        "used": ("HaDeSMossSamplerMetadata", {"info": ("ks", 2)}),
+        "used_text": ("PreviewAny", {"source": ("used", 8)}),
         **telemetry(("load", 3), ("enh", 6), ("latent", 3), ("ks", 2)),
     },
     "HaDeS MOSS Suite - Turbo 8 steps + Upscale x2": {
@@ -308,6 +375,11 @@ EXAMPLES = {
                                            "dynamic_energy": 0.0, "overwrite_existing": False}, MUTED),
         "extract": ("HaDeSMossLoraExtractor", {"model_tuned": ("tuned", 0), "model_base": ("load", 0), "rank": 32,
                                                "export_filename": "HaDeS_MOSS_Extracted_LoRA", "overwrite_existing": False}, MUTED),
+        # one LoRA with a strength per group of 6 layers (muted: the Multi-LoRA rows do the same, folded under each row)
+        "lbw": ("HaDeSMossLoraBlockWeight", {"model": ("load", 0), "lora_name": LORA, "strength_model": 1.0}, MUTED),
+        # what a LoRA or model file says about itself (header only): rank, layers, layout and, for Suite files, the recipe
+        "meta": ("HaDeSMossMetadataReader", {"lora_name": LORA, "model_name": "(none)", "sha256": False}),
+        "meta_text": ("PreviewAny", {"source": ("meta", 0)}),
         **telemetry(("load", 3), ("enh", 6), ("loras", 1), ("latent", 3), ("ks", 2)),
     },
 }

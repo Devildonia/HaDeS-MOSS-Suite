@@ -105,6 +105,12 @@
      "type": "IMAGE",
      "link": null,
      "shape": 7
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": null,
+     "shape": 7
     }
    ],
    "widgets_values": [
@@ -116,7 +122,9 @@
     1,
     "fixed",
     1024,
-    ""
+    "",
+    "off",
+    1.0
    ],
    "properties": {
     "Node name for S&R": "HaDeSMossPromptEnhancer"
@@ -257,7 +265,8 @@
     8,
     1.0,
     "euler",
-    "simple"
+    "simple",
+    true
    ],
    "properties": {
     "Node name for S&R": "HaDeSMossTurbo",
@@ -277,6 +286,11 @@
       8,
       22
      ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
     }
    ]
   },
@@ -345,7 +359,8 @@
     "simple",
     1.0,
     0.0,
-    "off"
+    "off",
+    "steps / denoise (core)"
    ],
    "properties": {
     "Node name for S&R": "HaDeSMossKSampler"
@@ -400,6 +415,12 @@
      "shape": 7
     },
     {
+     "name": "primary_stage_metadata",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
      "name": "positive",
      "type": "STRING",
      "link": null,
@@ -423,6 +444,11 @@
    "outputs": [
     {
      "name": "parameters",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "info",
      "type": "STRING",
      "links": []
     }
@@ -647,7 +673,8 @@
     "simple",
     0.25,
     0.0,
-    "off"
+    "off",
+    "steps / denoise (core)"
    ],
    "properties": {
     "Node name for S&R": "HaDeSMossKSampler"
@@ -794,6 +821,11 @@
     },
     {
      "name": "summary",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "info",
      "type": "STRING",
      "links": []
     }
@@ -1114,7 +1146,7 @@
     2770,
     620,
     1340,
-    780
+    810
    ],
    "color": "#553355",
    "font_size": 24,
