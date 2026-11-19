@@ -7,11 +7,14 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-19
+
 ### Added
 - **MOSS Layout Editor: `DRAFT LAYOUT` and `GENERATE` buttons** under the canvas. `DRAFT LAYOUT` (shown when `draft_in` is connected) runs only the nodes the editor needs, e.g. the Prompt Enhancer in `layout` mode, without the sampler, and the boxes it writes replace the canvas at once; move, resize or delete them, then `GENERATE` runs the whole workflow with them (the same as Run). Any other run still only offers `draft_in` with `IMPORT`. The editor is now an output node, which ComfyUI needs for that partial run (the same as Run selected).
 - **Example workflows:** `Layout from a Sentence` (Prompt Enhancer layout → DRAFT LAYOUT → Layout Editor → GENERATE → Text Check) and `Compare Models` (Compare Sampler, with a muted Compare Sheet group). Sampler Metadata is in the Turbo example and LoRA Block Weight (muted) and Metadata Reader in the LoRA Toolkit, so every node of the pack is in an example.
 
 ### Changed
+- **Behaviour an existing workflow may notice:** MOSS Compare Sampler's `images` output now carries every image of every batch (it gave one per model); MOSS Text Check no longer passes an empty read (a workflow that relied on `passed` can now stop there, rightly); a Compare Sheet footer leaves out what not every panel carries; MOSS Model Saver `nearest` files hold the weights of a whole-in-VRAM load. Details under Fixed.
 - **Example workflows** regenerated from the current node definitions (the `info` outputs, Turbo's `enabled` switch and the newer widgets were missing in some).
 
 ### Fixed
