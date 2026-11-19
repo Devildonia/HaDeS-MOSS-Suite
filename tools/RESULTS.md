@@ -2015,6 +2015,21 @@ LoRAs loaded live in the running server (15 steps, CFG 2.5, euler / simple, 896x
 - Test: `test_saver_nearest_matches_live_lora_weights` (two stacked LoRAs, float16 LoRA compute forced) checks the file against
   `ModelPatcher.patch_weight_to_device`. The 0.8.1 Saver passes it too (on the CPU nothing is patched on the fly); it guards the new path.
 
+## Layout mode: Prompt Enhancer boxes and MOSS placement (2026-11-19)
+
+Eight ideas written in Spanish, the way the maintainer writes them, each stating where 3 or 4 elements go ("un dragón enorme arriba a la derecha", "la firma \"HaDeS\" abajo a la izquierda"): 28 stated elements, 7 of them with two directions (e.g. top right). `MOSS Prompt Enhancer` in `layout` mode wrote the boxes (`qwen3.5_9b_int8_convrot`, 1024 x 1536 canvas, temperature 0.7, seed 1); the draft was compiled by `MOSS Layout Compiler` and sampled with Bulle d'Encre (`HaDeS_MOSS_preview_beta`, seed 1200, 15 steps, CFG 2.5, euler / sgm_uniform), the boxes not edited.
+
+| Check | Result |
+|---|---|
+| Box centre in the stated region (left / right < 0.45 / > 0.55 of the width, top / bottom of the height, centre 0.3-0.7), by script | **28 / 28** (the script first counted 27: its keyword for the book matched the cat's "bookshelf"; the book box is in the lower centre) |
+| Element drawn inside its box, by eye on the overlay sheet | **26 / 28**; both misses in one image: the astronaut (a 64 px wide, 500 px tall box) drawn lower, the rover (a box above the ground line) drawn lower |
+| Texts asked for (CAFÉ, MAR DEL NORTE, HaDeS, LA ÚLTIMA NOCHE, PRÓXIMAMENTE) | the boxes held the exact words; MOSS rendered all, with one extra line "LA" above LA ÚLTIMA NOCHE |
+| Items dropped by the fitting (no usable box) | 0 |
+
+The enhancer also adds elements the idea did not give: in a first run through the Layout Editor's DRAFT LAYOUT button, a signature box with invented text ("J. M. 2023") when the idea asked for "una firma" without saying what it reads. One seed per idea and one enhancer seed: individual outcomes, not a rate. Files: `I:/HaDeS_MOSS/layout_test` on the maintainer's machine (drafts, images, overlay sheet).
+
+The two Layout Editor buttons were checked once in the classic canvas view (ComfyUI 0.43.0 / frontend 1.57.4): DRAFT LAYOUT ran only the Prompt Enhancer and the editor (history outputs `2`, `4`; partial target `4`) and imported its 5 boxes; after one box was moved, GENERATE ran the graph with the Prompt Enhancer served from the cache and the moved box unchanged, and the moon was drawn inside it. Nodes 2.0 / Vue view not checked.
+
 ## AI-model reviews (qualitative, not measurements)
 
 Preferences given by AI models on the blind sheets of the four 2026-11-11 experiments above: GPT and Gemini (screenshots supplied by the maintainer) and the assistant that ran the experiments (sealed before each key was opened, but it had seen earlier images, so never fully blind). They are kept for the record, with their tables as decoded. They are **impressions, not measurements**: the criteria differ and are not verifiable from screenshots, AI judgments may be correlated, and the same pairs were judged repeatedly. No conclusion, default or model card in this repository relies on them.

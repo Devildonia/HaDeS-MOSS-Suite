@@ -147,6 +147,7 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 - **Outputs:** `draft` (to the Layout Compiler's `draft`), `width`, `height`, `info`.
 - **Image → layout:** the Prompt Enhancer in `layout` mode with an `image` writes the draft; import it here to correct the boxes.
 - **Boxes first, image after:** with the Prompt Enhancer's `draft` connected to `draft_in`, **DRAFT LAYOUT** runs only the nodes up to this editor (the sampler does not run) and puts the boxes it writes on the canvas, replacing what was there. Adjust them, then **GENERATE** runs the whole workflow (the same as Run); the Prompt Enhancer runs again only if its inputs changed. Other runs never replace the canvas: they only offer `draft_in` with IMPORT.
+- **Tried** ([`tools/RESULTS.md`](tools/RESULTS.md), Layout mode): 8 ideas written in Spanish stating where 28 elements go; the Prompt Enhancer put all 28 boxes in the stated region and MOSS drew 26 inside their boxes (the 2 misses had odd boxes), one seed each. The enhancer can add elements you did not give, such as a signature with invented text: check the boxes before GENERATE.
 
 ### `MOSS Prompt Enhancer` (`HaDeS/MOSS Pipeline`)
 - **Class:** `HaDeSMossPromptEnhancer`
