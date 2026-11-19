@@ -360,6 +360,8 @@ class TestLoras(unittest.TestCase):
         self.assertTrue(any("trained for 4 steps" in f["message"] for f in findings))
 
     def test_layout_editor_outputs_a_compilable_draft(self):
+        # an output node: the editor's DRAFT LAYOUT button runs the graph only up to it (partial execution)
+        self.assertTrue(pipeline.HaDeSMossLayoutEditor.OUTPUT_NODE)
         node = pipeline.HaDeSMossLayoutEditor()
         out = node.edit(pipeline.EXAMPLE_DRAFT, draft_in='{"caption": "x"}')
         draft, width, height, info = out["result"]

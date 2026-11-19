@@ -146,6 +146,7 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 - **Inputs:** `draft` (the JSON the canvas edits, shown as text with the standard widgets); optional `draft_in` (e.g. the Prompt Enhancer's `draft`: after a run the toolbar shows **IMPORT**, which replaces the canvas with it; it never overwrites your edits by itself) and `image` (a background for placing the boxes: pick it in a `Load Image` node wired here, shown at once even when that node is muted, otherwise after a run; **MATCH IMAGE** sets the canvas to its aspect ratio at about the same area; not sent to the model).
 - **Outputs:** `draft` (to the Layout Compiler's `draft`), `width`, `height`, `info`.
 - **Image → layout:** the Prompt Enhancer in `layout` mode with an `image` writes the draft; import it here to correct the boxes.
+- **Boxes first, image after:** with the Prompt Enhancer's `draft` connected to `draft_in`, **DRAFT LAYOUT** runs only the nodes up to this editor (the sampler does not run) and puts the boxes it writes on the canvas, replacing what was there. Adjust them, then **GENERATE** runs the whole workflow (the same as Run); the Prompt Enhancer runs again only if its inputs changed. Other runs never replace the canvas: they only offer `draft_in` with IMPORT.
 
 ### `MOSS Prompt Enhancer` (`HaDeS/MOSS Pipeline`)
 - **Class:** `HaDeSMossPromptEnhancer`

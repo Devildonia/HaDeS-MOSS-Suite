@@ -7,6 +7,9 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **MOSS Layout Editor: `DRAFT LAYOUT` and `GENERATE` buttons** under the canvas. `DRAFT LAYOUT` (shown when `draft_in` is connected) runs only the nodes the editor needs, e.g. the Prompt Enhancer in `layout` mode, without the sampler, and the boxes it writes replace the canvas at once; move, resize or delete them, then `GENERATE` runs the whole workflow with them (the same as Run). Any other run still only offers `draft_in` with `IMPORT`. The editor is now an output node, which ComfyUI needs for that partial run (the same as Run selected).
+
 ### Fixed
 - **MOSS Model Saver, `rounding` nearest:** computes the patched weights itself, the way ComfyUI does for a model loaded whole in VRAM (the weight cast to the GPU's LoRA compute dtype, the patches applied, rounded once), so the file no longer depends on what else is in VRAM. It used the core's lazy saving, whose result depends on how much of the model is loaded: run alone it gave exactly these weights, but in a running server (text encoder loaded too) it gave a file that rendered visibly different from the live LoRAs at the same seed. Checked on an RTX 5090: 0 elements differ from ComfyUI's whole-in-VRAM load (`tools/RESULTS.md`). Live renders made while the model is only partly in VRAM use LoRAs applied another way and can still differ a little from the file; the tooltip says so.
 

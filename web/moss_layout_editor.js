@@ -1,4 +1,5 @@
 import { api } from "../../scripts/api.js";
+import { app } from "../../scripts/app.js";
 import {
     HADES_FONT,
     HADES_THEME,
@@ -167,6 +168,66 @@ export function createLayoutEditorWidget(node, backing) {
     };
 
     // items the Prompt Enhancer left out for lack of a box: one row each under the canvas, placed again by drawing a box
+    const importDraftIn = () => {
+        const imported = parseDraft(node._hadesDraftIn);
+        if (!(imported.draft || imported.caption !== undefined)) return false;
+        state.sel = -1;
+        state.place = -1;
+        setWidgetValue(backing, imported.draft ? JSON.stringify(imported.draft, null, 2) : node._hadesDraftIn, node);
+        fit();
+        return true;
+    };
+    // after a DRAFT LAYOUT run (and only then) the boxes the run brought are imported at once
+    node._hadesImportDraftIn = importDraftIn;
+    // the run that DRAFT LAYOUT queued has ended (an error before this node, an interrupt): a later run must not import
+    for (const ev of ["execution_success", "execution_error", "execution_interrupted"]) {
+        api.addEventListener(ev, () => { node._hadesAutoImport = false; });
+    }
+
+    // run buttons: DRAFT LAYOUT runs only the nodes this editor needs (the Prompt Enhancer writing the boxes), GENERATE the whole graph
+    const hasDraftInput = () => {
+        const slot = node.inputs?.findIndex((i) => i.name === "draft_in") ?? -1;
+        return slot >= 0 && node.inputs[slot].link != null;
+    };
+    const runCommand = async (id) => {
+        const commands = app.extensionManager?.command;
+        if (commands?.execute) return commands.execute(id);
+        throw new Error(`the ComfyUI frontend has no command ${id}`);
+    };
+    const draftLayout = async () => {
+        node._hadesAutoImport = true;
+        try {
+            // the frontend's own Run selected, so nodes inside subgraphs get their execution path
+            app.canvas.selectNode(node, false);
+            await runCommand("Comfy.QueueSelectedOutputNodes");
+        } catch (e) {
+            node._hadesAutoImport = false;
+            console.error("HaDeS MOSS Layout Editor: DRAFT LAYOUT could not queue", e);
+        }
+    };
+    const generate = async () => {
+        node._hadesAutoImport = false;
+        try { await runCommand("Comfy.QueuePrompt"); } catch (e) { console.error("HaDeS MOSS Layout Editor: GENERATE could not queue", e); }
+    };
+    const drawRunRow = (ctx, x, y, w, zones) => {
+        const buttons = hasDraftInput() ? [["draft_run", "DRAFT LAYOUT"], ["generate", "GENERATE"]] : [["generate", "GENERATE"]];
+        const gap = 6, bw = (w - gap * (buttons.length - 1)) / buttons.length;
+        ctx.font = HADES_FONT.label;
+        ctx.textAlign = "center";
+        buttons.forEach(([kind, text], i) => {
+            const bx = x + i * (bw + gap);
+            const color = kind === "generate" ? HADES_THEME.accent : LABEL_COLORS.text;
+            drawRoundedRect(ctx, bx, y + 2, bw, 24, 4);
+            ctx.fillStyle = `${color}30`;
+            ctx.fill();
+            ctx.strokeStyle = color;
+            ctx.stroke();
+            ctx.fillStyle = HADES_THEME.textPrimary;
+            ctx.fillText(text, bx + bw / 2, y + 14.5);
+            zones.push({ kind, x: bx, y: y + 2, w: bw, h: 24 });
+        });
+    };
+
     const droppedOf = (d) => (Array.isArray(d.dropped) ? d.dropped : []);
     const detailRows = (d) => (state.sel >= 0 && d.items[state.sel] ? 4 : 1) + droppedOf(d).length;
     const drawLabel = (d) => droppedOf(d)[state.place]?.label ?? state.tool;
@@ -184,8 +245,8 @@ export function createLayoutEditorWidget(node, backing) {
             // LiteGraph asks with the node's minimum width; the canvas is drawn at the node's real width, so size it from that
             width = Math.max(width || 0, node.size?.[0] || 0);
             const p = read();
-            if (!p.draft) return [width, ROW_H * 2 + 8];
-            return [width, ROW_H + frame(width, 0, p.draft).h + 8 + detailRows(p.draft) * ROW_H + 4];
+            if (!p.draft) return [width, ROW_H * 3 + 8];
+            return [width, ROW_H + frame(width, 0, p.draft).h + 8 + (detailRows(p.draft) + 1) * ROW_H + 4];
         },
 
         draw(ctx, n, widgetWidth, y) {
@@ -212,6 +273,7 @@ export function createLayoutEditorWidget(node, backing) {
                 ctx.fillStyle = HADES_THEME.textSecondary;
                 ctx.fillText(p.caption !== undefined ? "NEW LAYOUT FROM THIS CAPTION" : "START A NEW LAYOUT", x + w / 2, by + 12.5);
                 zones.push({ kind: "new", x, y: by, w, h: 24 });
+                drawRunRow(ctx, x, by + ROW_H - 2, w, zones);
                 this._zones = zones;
                 ctx.restore();
                 return;
@@ -435,6 +497,7 @@ export function createLayoutEditorWidget(node, backing) {
                 zones.push(...actionZones, { kind: "place", index: i, x, y: ry + 2, w: ax - x, h: 24 });
                 ry += ROW_H;
             });
+            drawRunRow(ctx, x, ry, w, zones);
             this._zones = zones;
             ctx.restore();
         },
@@ -478,6 +541,8 @@ export function createLayoutEditorWidget(node, backing) {
                 else if (hit?.kind === "import") showHadesTooltip("<strong>Import</strong><br>Replaces this draft with the one at the draft_in input (from the last run).", event.clientX, event.clientY, HADES_THEME.accent);
                 else if (hit?.kind === "place") showHadesTooltip("<strong>Dropped by the Prompt Enhancer</strong><br>This item came without a usable box, so it is not sent to the model. Click, then drag on an empty part of the canvas: it joins the layout with its label, caption and text.", event.clientX, event.clientY, HADES_THEME.accent);
                 else if (hit?.kind === "discard") showHadesTooltip("<strong>Discard</strong><br>Removes this dropped item from the draft.", event.clientX, event.clientY, HADES_THEME.danger);
+                else if (hit?.kind === "draft_run") showHadesTooltip("<strong>Draft layout</strong><br>Runs only the nodes this editor needs (the Prompt Enhancer in layout mode writes the boxes), not the sampler. The boxes it writes replace this canvas: move, resize or delete them, then GENERATE.", event.clientX, event.clientY, LABEL_COLORS.text);
+                else if (hit?.kind === "generate") showHadesTooltip("<strong>Generate</strong><br>Runs the whole workflow (the same as Run) with the boxes on this canvas. The Prompt Enhancer runs again only if its inputs changed, e.g. a seed set to randomize; your boxes stay.", event.clientX, event.clientY, HADES_THEME.accent);
                 else if (hit?.kind === "match") showHadesTooltip("<strong>Match image</strong><br>Sets the canvas to the background image's aspect ratio at about the current area, snapped to 16 px.", event.clientX, event.clientY, HADES_THEME.accent);
                 else hideHadesTooltip();
                 return false;
@@ -519,6 +584,8 @@ export function createLayoutEditorWidget(node, backing) {
 
             if ((type !== "pointerdown" && type !== "mousedown") || !hit) return false;
             hideHadesTooltip();
+            if (hit.kind === "draft_run") { draftLayout(); return true; }
+            if (hit.kind === "generate") { generate(); return true; }
             if (hit.kind === "new") {
                 write(newDraft(p.caption ?? ""));
                 return true;
@@ -566,16 +633,9 @@ export function createLayoutEditorWidget(node, backing) {
                     state.showBg = !state.showBg;
                     n.setDirtyCanvas(true, false);
                     return true;
-                case "import": {
-                    const imported = parseDraft(node._hadesDraftIn);
-                    if (imported.draft || imported.caption !== undefined) {
-                        state.sel = -1;
-                        state.place = -1;
-                        setWidgetValue(backing, imported.draft ? JSON.stringify(imported.draft, null, 2) : node._hadesDraftIn, node);
-                        fit();
-                    }
+                case "import":
+                    importDraftIn();
                     return true;
-                }
                 case "label":
                     it.label = hit.label;
                     if (hit.label === "text" && it.text === undefined) it.text = "";

@@ -205,8 +205,9 @@ EXAMPLES = {
                                   "BG ON / OFF hides it, MATCH IMAGE sets the canvas to its proportions. Only a guide: the model never sees it.\n\n"
                                   "Optional (muted, right-click > Mode > Always to use):\n"
                                   "  - the Prompt Enhancer on the left, in layout mode, writes a draft from the idea, and from the picture through\n"
-                                  "    its image input. Run once, then press IMPORT in the editor's toolbar to load it, and correct the boxes.\n"
-                                  "    Your edits are never replaced by themselves."}),
+                                  "    its image input. Press DRAFT LAYOUT under the canvas: only the nodes up to the editor run\n"
+                                  "    (no sampling) and its boxes replace the canvas. Move, resize or delete them, then press GENERATE\n"
+                                  "    (the same as Run). A normal Run never replaces your boxes: it only offers the new draft with IMPORT."}),
         "_layout": {"note": (0, -620), "load": (0, 0), "img": (0, 380), "draft": (450, 0), "editor": (950, 0), "layout": (1550, 0),
                     "enh": (1550, 600), "ks": (2050, 0), "save": (2500, 0), "tel": (2500, 480), "report": (2950, 480)},
     },

@@ -196,6 +196,11 @@ const INSTALLERS = {
         node.onExecuted = function (message) {
             origOnExecuted?.apply(this, arguments);
             this._hadesDraftIn = message?.draft_in?.[0] ?? null;
+            // a DRAFT LAYOUT run imports the boxes it brought; any other run only offers them with IMPORT
+            if (this._hadesAutoImport) {
+                this._hadesAutoImport = false;
+                if (this._hadesDraftIn) this._hadesImportDraftIn?.();
+            }
             const img = message?.images?.[0];
             this._hadesLayoutBgUrl = img ? api.apiURL(`/view?filename=${encodeURIComponent(img.filename)}&type=${img.type}&subfolder=${encodeURIComponent(img.subfolder || "")}`) : null;
             this.setDirtyCanvas(true, true);

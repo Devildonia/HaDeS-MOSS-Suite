@@ -236,6 +236,8 @@ class HaDeSMossLayoutEditor:
     RETURN_TYPES = ("STRING", "INT", "INT", "STRING")
     RETURN_NAMES = ("draft", "width", "height", "info")
     FUNCTION = "edit"
+    # an output node, so its DRAFT LAYOUT button can run only the nodes up to it (ComfyUI partial execution, like Run selected)
+    OUTPUT_NODE = True
     CATEGORY = "HaDeS/MOSS Pipeline"
     DESCRIPTION = ("Visual editor for a layout draft: boxes on a canvas of the draft's size, colored by label (object, character, text), "
                    "with an optional background image. Its draft goes to the Layout Compiler.")

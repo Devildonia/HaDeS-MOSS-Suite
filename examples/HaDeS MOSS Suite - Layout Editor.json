@@ -103,6 +103,12 @@
      "type": "IMAGE",
      "link": null,
      "shape": 7
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": null,
+     "shape": 7
     }
    ],
    "widgets_values": [
@@ -114,7 +120,9 @@
     1,
     "fixed",
     1024,
-    ""
+    "",
+    "off",
+    1.0
    ],
    "properties": {
     "Node name for S&R": "HaDeSMossPromptEnhancer"
@@ -354,6 +362,12 @@
      "type": "IMAGE",
      "link": null,
      "shape": 7
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": null,
+     "shape": 7
     }
    ],
    "widgets_values": [
@@ -365,7 +379,9 @@
     1,
     "fixed",
     1024,
-    ""
+    "",
+    "off",
+    1.0
    ],
    "properties": {
     "Node name for S&R": "HaDeSMossPromptEnhancer"
@@ -471,7 +487,8 @@
     "simple",
     1.0,
     0.0,
-    "off"
+    "off",
+    "steps / denoise (core)"
    ],
    "properties": {
     "Node name for S&R": "HaDeSMossKSampler"
@@ -525,6 +542,12 @@
      "shape": 7
     },
     {
+     "name": "primary_stage_metadata",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
      "name": "positive",
      "type": "STRING",
      "link": null,
@@ -548,6 +571,11 @@
    "outputs": [
     {
      "name": "parameters",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "info",
      "type": "STRING",
      "links": []
     }
@@ -642,6 +670,11 @@
      "name": "summary",
      "type": "STRING",
      "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
     }
    ]
   },
@@ -695,7 +728,7 @@
    "inputs": [],
    "outputs": [],
    "widgets_values": [
-    "HaDeS MOSS Suite - Layout Editor\n\nLayout Editor: the boxes of the layout draft on a canvas of its size.\n  - pick OBJECT / CHARACTER / TEXT in the toolbar, then drag on an empty part of the canvas to draw a box\n  - drag a box to move it, drag its corners to resize it (16 px grid)\n  - with a box selected, the rows below edit its label, caption, text and pixels;\n    with none selected, the caption of the whole image\n  - click the size (1024 x 1024) to change the canvas; the boxes scale with it\n  - boxes outlined in red still need a caption (text boxes also their text)\nIts draft goes to the Layout Compiler, which writes the prompt and the latent of the same size;\nthe Prompt Enhancer on the right encodes that prompt as written.\n\nBackground: the Load Image wired to the editor's image input shows behind the boxes at once.\nPick your picture in the Load Image node (the editor has no upload button of its own);\nBG ON / OFF hides it, MATCH IMAGE sets the canvas to its proportions. Only a guide: the model never sees it.\n\nOptional (muted, right-click > Mode > Always to use):\n  - the Prompt Enhancer on the left, in layout mode, writes a draft from the idea, and from the picture through\n    its image input. Run once, then press IMPORT in the editor's toolbar to load it, and correct the boxes.\n    Your edits are never replaced by themselves."
+    "HaDeS MOSS Suite - Layout Editor\n\nLayout Editor: the boxes of the layout draft on a canvas of its size.\n  - pick OBJECT / CHARACTER / TEXT in the toolbar, then drag on an empty part of the canvas to draw a box\n  - drag a box to move it, drag its corners to resize it (16 px grid)\n  - with a box selected, the rows below edit its label, caption, text and pixels;\n    with none selected, the caption of the whole image\n  - click the size (1024 x 1024) to change the canvas; the boxes scale with it\n  - boxes outlined in red still need a caption (text boxes also their text)\nIts draft goes to the Layout Compiler, which writes the prompt and the latent of the same size;\nthe Prompt Enhancer on the right encodes that prompt as written.\n\nBackground: the Load Image wired to the editor's image input shows behind the boxes at once.\nPick your picture in the Load Image node (the editor has no upload button of its own);\nBG ON / OFF hides it, MATCH IMAGE sets the canvas to its proportions. Only a guide: the model never sees it.\n\nOptional (muted, right-click > Mode > Always to use):\n  - the Prompt Enhancer on the left, in layout mode, writes a draft from the idea, and from the picture through\n    its image input. Press DRAFT LAYOUT under the canvas: only the nodes up to the editor run\n    (no sampling) and its boxes replace the canvas. Move, resize or delete them, then press GENERATE\n    (the same as Run). A normal Run never replaces your boxes: it only offers the new draft with IMPORT."
    ],
    "properties": {}
   }
