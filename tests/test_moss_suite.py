@@ -979,6 +979,21 @@ class TestCompareSheet(unittest.TestCase):
             self.assertIn("hades_moss_compare", png.text)
             self.assertEqual(png.size, (sheet.shape[2], sheet.shape[1]))
 
+    def test_batch_sheets_built_one_at_a_time_match_their_files(self):
+        """Audit 0.8.1 #9: sheets are now built, saved and copied into the output one at a time; each output sheet must still be
+        exactly its saved PNG (the uint8 sheet / 255)."""
+        import numpy as np
+        from PIL import Image
+        cmp = importlib.import_module(f"{PACK}.moss_compare_nodes")
+        out = cmp.HaDeSMossCompareSheet().compare(torch.rand(3, 40, 32, 3), "tests/compare_batch", True, False,
+                                                   image_B=torch.rand(3, 40, 32, 3), footer="seed 1")
+        sheets, items = out["result"][0], out["ui"]["images"]
+        self.assertEqual((sheets.shape[0], len(items)), (3, 3))
+        for b, item in enumerate(items):
+            with Image.open(os.path.join(TMP, item["subfolder"], item["filename"])) as png:
+                expected = torch.from_numpy(np.asarray(png.convert("RGB"), dtype=np.float32) / 255.0)
+            torch.testing.assert_close(sheets[b], expected, rtol=0, atol=0)
+
     def test_manual_label_and_preview_only(self):
         cmp = importlib.import_module(f"{PACK}.moss_compare_nodes")
         with patch.object(cmp.folder_paths, "get_temp_directory", return_value=TMP):

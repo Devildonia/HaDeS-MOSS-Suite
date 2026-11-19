@@ -249,34 +249,45 @@ class HaDeSMossCompareSheet:
             random.Random(blind_seed).shuffle(order)
             shown = [str(k + 1) for k in range(len(order))]
             key = {str(k + 1): labels[i] for k, i in enumerate(order)}
-        sheets = [build_sheet([to_pil(images[i][1][b]) for i in order], shown, footer.strip()) for b in range(batch)]
+        # One sheet at a time: built, saved and copied into the preallocated output, so only one PIL sheet is alive at once. Keeping
+        # every sheet, then a float copy of each, then the stacked batch added about 640 MB at the peak for 4 panels x batch 4 at
+        # 1344 x 1792 (audit 0.8.1 #9, tools/RESULTS.md); the IMAGE output itself (475 MB there) cannot be avoided.
+        def make(b):
+            return build_sheet([to_pil(images[i][1][b]) for i in order], shown, footer.strip())
 
         results, files = [], []
+        sheet = make(0)
+        out = torch.empty((batch, sheet.height, sheet.width, 3), dtype=torch.float32)
         if save:
             out_dir = folder_paths.get_output_directory()
-            full_folder, filename, counter, subfolder, _ = folder_paths.get_save_image_path(filename_prefix, out_dir, sheets[0].width, sheets[0].height)
-            for b, sheet in enumerate(sheets):
-                info = PngInfo()
-                if not args.disable_metadata:
-                    info.add_text("hades_moss_compare", json.dumps({"labels": labels, "footer": footer.strip(), "blind_key": key,
-                                                                    "branches": {s: metas[s] for s, _ in images}}, ensure_ascii=False))
-                    if embed_workflow:
-                        if prompt is not None:
-                            info.add_text("prompt", json.dumps(prompt))
-                        for k, v in (extra_pnginfo or {}).items():
-                            info.add_text(k, json.dumps(v))
+            full_folder, filename, counter, subfolder, _ = folder_paths.get_save_image_path(filename_prefix, out_dir, sheet.width, sheet.height)
+            pnginfo = PngInfo()
+            if not args.disable_metadata:
+                pnginfo.add_text("hades_moss_compare", json.dumps({"labels": labels, "footer": footer.strip(), "blind_key": key,
+                                                                   "branches": {s: metas[s] for s, _ in images}}, ensure_ascii=False))
+                if embed_workflow:
+                    if prompt is not None:
+                        pnginfo.add_text("prompt", json.dumps(prompt))
+                    for k, v in (extra_pnginfo or {}).items():
+                        pnginfo.add_text(k, json.dumps(v))
+        for b in range(batch):
+            if b:
+                sheet = make(b)
+            if save:
                 file = f"{filename.replace('%batch_num%', str(b))}_{counter:05}_.png"
-                sheet.save(os.path.join(full_folder, file), pnginfo=info, compress_level=4)
+                sheet.save(os.path.join(full_folder, file), pnginfo=pnginfo, compress_level=4)
                 results.append({"filename": file, "subfolder": subfolder, "type": "output"})
                 files.append(f"{subfolder}/{file}" if subfolder else file)
                 counter += 1
-        else:
-            for b, sheet in enumerate(sheets):
+            else:
                 tmp_dir = folder_paths.get_temp_directory()
-                full_folder, filename, counter, subfolder, _ = folder_paths.get_save_image_path("hades_compare", tmp_dir, sheet.width, sheet.height)
-                file = f"{filename}_{counter:05}_.png"
-                sheet.save(os.path.join(full_folder, file), compress_level=1)
-                results.append({"filename": file, "subfolder": subfolder, "type": "temp"})
+                tfolder, tname, tcounter, tsub, _ = folder_paths.get_save_image_path("hades_compare", tmp_dir, sheet.width, sheet.height)
+                file = f"{tname}_{tcounter:05}_.png"
+                sheet.save(os.path.join(tfolder, file), compress_level=1)
+                results.append({"filename": file, "subfolder": tsub, "type": "temp"})
+            out[b].copy_(torch.from_numpy(np.asarray(sheet)))  # uint8 -> float32 in place, no float copy of the sheet
+            out[b].div_(255.0)
+            sheet = None
 
         notes = [f"{s}: no label in info_{s}, named '{s}'" for (s, _), src in zip(images, sources) if src == "slot"]
         sizes = {tuple(im.shape[1:3]) for _, im in images}
@@ -290,7 +301,6 @@ class HaDeSMossCompareSheet:
                 + "".join(f"\nnote: {n}" for n in notes))
         info = format_info(text, "compare_sheet", labels=labels, label_sources=sources, files=files, footer=footer.strip(), notes=notes,
                            **({"blind_key": key, "blind_seed": blind_seed} if blind else {}))
-        out = torch.from_numpy(np.stack([np.asarray(s, dtype=np.float32) / 255.0 for s in sheets]))
         return {"ui": {"images": results}, "result": (out, info)}
 
 

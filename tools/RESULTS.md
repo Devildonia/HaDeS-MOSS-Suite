@@ -2077,6 +2077,17 @@ The phrases that change the medium (monochrome manga, pencil, ink) move furthest
 
 94 of 96 texts were exact and literal. The two misses: a 6-word Title Case text written bare repeated a word ("Baked Baked"), and with three texts the poster's "SALE" was missing. At this size and with up to 6 words, none of these factors made a measurable difference on Bulle d'Encre; longer texts, smaller text, more texts and other models were not tested.
 
+## Compare Sheet peak RAM (2026-11-19, audit 0.8.1 #9)
+
+`MOSS Compare Sheet` with 4 panels, batch 4, 1344 x 1792 random images (441 MB of inputs), saving the 4 PNGs, one fresh CPU process per version; peak working set (psutil `peak_wset`, Windows) minus the process memory once the inputs were made.
+
+| Version | Peak added by `compare()` | Of which the `IMAGE` output | Time |
+|---|---:|---:|---:|
+| Before (every sheet kept, then a float copy of each, then the stack) | 1 112 MB | 475 MB | 2.7 s |
+| After (each sheet built, saved and copied into the preallocated output in turn) | 555 MB | 475 MB | 2.5 s |
+
+The output tensor and the four PNG files are bit-identical between the two versions (SHA-256). The Compare Sampler builds its sheet through the same code. One size and batch measured; the saving scales with batch size and sheet area.
+
 ## AI-model reviews (qualitative, not measurements)
 
 Preferences given by AI models on the blind sheets of the four 2026-11-11 experiments above: GPT and Gemini (screenshots supplied by the maintainer) and the assistant that ran the experiments (sealed before each key was opened, but it had seen earlier images, so never fully blind). They are kept for the record, with their tables as decoded. They are **impressions, not measurements**: the criteria differ and are not verifiable from screenshots, AI judgments may be correlated, and the same pairs were judged repeatedly. No conclusion, default or model card in this repository relies on them.
