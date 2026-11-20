@@ -2028,6 +2028,8 @@ Eight ideas written in Spanish, the way the maintainer writes them, each stating
 
 The enhancer also adds elements the idea did not give: in a first run through the Layout Editor's DRAFT LAYOUT button, a signature box with invented text ("J. M. 2023") when the idea asked for "una firma" without saying what it reads. One seed per idea and one enhancer seed: individual outcomes, not a rate. Files: `I:/HaDeS_MOSS/layout_test` on the maintainer's machine (drafts, images, overlay sheet).
 
+**The same 8 drafts with HaDeS MOSS v1.0 Turbo** (2026-11-20; boxes unchanged, its card's settings: 8 steps, CFG 1, euler / simple, seed 1200, 1024 x 1536): **26 / 28** elements drawn inside their box, by eye on the overlay sheet. The misses: the astronaut (the same 64 px wide box) drawn wider than it, centred to its right, and the dog beside the fisherman, drawn left of its box. The five texts were rendered as asked, again with the extra line "LA" above LA ÚLTIMA NOCHE. One seed per draft. Files: `I:/HaDeS_MOSS/layout_test_v10`.
+
 The two Layout Editor buttons were checked once in the classic canvas view (ComfyUI 0.43.0 / frontend 1.57.4): DRAFT LAYOUT ran only the Prompt Enhancer and the editor (history outputs `2`, `4`; partial target `4`) and imported its 5 boxes; after one box was moved, GENERATE ran the graph with the Prompt Enhancer served from the cache and the moved box unchanged, and the moon was drawn inside it. Nodes 2.0 / Vue view not checked.
 
 ## Layout Editor DRAFT LAYOUT / GENERATE: acceptance in four views (2026-11-19, after audit 0.8.1)
