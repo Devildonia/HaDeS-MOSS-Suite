@@ -1,6 +1,6 @@
 from . import moss_compare_nodes, moss_control_nodes, moss_enhancer_nodes, moss_image_saver_nodes, moss_loader_nodes, moss_lora_nodes, moss_merger_nodes, moss_metadata_nodes, moss_pipeline_nodes, moss_sampler_nodes, moss_saver_nodes, moss_telemetry_nodes, moss_textcheck_nodes
 
-__version__ = "0.9.1"
+__version__ = "0.9.2"
 
 # the Dev Tools (measurement nodes) live in the git repository only; the Comfy Registry package leaves them out
 import logging

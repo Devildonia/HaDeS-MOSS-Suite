@@ -148,8 +148,11 @@ function redrawVueWidgets(node) {
 
 export function setWidgetValue(widget, value, node) {
     if (!widget) return;
+    const old = widget.value;
     widget.value = value;
     widget.callback?.(value, app.canvas, node, [0, 0], null);
+    // as LiteGraph does for its own widgets: the frontend clears a node's errors (a missing model's red frame) from this hook
+    node?.onWidgetChanged?.(widget.name, value, old, widget);
     if (node?.graph) {
         node.graph._version = (node.graph._version || 0) + 1;
     }

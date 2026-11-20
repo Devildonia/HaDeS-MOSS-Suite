@@ -118,3 +118,14 @@ test("layout editor picks the smallest box under the pointer, so a full-canvas b
     assert.equal(pickBox([moon, background], 2000, 2000), -1);
     assert.equal(pickBox([[0, 0, 10, 10], [0, 0, 10, 10]], 5, 5), 1);  // equal sizes: the topmost
 });
+
+test("a value picked in a HaDeS widget reaches node.onWidgetChanged, so the frontend clears a missing model's red frame", () => {
+    const { context, node } = setup();
+    const n = node("HaDeSMossLoader");
+    const calls = [];
+    n.onWidgetChanged = (name, value, old, widget) => calls.push([name, value, old, widget]);
+    const w = { name: "unet_name", value: "moss_image_base_bf16.safetensors", callback() {} };
+    context.setWidgetValue(w, "mossImage_base_bf16.safetensors", n);
+    assert.equal(w.value, "mossImage_base_bf16.safetensors");
+    assert.deepEqual(calls, [["unet_name", "mossImage_base_bf16.safetensors", "moss_image_base_bf16.safetensors", w]]);
+});
