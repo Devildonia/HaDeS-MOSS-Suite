@@ -7,6 +7,8 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-20
+
 ### Added
 - **CI: the published package checked as a user gets it** (suggested by audit 0.8.1): `comfy node pack` builds the zip, `tests/check_package.py` checks its files and loads it in a clean ComfyUI (no git checkout), which must register exactly the distributed nodes, serve their frontend, log no import failure and know every example's nodes and widget counts. Run locally on the 0.9.0 tree, with a stand-in for comfy node pack (git-tracked files minus .comfyignore) and a clean CPU ComfyUI 0.43.0: 37 files, 23 nodes, 4 frontend files, 10 examples, all checks passed.
 
