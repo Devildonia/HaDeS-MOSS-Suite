@@ -7,6 +7,12 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **Turbo 8 steps + Upscale x2 example**, rebuilt for the second video tutorial: MOSS-Image Base with Turbo 8-steps v1.0 (was SFT with v0.7) on the first video's fisherman (seed 1013); the MOSS pass is on, all three images go through the MOSS Image Saver with Suite Telemetry's metadata, and Telemetry reads both samplers and the turbo. Run in a clean ComfyUI: the 1024, x2 and x2 + MOSS pass images are pixel-identical to the video's. Measured on Base + v1.0 (`tools/RESULTS.md`): 2.9 s at 1024, 1.1 s for RealESRGAN x2, 10.7-11.1 s for the pass at 2048 (denoise 0.25); by eye on 100 % crops the pass adds skin pores, beard hairs and sharper net threads, and 0.40 redraws more.
+
+### Added
+- **`tools/moss_video.py upscale_telemetry`:** the second tutorial (the first video's workflow rebuilt with the mechanical parts fast-forwarded, Suite Telemetry and its report, RealESRGAN x2 and the MOSS pass, with 100 % crops and the times from ComfyUI's history). `--captions none` records without burned captions and writes only the EN / ES .srt files.
+
 ## [0.9.2] - 2026-11-20
 
 ### Added

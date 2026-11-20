@@ -291,43 +291,46 @@ EXAMPLES = {
         **telemetry(("load", 3), ("enh", 6), ("latent", 3), ("ks", 2)),
     },
     "HaDeS MOSS Suite - Turbo 8 steps + Upscale x2": {
-        # 1. generate: Turbo 8-steps v0.7 at 8 steps (blind pairs and colour in tools/RESULTS.md, "At 8 steps")
-        **loader(),
-        "enh": prompt("An old watchmaker repairing a pocket watch at his workbench, brass gears and tweezers, warm lamp light, close-up photograph."),
-        "latent": latent(),
-        "turbo": ("HaDeSMossTurbo", {"lora_name": TURBO_8STEPS, "strength": 1.0, "steps": 8}),
-        "ks": with_turbo(ksampler(("load", 0), ("latent", 0), seed=("latent", 4))),
+        # the second video tutorial (tools/moss_video.py upscale_telemetry): the first video's fisherman, then two ways to 2048.
+        # Base + Turbo 8-steps v1.0; times and 100 % crops in tools/RESULTS.md, "The same pass on Base with Turbo 8-steps v1.0"
+        **loader(BASE),
+        "enh": prompt("Photograph of an old fisherman with a grey beard mending a net on a wooden dock at sunrise, his face and weathered "
+                      "hands in view, thick wool sweater, seagulls in the background."),
+        "latent": latent(seed=1013),
+        "turbo": ("HaDeSMossTurbo", {"lora_name": TURBO_V10, "strength": 1.0, "steps": 8}),
+        "ks": with_turbo(ksampler(("load", 0), ("latent", 0), seed=("latent", 4)), sampler_name="euler"),
         "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_1024_%seed%", "hashes": True, "embed_workflow": True}),
-        # 2. upscale x2 with a model: pixels only, nothing redrawn (about 1.5 s at 2048)
+        # 2. upscale x2 with a model: pixels only, nothing redrawn (about 1 s at 2048)
         "upmodel": ("UpscaleModelLoader", {"model_name": UPSCALER}),
         "up": ("ImageUpscaleWithModel", {"upscale_model": ("upmodel", 0), "image": ("ks", 1)}),
-        "save_up": ("SaveImage", {"images": ("up", 0), "filename_prefix": "HaDeS_MOSS_x2"}),
-        # 3. optional MOSS pass on the upscaled image (muted): Turbo 8-steps at denoise 0.25 adds hair, pores and stitching the
-        #    upscaler smooths, about 16 s at 2048; SFT at 25 steps and the same denoise took 75 s and was no better by eye
-        "enc": ("VAEEncode", {"pixels": ("up", 0), "vae": ("load", 2)}, MUTED),
-        "ks2": (lambda k: (k[0], k[1], MUTED))(with_turbo(ksampler(("load", 0), ("enc", 0), seed=("latent", 4)), denoise=0.25)),
-        "save_ref": ("SaveImage", {"images": ("ks2", 1), "filename_prefix": "HaDeS_MOSS_x2_refined"}, MUTED),
-        **telemetry(("load", 3), ("enh", 6), ("latent", 3), ("ks", 2)),
-        "note": ("Note", {"text": "HaDeS MOSS Suite - Turbo 8 steps + Upscale x2\n\n"
-                                  "1. Generate (always on): MOSS-Image SFT with HaDeS Turbo 8-steps v0.7, 8 steps, CFG 1, up to 1024 px.\n"
-                                  "   Without the turbo: unplug the turbo input of the MOSS KSampler (25 steps, CFG 2.5).\n"
-                                  "   The MOSS Latent's seed feeds both samplers (fixed: set its after run to randomize for new images).\n\n"
-                                  "2. Upscale x2 (on): RealESRGAN x2 doubles the image in pixels, in about a second. Nothing is redrawn.\n"
-                                  "   To turn it off: right-click the group > Set Group Nodes to Never.\n\n"
-                                  "3. Upscale x2 + MOSS pass (off): re-renders the upscaled image at denoise 0.25 with the same turbo,\n"
-                                  "   adding hair, pores and fine texture the upscaler smooths (about 16 s at 2048). Needs group 2.\n"
-                                  "   To turn it on: right-click the group > Set Group Nodes to Always.\n"
-                                  "   Denoise 0.40 (also measured) adds a little more detail and changes the image a little more.\n\n"
+        "save_up": ("HaDeSMossImageSaver", {"images": ("up", 0), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_x2_%seed%", "hashes": True, "embed_workflow": True}),
+        # 3. the MOSS pass on the upscaled image: the same turbo at denoise 0.25 redraws skin pores, beard hairs and the net's threads
+        #    the upscaler smooths, about 11 s at 2048 (SFT + Turbo v0.7 measured earlier: the same by eye as SFT at 25 steps, 75 s)
+        "enc": ("VAEEncode", {"pixels": ("up", 0), "vae": ("load", 2)}),
+        "ks2": with_turbo(ksampler(("load", 0), ("enc", 0), seed=("latent", 4)), sampler_name="euler", denoise=0.25),
+        "save_ref": ("HaDeSMossImageSaver", {"images": ("ks2", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_x2_refined_%seed%", "hashes": True, "embed_workflow": True}),
+        **telemetry(("load", 3), ("enh", 6), ("latent", 3), ("ks", 2), ("turbo", 1), ("ks2", 2)),
+        "note": ("Note", {"text": "HaDeS MOSS Suite - Turbo 8 steps + Upscale x2 (the second video tutorial)\n\n"
+                                  "1. Generate: MOSS-Image Base with HaDeS Turbo 8-steps v1.0, 8 steps, CFG 1, euler / simple, 1024 px.\n"
+                                  "   The first video's fisherman (seed 1013). The MOSS Latent's seed feeds both samplers\n"
+                                  "   (fixed: set its after run to randomize for new images).\n\n"
+                                  "2. Upscale x2: RealESRGAN x2 doubles the image to 2048 in about a second. Nothing is redrawn.\n\n"
+                                  "3. Upscale x2 + MOSS pass: VAE Encode and a second MOSS KSampler with the same turbo at denoise 0.25\n"
+                                  "   redraw the fine detail the upscaler smooths (skin pores, beard hairs), about 11 s at 2048 on an RTX 5090.\n"
+                                  "   Denoise 0.40 adds a little more and changes the image a little more.\n"
+                                  "   To skip it: right-click the group > Set Group Nodes to Never.\n\n"
+                                  "Suite Telemetry reads every info output, checks the settings against the measurements and feeds the\n"
+                                  "   Image Savers' metadata. With two samplers, the PNGs' A1111 parameters are the first sampler's\n"
+                                  "   (the 1024 image); connect a second Telemetry to primary_stage_metadata to pick another stage.\n\n"
                                   "Models: RealESRGAN_x2plus.pth in models/upscale_models, the turbo LoRA in models/loras.\n"
                                   "Measurements: tools/RESULTS.md in the HaDeS MOSS Suite."}),
-        "_layout": {"note": (0, -620), "load": (0, 0), "turbo": (0, 380),
-                    "enh": (450, 0), "latent": (950, 0),
-                    "ks": (1400, 0), "save": (1850, 0), "tel": (1850, 480), "report": (2300, 480),
-                    "upmodel": (2800, 0), "up": (2800, 180), "save_up": (3250, 0),
-                    "enc": (2800, 700), "ks2": (3250, 700), "save_ref": (3700, 700)},
+        "_layout": {"note": (0, -620), "load": (0, 0), "enh": (440, 0), "latent": (940, 0), "ks": (1380, 0), "save": (1820, 0),
+                    "turbo": (940, 450), "tel": (1380, 640), "report": (1820, 640),
+                    "upmodel": (2300, 0), "up": (2300, 150), "save_up": (2620, 0),
+                    "enc": (2300, 640), "ks2": (2500, 640), "save_ref": (2940, 640)},
         "_groups": [("1. Generate (Turbo 8 steps)", ["load", "turbo", "enh", "latent", "ks", "save", "tel", "report"], "#335533"),
                     ("2. Upscale x2 (model)", ["upmodel", "up", "save_up"], "#334466"),
-                    ("3. Upscale x2 + MOSS pass (turn on to use)", ["enc", "ks2", "save_ref"], "#553355")],
+                    ("3. Upscale x2 + MOSS pass", ["enc", "ks2", "save_ref"], "#553355")],
     },
     "HaDeS MOSS Suite - Basic Generation": {
         # the first video tutorial, built node by node: Base at 25 steps, then Turbo 8-steps v1.0 at 8 (tools/moss_video.py basic_generation)

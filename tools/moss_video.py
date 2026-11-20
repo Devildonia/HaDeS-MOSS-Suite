@@ -227,8 +227,15 @@ class Director:
 
     @contextlib.asynccontextmanager
     async def fast(self, target=1.6):
+        if getattr(self, "_in_fast", False):  # nested: the outer fast part counts
+            yield
+            return
+        self._in_fast = True
         t0 = time.time()
-        yield
+        try:
+            yield
+        finally:
+            self._in_fast = False
         t1 = time.time()
         self.fast_parts.append((t0, t1, target))
         self.saved += max(0.0, (t1 - t0) - target)
@@ -970,9 +977,11 @@ async def basic_prepare(page):
     print("warm-up runs:", await page.evaluate(BASIC_BUILD_JS, [BASIC_POS, BASIC_LOADER, BASIC_PROMPT, BASIC_LORA, 7]), flush=True)
 
 
-async def basic_add(d: Director, type_, query):
-    """Double-click the canvas where the node goes, type its name in the search box, Enter; returns the new node's id."""
-    gx, gy = BASIC_POS[type_]
+async def basic_add(d: Director, type_, query, pos=None):
+    """Double-click the canvas where the node goes (pos in graph space, BASIC_POS by default), type its name in the search
+    box, Enter; returns the new node's id."""
+    pos = list(pos or BASIC_POS[type_])
+    gx, gy = pos
     x, y = await d.js("([x, y]) => window.__hv.g2s(x, y)", [gx + 40, gy + 20])
     before = await d.js("() => window.__hv.app().graph._nodes.length")
     await d.move(x, y)
@@ -996,7 +1005,7 @@ async def basic_add(d: Director, type_, query):
     node = await d.js("""([before, type, pos]) => { const g = window.__hv.app().graph;
         if (g._nodes.length !== before + 1) return null; const n = g._nodes[g._nodes.length - 1];
         if (n.type !== type) return 'wrong:' + n.type; if (n.flags?.ghost) return 'wrong: still following the pointer'; n.pos = [...pos]; g.setDirtyCanvas(true, true); return n.id; }""",
-                      [before, type_, BASIC_POS[type_]])
+                      [before, type_, pos])
     if not node or str(node).startswith("wrong"):
         raise SystemExit(f"searching {query} did not add {type_} ({node})")
     await d.no_library()
@@ -1319,11 +1328,453 @@ async def basic_generation(d: Director):
 basic_generation.prepare = basic_prepare
 
 
+# ---- bigger images: upscale x2 + telemetry (the second tutorial) ----
+
+UP_LINES = [
+    ("Hi, I'm HaDeS, and welcome back.",
+     "Hola, soy HaDeS, y bienvenido de nuevo."),
+    ("In the last video we built a MOSS-Image workflow from an empty canvas and made this fisherman in eight steps.",
+     "En el vídeo anterior montamos un workflow de MOSS-Image desde un lienzo vacío e hicimos este pescador en ocho pasos."),
+    ("Today we build it again, and then we make it twice as big, in two different ways. I'll show you which one I use, and why.",
+     "Hoy lo volvemos a montar y después lo hacemos el doble de grande, de dos maneras distintas. Te enseño cuál uso yo y por qué."),
+    ("We'll also meet Suite Telemetry, the node that checks your whole workflow and writes your settings into the image.",
+     "Además conoceremos Suite Telemetry, el nodo que revisa todo tu workflow y escribe tus ajustes dentro de la imagen."),
+    ("As always, everything is free, and all the links are in the description.",
+     "Como siempre, todo es gratis y tienes todos los enlaces en la descripción."),
+    # 5: quick rebuild
+    ("Quick rebuild. If you missed the first video, every node is explained there.",
+     "Montaje rápido. Si te perdiste el primer vídeo, ahí está explicado cada nodo."),
+    ("MOSS Loader, with MOSS-Image Base, the int8 text encoder and the Flux 2 VAE.",
+     "MOSS Loader, con MOSS-Image Base, el text encoder int8 y el VAE de Flux 2.",
+     "MOSS Loader, with MOSS-Image Base, the int eight text encoder and the Flux two VAE."),
+    ("The Prompt Enhancer, on \"as written\", with our fisherman.",
+     "El Prompt Enhancer, en \"as written\", con nuestro pescador.",
+     "The Prompt Enhancer, on as written, with our fisherman."),
+    ("MOSS Latent, square, 1024, with the same seed as last time.",
+     "MOSS Latent, cuadrado, 1024, con la misma semilla que la otra vez.",
+     "MOSS Latent, square, ten twenty-four, with the same seed as last time."),
+    ("The MOSS KSampler, with my Turbo 8-steps v1.0 plugged into its turbo input.",
+     "El MOSS KSampler, con mi Turbo 8-steps v1.0 conectado a su entrada turbo.",
+     "The MOSS K Sampler, with my Turbo eight steps, version one, plugged into its turbo input."),
+    ("And the MOSS Image Saver at the end.",
+     "Y el MOSS Image Saver al final."),
+    # 11: Suite Telemetry
+    ("Now something new: Suite Telemetry.",
+     "Ahora algo nuevo: Suite Telemetry."),
+    ("Almost every node in the Suite has an info output. It describes what that node really did: the files it loaded, the size, "
+     "the seed, the steps.",
+     "Casi todos los nodos de la Suite tienen una salida info. Describe lo que ese nodo ha hecho de verdad: los archivos que cargó, "
+     "el tamaño, la semilla, los pasos."),
+    ("I connect the info of the loader, the prompt, the latent, the sampler and the turbo. Telemetry reads them all together.",
+     "Conecto el info del loader, del prompt, del latent, del sampler y del turbo. Telemetry los lee todos juntos."),
+    ("Then it checks the workflow against what I've measured, and writes a report: errors, warnings and notes.",
+     "Después revisa el workflow comparándolo con lo que he medido y escribe un informe: errores, avisos y notas."),
+    ("For example, it knows the turbo was made for eight steps at CFG one. If your sampler uses other settings, it tells you.",
+     "Por ejemplo, sabe que el turbo está hecho para ocho pasos con CFG uno. Si tu sampler usa otros ajustes, te lo dice."),
+    ("And its json output goes into the Image Saver. That's what writes the prompt, the settings and the model hashes into the PNG.",
+     "Y su salida json va al Image Saver. Es lo que escribe el prompt, los ajustes y los hashes de los modelos dentro del PNG.",
+     "And its jason output goes into the Image Saver. That's what writes the prompt, the settings and the model hashes into the P N G."),
+    ("So when you upload the image to Civitai, it shows exactly how you made it.",
+     "Así, cuando subes la imagen a Civitai, se ve exactamente cómo la hiciste."),
+    ("Let's run it.",
+     "Vamos a lanzarlo."),
+    ("Here's our fisherman, pixel for pixel the same image as in the last video. And here's the report: no findings. "
+     "Everything matches what I've measured.",
+     "Aquí está nuestro pescador, píxel a píxel la misma imagen que en el vídeo anterior. Y aquí está el informe: sin avisos. "
+     "Todo cuadra con lo que he medido."),
+    # 20: upscale model
+    ("One thousand twenty-four pixels is fine for the screen, but sometimes you want it bigger. The first way is an upscale model.",
+     "Mil veinticuatro píxeles está bien para la pantalla, pero a veces la quieres más grande. La primera manera es un modelo de escalado."),
+    ("I add Load Upscale Model with RealESRGAN x2 plus. It goes in the upscale models folder; the link is in the description.",
+     "Añado Load Upscale Model con RealESRGAN x2 plus. Va en la carpeta upscale_models; el enlace está en la descripción.",
+     "I add Load Upscale Model with Real E S R GAN, times two plus. It goes in the upscale models folder; the link is in the description."),
+    ("Then Upscale Image using Model, fed with the image from the sampler, and another Image Saver.",
+     "Después Upscale Image using Model, con la imagen del sampler, y otro Image Saver."),
+    ("It takes about one second and doubles the image to 2048. But nothing is redrawn: it only guesses the missing pixels.",
+     "Tarda alrededor de un segundo y dobla la imagen a 2048. Pero no se redibuja nada: solo adivina los píxeles que faltan.",
+     "It takes about one second and doubles the image to twenty forty-eight. But nothing is redrawn: it only guesses the missing pixels."),
+    ("Up close, at full size, you can see it: the beard and the wool look smooth, almost painted.",
+     "De cerca, a tamaño real, se nota: la barba y la lana se ven lisas, casi pintadas."),
+    # 25: the MOSS pass
+    ("The second way is to let MOSS redraw the upscaled image.",
+     "La segunda manera es dejar que MOSS redibuje la imagen escalada."),
+    ("VAE Encode turns the big image back into a latent. A second MOSS KSampler, with the same turbo, works on it.",
+     "VAE Encode vuelve a convertir la imagen grande en latente. Un segundo MOSS KSampler, con el mismo turbo, trabaja sobre él.",
+     "V A E Encode turns the big image back into a latent. A second MOSS K Sampler, with the same turbo, works on it."),
+    ("The key is denoise: zero point two five. It keeps the picture and only redraws the fine detail.",
+     "La clave es el denoise: cero coma veinticinco. Conserva la imagen y solo redibuja el detalle fino."),
+    ("Let's run it. At 2048 this pass takes about eleven seconds.",
+     "Vamos a lanzarlo. A 2048, este pase tarda unos once segundos.",
+     "Let's run it. At twenty forty-eight this pass takes about eleven seconds."),
+    ("And now, up close: skin pores, separate hairs in the beard and sharper threads in the net, where the upscaler only smoothed.",
+     "Y ahora, de cerca: poros en la piel, los pelos de la barba separados y los hilos de la red más nítidos, donde el escalador "
+     "solo suavizaba."),
+    ("Telemetry notices this too: it adds a note that the turbo is running below denoise one. That's expected here.",
+     "Telemetry también lo ve: añade una nota de que el turbo trabaja por debajo de denoise uno. Aquí es lo esperado."),
+    # 31: which one, tips
+    ("So which one do I use? For a quick bigger image, the upscaler alone. For the final picture, the MOSS pass.",
+     "¿Y cuál uso? Para una imagen más grande rápida, el escalador solo. Para la imagen final, el pase MOSS."),
+    ("If you want a little more detail, try denoise zero point four. It also changes the picture a bit more.",
+     "Si quieres un poco más de detalle, prueba denoise cero coma cuatro. También cambia un poco más la imagen."),
+    ("Your seed is still fixed, so you can try both without losing the image.",
+     "La semilla sigue fija, así que puedes probar las dos sin perder la imagen."),
+    ("One thing about metadata. With two samplers in the workflow, the PNG's settings come from the first one, the 1024 image. "
+     "The Image Saver tells you so.",
+     "Una cosa sobre los metadatos. Con dos samplers en el workflow, los ajustes del PNG salen del primero, el de la imagen de 1024. "
+     "El Image Saver te lo avisa.",
+     "One thing about metadata. With two samplers in the workflow, the P N G's settings come from the first one, the ten twenty-four "
+     "image. The Image Saver tells you so."),
+    ("You can choose which stage goes into the image, but metadata deserves a video of its own. I'll make one entirely about it, "
+     "so stay tuned.",
+     "Se puede elegir qué etapa va dentro de la imagen, pero los metadatos merecen un vídeo para ellos solos. Haré uno dedicado "
+     "enteramente a ese tema, así que atento."),
+    # 36: goodbye
+    ("That's it: one image, made bigger two ways, with the whole recipe written inside the PNG.",
+     "Y ya está: una imagen, agrandada de dos maneras, con toda la receta escrita dentro del PNG.",
+     "That's it: one image, made bigger two ways, with the whole recipe written inside the P N G."),
+    ("This exact workflow is free to download from the description.",
+     "Este mismo workflow se puede descargar gratis desde la descripción."),
+    ("If you've made it to the end and enjoyed the video, and you'd like to see more content like this, leave a like and subscribe. "
+     "It's free!",
+     "Si has llegado hasta el final del vídeo, te ha gustado y quieres ver más contenido de este tipo, dale un buen like y "
+     "suscríbete. ¡Es gratis!"),
+    ("Thanks for watching, and see you in the next one.",
+     "Gracias por verlo, y nos vemos en el próximo."),
+]
+
+# where each node goes, in graph space: the first video's row, Telemetry under the sampler, the upscale to the right
+UP_POS = {"loader": (0, 0), "enhancer": (440, 0), "latent": (940, 0), "sampler": (1380, 0), "saver": (1820, 0), "turbo": (940, 450),
+          "telemetry": (1380, 640), "preview": (1820, 640), "upmodel": (2300, 0), "upscale": (2300, 150), "saver2": (2620, 0),
+          "encode": (2300, 640), "sampler2": (2500, 640), "saver3": (2940, 640)}
+UP_BOX = [-260, -60, 3380, 1240]
+UP_UPSCALER = "RealESRGAN_x2plus.pth"
+# 100 % crops at 2048 (top-left corners, 512 square), checked on the measured images
+UP_CROPS = {"face": (790, 200), "hands": (620, 1340)}
+UP_VIDEO1 = Path("I:/HaDeS_MOSS/videos/basic_generation/civitai/fisherman_turbo_v1.0_8steps_seed1013.png")
+# denoise 0.40 is not run on camera: the measured image (same clean instance, same seed and settings; tools/RESULTS.md)
+UP_D40 = "/view?filename=s3_d40_seed1013_00001_.png&subfolder=upscale_measure&type=output"
+
+UP_WARM_JS = r"""
+async (g) => {
+  const r = await (await fetch('/prompt', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({prompt: g})})).json();
+  for (;;) { const h = await (await fetch('/history/' + r.prompt_id)).json(); if (h[r.prompt_id]?.status?.completed !== undefined) return h[r.prompt_id].status.status_str; await new Promise(f => setTimeout(f, 500)); }
+}
+"""
+
+
+def up_api_graph(seed, denoise=0.25, full=True):
+    """The pipeline in API form, for the off-camera warm-up (models, LoRA and upscaler loaded); full=False: the 1024 stage only."""
+    ks = lambda latent, d: {"class_type": "HaDeSMossKSampler", "inputs": {
+        "model": ["1", 0], "positive": ["2", 0], "negative": ["2", 1], "latent_image": latent, "seed": ["3", 4], "steps": 25,
+        "cfg": 2.5, "sampler_name": "euler", "scheduler": "simple", "denoise": d, "flow_shift": 0.0, "slg": "off",
+        "vae": ["1", 2], "denoise_mode": "steps / denoise (core)", "turbo": ["4", 0]}}
+    g = {"1": {"class_type": "HaDeSMossLoader", "inputs": dict(BASIC_LOADER)},
+            "2": {"class_type": "HaDeSMossPromptEnhancer", "inputs": {"clip": ["1", 1], "idea": BASIC_PROMPT, "mode": "as written",
+                  "width": 1024, "height": 1024, "temperature": 0.7, "seed": 1, "max_tokens": 1024, "negative": ""}},
+            "3": {"class_type": "HaDeSMossLatent", "inputs": {"aspect_ratio": "1:1", "megapixels": 1.0, "custom_width": 1024,
+                  "custom_height": 1024, "batch_size": 1, "seed": seed}},
+            "4": {"class_type": "HaDeSMossTurbo", "inputs": {"lora_name": BASIC_LORA, "strength": 1.0, "steps": 8, "cfg": 1.0,
+                  "sampler_name": "euler", "scheduler": "simple", "enabled": True}},
+            "5": ks(["3", 0], 1.0),
+            "7": {"class_type": "UpscaleModelLoader", "inputs": {"model_name": UP_UPSCALER}},
+            "8": {"class_type": "ImageUpscaleWithModel", "inputs": {"upscale_model": ["7", 0], "image": ["5", 1]}},
+            "10": {"class_type": "VAEEncode", "inputs": {"pixels": ["8", 0], "vae": ["1", 2]}},
+            "11": ks(["10", 0], denoise),
+            "13": {"class_type": "HaDeSMossSuiteTelemetry", "inputs": {"report_title": "HaDeS MOSS Suite Telemetry",
+                   "info_1": ["1", 3], "info_2": ["2", 6], "info_3": ["3", 3], "info_4": ["5", 2], "info_5": ["4", 1]}},
+            "6": {"class_type": "HaDeSMossImageSaver", "inputs": {"images": ["5", 1], "filename_prefix": "warmup/w", "hashes": True,
+                  "embed_workflow": True, "metadata": ["13", 1]}},
+            "9": {"class_type": "HaDeSMossImageSaver", "inputs": {"images": ["8", 0], "filename_prefix": "warmup/w", "hashes": True,
+                  "embed_workflow": True, "metadata": ["13", 1]}},
+            "12": {"class_type": "HaDeSMossImageSaver", "inputs": {"images": ["11", 1], "filename_prefix": "warmup/w", "hashes": True,
+                  "embed_workflow": True, "metadata": ["13", 1]}}}
+    if not full:
+        g = {k: v for k, v in g.items() if k in ("1", "2", "3", "4", "5", "6", "13")}
+    return g
+
+
+async def up_prepare(page):
+    """Off camera: the whole pipeline once at another seed loads the model, text encoder, VAE, LoRA and upscaler."""
+    print("warm-up runs:", await page.evaluate(UP_WARM_JS, up_api_graph(7)), await page.evaluate(UP_WARM_JS, up_api_graph(8, full=False)),
+          flush=True)
+
+
+def up_crops_html(cols, rows):
+    """Columns of 100 % crops: cols = [(url, label, pixelated)], rows = crop corners at 2048; a 1024 image is shown doubled."""
+    side = 512 * 1920 / W
+    full = 2048 * side / 512
+    head = "".join(f'<div style="color:#fff;font:600 24px Segoe UI,sans-serif;text-align:center">{t}</div>' for _, t, _ in cols)
+    cells = []
+    for x, y in rows:
+        for url, _, pix in cols:
+            cells.append(f'<div style="width:{side}px;height:{side}px;overflow:hidden;border-radius:6px;position:relative">'
+                         f'<img src="{url}" style="position:absolute;width:{full}px;height:{full}px;left:{-x * side / 512}px;'
+                         f'top:{-y * side / 512}px;max-width:none;{"image-rendering:pixelated;" if pix else ""}"></div>')
+    return (f'<div style="display:grid;grid-template-columns:repeat({len(cols)},{side}px);gap:14px 28px">{head}{"".join(cells)}</div>')
+
+
+async def up_set(d, node, values):
+    await d.js("([id, v]) => window.__hv.set(id, v)", [node, values])
+
+
+async def upscale_telemetry(d: Director):
+    """The second tutorial: the first video's workflow rebuilt quickly, Suite Telemetry, RealESRGAN x2 and a MOSS pass at 0.25."""
+    P = UP_POS
+    await d.camera({"box": BASIC_BOX}, 10, pad=60, top=60)
+    await d.move(W * 0.62, H * 0.55)
+
+    # 1. introduction, the fisherman of the first video
+    d.title("HaDeS MOSS Suite", "Bigger images: Upscale x2 + Telemetry", 7.0)
+    await d.say(0)
+    await d.say(1)
+    first = "data:image/png;base64," + base64.b64encode(UP_VIDEO1.read_bytes()).decode()
+    await d.js("(h) => window.__hv.show(h)", f'<div style="text-align:center"><img src="{first}" style="height:760px;border-radius:6px">'
+               '<div style="color:#ffcc33;font:600 28px Segoe UI,sans-serif;margin-top:14px">Your first MOSS-Image workflow · '
+               'Base + Turbo 8-steps v1.0 · 8 steps · 1024 x 1024</div></div>')
+    await d._after_voice(0.2)
+    await d.say(2)
+    await d.hold(2.0)
+    await d.js("() => window.__hv.hide()")
+    await d.say(3)
+    await d.move(W * 0.55, H * 0.6, 2500)
+    await d.say(4)
+    await d.move(W * 0.6, H * 0.55, 2500)
+
+    # 2. quick rebuild of the first video
+    await d.say(5)
+    loader = await basic_add(d, "HaDeSMossLoader", "MOSS Loader", P["loader"])
+    await up_set(d, loader, BASIC_LOADER)
+    await d.camera([loader], 1000, pad=200, top=60)
+    await d.say(6)
+    await basic_point(d, loader, "unet_name")
+    await d.hold(0.5)
+    await basic_point(d, loader, "clip_name")
+    await d.hold(0.5)
+    await basic_point(d, loader, "vae_name")
+    await d.camera({"box": BASIC_BOX}, 1000, pad=60, top=60)
+    await d.say(7)
+    enhancer = await basic_add(d, "HaDeSMossPromptEnhancer", "MOSS Prompt Enhancer", P["enhancer"])
+    await d.camera([loader, enhancer], 1000, pad=50, top=60)
+    await basic_point(d, enhancer, "mode", {"mode": "as written"})
+    box = await d.js("""(id) => { const w = window.__hv.widget(id, 'idea'); w.value = ''; if (w.element) w.element.value = '';
+        const r = w.element.getBoundingClientRect(); return [r.left, r.top]; }""", enhancer)
+    await d.click(box[0] + 40, box[1] + 30)
+    if not await d.js("() => document.activeElement?.tagName === 'TEXTAREA'"):
+        raise SystemExit("the prompt box is not focused; nothing typed")
+    async with d.fast(2.0):
+        await d.page.keyboard.type(BASIC_PROMPT, delay=12)
+        await basic_link(d, loader, "CLIP", enhancer, "clip", 800)
+    await d.camera({"box": BASIC_BOX}, 1000, pad=60, top=60)
+    await d.say(8)
+    latent = await basic_add(d, "HaDeSMossLatent", "MOSS Latent", P["latent"])
+    await up_set(d, latent, {"aspect_ratio": "1:1", "megapixels": 1.0, "seed": BASIC_SEED, "control_after_generate": "fixed"})
+    await basic_point(d, latent, "seed")
+    await d.hold(0.4)
+    await d.say(9)
+    sampler = await basic_add(d, "HaDeSMossKSampler", "MOSS KSampler", P["sampler"])
+    async with d.fast(6.0):
+        await d.camera([loader, enhancer, latent, sampler], 1000, pad=40, top=60)
+        for a, out, inp in ((loader, "MODEL", "model"), (enhancer, "positive", "positive"), (enhancer, "negative", "negative"),
+                            (latent, "latent", "latent_image"), (latent, "seed", "seed"), (loader, "VAE", "vae")):
+            await basic_link(d, a, out, sampler, inp, 700)
+        await d.camera({"box": BASIC_BOX}, 1000, pad=60, top=60)
+        turbo = await basic_add(d, "HaDeSMossTurbo", "MOSS Turbo LoRA", P["turbo"])
+        await up_set(d, turbo, {"lora_name": BASIC_LORA, "strength": 1.0, "steps": 8, "cfg": 1.0, "sampler_name": "euler",
+                                "scheduler": "simple"})
+    await basic_link(d, turbo, "turbo", sampler, "turbo", 800)
+    await d.say(10)
+    saver = await basic_add(d, "HaDeSMossImageSaver", "MOSS Image Saver", P["saver"])
+    await basic_link(d, sampler, "image", saver, "images", 700)
+    await d._after_voice(0.1)
+
+    # 3. Suite Telemetry
+    await d.camera({"box": UP_BOX}, 1200, pad=60, top=60)
+    await d.say(11)
+    telemetry = await basic_add(d, "HaDeSMossSuiteTelemetry", "MOSS Suite Telemetry", P["telemetry"])
+    await d.say(12)
+    await d.camera([loader, enhancer, latent, sampler], 1200, pad=40, top=60)
+    for n, out in ((loader, "info"), (enhancer, "info"), (latent, "info"), (sampler, "info")):
+        x, y = await d.js("([id, n]) => window.__hv.slot(id, n, true)", [n, out])
+        await d.move(x, y, 700)
+        await d.hold(0.5)
+    await d._after_voice(0.1)
+    await d.camera({"box": [-60, -60, 1900, 1000]}, 1200, pad=40, top=60)
+    await d.say(13)
+    async with d.fast(5.0):
+        for k, (n, out) in enumerate(((loader, "info"), (enhancer, "info"), (latent, "info"), (sampler, "info"), (turbo, "info"))):
+            await basic_link(d, n, out, telemetry, f"info_{k + 1}", 800)
+    await d._after_voice(0.1)
+    await d.camera([sampler, saver, telemetry], 1200, pad=60, top=60)
+    async with d.fast(3.0):
+        preview = await basic_add(d, "PreviewAny", "Preview as Text", P["preview"])
+        await d.js("(id) => { const n = window.__hv.node(id); n.setSize([440, 560]); n.setDirtyCanvas(true, true); }", preview)
+        await basic_link(d, telemetry, "report", preview, "source", 700)
+    await d.camera([telemetry, preview], 1200, pad=60, top=60)
+    await d.say(14)
+    await d._after_voice(0.1)
+    await d.say(15)
+    await d._after_voice(0.1)
+    await d.camera([sampler, saver, telemetry], 1200, pad=60, top=60)
+    await d.say(16)
+    await basic_link(d, telemetry, "json", saver, "metadata", 800)
+    await d._after_voice(0.1)
+    await d.say(17)
+    await d._after_voice(0.1)
+
+    # 4. first run
+    await d.camera({"box": UP_BOX}, 1200, pad=60, top=60)
+    await d.say(18)
+    await d._after_voice(0.1)
+    url1, t1 = await basic_run(d, saver)
+    await d.move(W * 0.5, H * 0.92)
+    await d.say(19)
+    await d.js("(h) => window.__hv.show(h)", f'<div style="text-align:center"><img src="{url1}" style="height:760px;border-radius:6px">'
+               f'<div style="color:#ffcc33;font:600 28px Segoe UI,sans-serif;margin-top:14px">Base + Turbo 8-steps v1.0 · 8 steps · '
+               f'1024 x 1024 · {t1:.1f} s</div></div>')
+    await d.hold(3.0)
+    await d.js("() => window.__hv.hide()")
+    await d.camera([preview], 1200, pad=40, top=60)
+    await d._after_voice(0.6)
+
+    # 5. RealESRGAN x2
+    await d.camera({"box": UP_BOX}, 1200, pad=60, top=60)
+    await d.say(20)
+    await d._after_voice(0.1)
+    await d.say(21)
+    upmodel = await basic_add(d, "UpscaleModelLoader", "Load Upscale Model", P["upmodel"])
+    await up_set(d, upmodel, {"model_name": UP_UPSCALER})
+    await d.camera([saver, upmodel], 1000, pad=80, top=60)
+    await basic_point(d, upmodel, "model_name")
+    await d._after_voice(0.1)
+    await d.camera({"box": [1340, -60, 3060, 700]}, 1000, pad=40, top=60)
+    await d.say(22)
+    upscale = await basic_add(d, "ImageUpscaleWithModel", "Upscale Image using Model", P["upscale"])
+    async with d.fast(4.0):
+        await basic_link(d, upmodel, "UPSCALE_MODEL", upscale, "upscale_model", 700)
+        await basic_link(d, sampler, "image", upscale, "image", 900)
+        saver2 = await basic_add(d, "HaDeSMossImageSaver", "MOSS Image Saver", P["saver2"])
+        await basic_link(d, upscale, "IMAGE", saver2, "images", 700)
+        await basic_link(d, telemetry, "json", saver2, "metadata", 900)
+    await d._after_voice(0.1)
+    url2, t2 = await basic_run(d, saver2)
+    await d.move(W * 0.5, H * 0.92)
+    await d.camera([saver2], 1000, pad=120, top=60)
+    await d.say(23)
+    await d._after_voice(0.1)
+    await d.say(24)
+    await d.js("(h) => window.__hv.show(h)", up_crops_html(
+        [(url1, "1024, pixels doubled", True), (url2, f"RealESRGAN x2 · 2048 · {t2:.1f} s", False)], [UP_CROPS["face"], UP_CROPS["hands"]]))
+    await d.move(W - 60, H - 90)
+    await d._after_voice(1.0)
+    await d.js("() => window.__hv.hide()")
+    await d.hold(0.6)
+
+    # 6. the MOSS pass at denoise 0.25
+    await d.camera({"box": UP_BOX}, 1200, pad=60, top=60)
+    await d.say(25)
+    await d._after_voice(0.1)
+    await d.say(26)
+    encode = await basic_add(d, "VAEEncode", "VAE Encode", P["encode"])
+    await d.camera({"box": [-60, -60, 3360, 1240]}, 1000, pad=40, top=60)
+    await basic_link(d, upscale, "IMAGE", encode, "pixels", 800)
+    await basic_link(d, loader, "VAE", encode, "vae", 900)
+    async with d.fast(7.0):
+        sampler2 = await basic_add(d, "HaDeSMossKSampler", "MOSS KSampler", P["sampler2"])
+        for a, out, inp in ((loader, "MODEL", "model"), (enhancer, "positive", "positive"), (enhancer, "negative", "negative"),
+                            (encode, "LATENT", "latent_image"), (latent, "seed", "seed"), (loader, "VAE", "vae"), (turbo, "turbo", "turbo")):
+            await basic_link(d, a, out, sampler2, inp, 700)
+        saver3 = await basic_add(d, "HaDeSMossImageSaver", "MOSS Image Saver", P["saver3"])
+        await basic_link(d, sampler2, "image", saver3, "images", 700)
+        await basic_link(d, telemetry, "json", saver3, "metadata", 900)
+    await d._after_voice(0.1)
+    await d.camera([sampler2], 1100, pad=160, top=60)
+    await d.say(27)
+    await basic_point(d, sampler2, "denoise", {"denoise": 0.25})
+    await d._after_voice(0.1)
+    await d.camera({"box": UP_BOX}, 1200, pad=60, top=60)
+    await d.say(28)
+    await d._after_voice(0.1)
+    url3, t3 = await basic_run(d, saver3)
+    await d.move(W * 0.5, H * 0.92)
+    await d.camera([saver3], 1000, pad=120, top=60)
+    await d.hold(0.6)
+    await d.say(29)
+    await d.js("(h) => window.__hv.show(h)", up_crops_html(
+        [(url2, "RealESRGAN x2", False), (url3, f"x2 + MOSS pass, denoise 0.25 · {t3:.1f} s", False)],
+        [UP_CROPS["face"], UP_CROPS["hands"]]))
+    await d.move(W - 60, H - 90)
+    await d._after_voice(1.0)
+    await d.js("() => window.__hv.hide()")
+    await d.hold(0.6)
+
+    # 7. Telemetry notices the pass
+    await d.camera([sampler2, telemetry], 1100, pad=60, top=60)
+    await d.say(30)
+    await basic_link(d, sampler2, "info", telemetry, "info_6", 1000)
+    _, t4 = await basic_run(d, saver3)
+    await d.move(W * 0.5, H * 0.92)
+    await d.camera([preview], 1100, pad=40, top=60)
+    await d._after_voice(0.6)
+
+    # 8. which one, tips
+    await d.camera({"box": UP_BOX}, 1200, pad=60, top=60)
+    await d.say(31)
+    await d._after_voice(0.1)
+    await d.say(32)
+    await d.js("(h) => window.__hv.show(h)", up_crops_html(
+        [(url3, "denoise 0.25", False), (UP_D40, "denoise 0.40", False)], [UP_CROPS["face"]]))
+    await d.move(W - 60, H - 90)
+    await d._after_voice(0.8)
+    await d.js("() => window.__hv.hide()")
+    await d.camera([latent], 1100, pad=200, top=60)
+    await d.say(33)
+    await basic_point(d, latent, "control_after_generate")
+    await d._after_voice(0.1)
+    # the saver's own note, read from the last run (the node does not draw it)
+    run = next(iter((await d.js("() => fetch('/history?max_items=1').then(r => r.json())")).values()))
+    note = (run["outputs"].get(str(saver3), {}).get("text") or [""])[0]
+    await d.camera([saver3], 1100, pad=140, top=60)
+    await d.say(34)
+    if note:
+        await d.js("(h) => window.__hv.show(h)", '<div style="margin-top:300px;max-width:1500px;padding:36px 44px;border-radius:14px;'
+                   'background:#24242b;border:2px solid #ffcc33;color:#fff;font:500 32px Segoe UI,sans-serif;line-height:1.4">'
+                   '<div style="color:#ffcc33;font:600 26px Segoe UI,sans-serif;margin-bottom:14px">MOSS Image Saver</div>'
+                   + note.replace("&", "&amp;").replace("<", "&lt;") + '</div>')
+    await d._after_voice(0.1)
+    await d.say(35)
+    await d._after_voice(0.3)
+    await d.js("() => window.__hv.hide()")
+
+    # 9. goodbye
+    ids = [loader, enhancer, latent, sampler, saver, turbo, telemetry, preview, upmodel, upscale, saver2, encode, sampler2, saver3]
+    await d.camera(ids, 1400, pad=50, top=60)
+    await d.say(36)
+    await d.move(W * 0.5, H * 0.9)
+    await d._after_voice(0.1)
+    await d.say(37)
+    await d.js("(h) => window.__hv.show(h)", '<div style="color:#fff;text-align:center;margin-top:300px">'
+               '<div style="font:600 30px Segoe UI,sans-serif;color:#c9c9d1">Free download (link in the description)</div>'
+               '<div style="font:700 44px Segoe UI,sans-serif;margin-top:22px">HaDeS MOSS Suite - Turbo 8 steps + Upscale x2.json</div></div>')
+    await d._after_voice(0.3)
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }",
+               f'<div style="display:flex;align-items:center;gap:80px;margin-top:60px"><img src="{url3}" style="height:780px;border-radius:6px">'
+               '<div style="color:#fff;max-width:640px"><div style="font:900 72px Segoe UI Black,sans-serif;line-height:1.05">HaDeS MOSS Suite</div>'
+               '<div style="font:600 34px Segoe UI,sans-serif;color:#ffcc33;margin-top:22px">Bigger images: Upscale x2 + Telemetry</div>'
+               '<div style="font:400 26px Segoe UI,sans-serif;color:#c9c9d1;margin-top:44px">Workflow, Suite and models: links in the description</div></div></div>')
+    await d.say(38)
+    await d.say(39)
+    await d.end(1.5)
+
+
+upscale_telemetry.prepare = up_prepare
+
+
 SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "layout_test": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_test, LAYOUT_TEST_LINES),
           "layout_sentence": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_sentence, LAYOUT_SENTENCE_LINES),
           "turbo_8_steps_upscale_x2": ("HaDeS MOSS Suite - Turbo 8 steps + Upscale x2.json", turbo_upscale_x2,
-                                       TURBO_UPSCALE_LINES)}
+                                       TURBO_UPSCALE_LINES),
+          "upscale_telemetry": (None, upscale_telemetry, UP_LINES)}
 
 # spoken forms where the written caption reads badly aloud
 SPOKEN = {"DRAFT LAYOUT": "Draft layout"}
@@ -1426,7 +1877,7 @@ def edit(rec_frames, d: Director, folder: Path, name: str, fps: int, cap_lang: s
            "Style: Title,Segoe UI Black,64,&H00FFFFFF,&H00FFFFFF,&H50101012,&H50101012,0,0,0,0,100,100,1,0,3,22,0,7,90,90,120,1",
            "Style: Sub,Segoe UI Semibold,36,&H0033CCFF,&H0033CCFF,&H50101012,&H50101012,0,0,0,0,100,100,0,0,3,14,0,7,90,90,222,1",
            "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"]
-    for a, b, en, es in caps:
+    for a, b, en, es in caps if cap_lang != "none" else []:  # none: the .srt files only
         ass.append(f"Dialogue: 0,{ts(a, '.')},{ts(b, '.')},Cap,,0,0,0,,{{\\fad(220,180)}}{en if cap_lang == 'en' else es}")
     for t, secs, text, subtitle in d.titles:
         a, b = f(t), f(t) + secs
@@ -1566,7 +2017,8 @@ def main():
     ap.add_argument("--until", type=int, help="test take: stop the scene before line N + 1")
     ap.add_argument("--voice", choices=["en", "es"], help="speak the captions in this language with the cloned voice")
     ap.add_argument("--ref", help="reference recording of the voice to clone (wav, 10-30 s, one speaker)")
-    ap.add_argument("--captions", choices=["en", "es"], help="language of the burned captions (default: the voice's, else en)")
+    ap.add_argument("--captions", choices=["en", "es", "none"],
+                    help="language of the burned captions (default: the voice's, else en); none: no burned captions, the .srt files only")
     ap.add_argument("--tts-python", default=str(COMFY / "venv" / "Scripts" / "python.exe"), help="a Python with qwen-tts")
     ap.add_argument("--serve", action="store_true", help="start a clean ComfyUI at --url for the recording and stop it after")
     ap.add_argument("--comfy-args", default="--use-sage-attention",

@@ -674,6 +674,29 @@ spectral energy above a quarter of Nyquist at 2048; drift = mean pixel differenc
 - The turbo pass looks as good as the SFT pass at a fifth of the time; denoise 0.40 adds a little more and changes the image a
   little more than 0.25. The example workflow uses Turbo 8-steps at 0.25. Four images, one seed each, judged by eye.
 
+**The same pass on Base with Turbo 8-steps v1.0** (2026-11-20, for the second tutorial). MOSS-Image Base bf16, Qwen3.5 9B int8,
+FLUX.2 VAE, Turbo 8-steps v1.0 at 1.0 on the MOSS KSampler's `turbo` input (8 steps, CFG 1, euler / simple), the fisherman of the
+first tutorial at 1024 x 1024, seed 1013; RealESRGAN x2 to 2048, then `VAEEncode` and a second MOSS KSampler with the same turbo,
+`denoise_mode` core. Clean ComfyUI on port 8189 with `--use-sage-attention`, RTX 5090, models warm; seconds from `/history`
+(`execution_start` to `execution_success`), each run re-executing only its own stage (ComfyUI's cache skips the rest), two runs per
+denoise. Detail and drift are computed here with this run's own script (share of spectral energy outside a radius of a quarter of
+the 2048 spectrum's half-width, in %; mean absolute difference from the RealESRGAN image, both resized to 512), so the detail values
+are not on the same scale as the table above; compare them only within this table:
+
+| Stage | Detail | Drift | Seconds |
+|---|---|---|---|
+| 1024, 8 steps (image only) | 0.37 (pixel-doubled to 2048) | 2.02 | 2.9 |
+| RealESRGAN x2 | 0.52 | 0 | 1.1 |
+| + MOSS pass, denoise 0.25 | 0.61 | 8.23 | 10.7–11.1 |
+| + MOSS pass, denoise 0.40 | 0.76 | 12.66 | 10.7–10.8 |
+
+- By eye on 100% crops (face and hands): the RealESRGAN image is sharp at the edges but smooth inside; the 0.25 pass adds skin
+  pores and spots on the forehead and the hands, separates beard and hair strands and sharpens the net's threads, keeping the
+  face. 0.40 adds a little more and redraws more (the forehead's wrinkles change). One image, one seed, judged by eye.
+- Suite Telemetry on this pipeline: no findings for the 1024 stage; with the pass's KSampler connected, one note (turbo LoRA at
+  denoise 0.25). The MOSS Image Saver with that Telemetry json notes that A1111 parameters take the first KSampler unless
+  `primary_stage_metadata` picks a stage.
+
 ## Attention backends and int8 speed
 
 `--mode attention`, RTX 5090 (32 GB, the whole model in VRAM in every run), café woman, fisherman and watercolor fox x seeds
