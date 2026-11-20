@@ -25,13 +25,14 @@ NEGATIVE = "nsfw, worst quality, bad anatomy, watermark, jpeg artifact"
 HF = "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main"
 TURBO, TURBO_DIVERSE = "HaDeS-MOSS-Turbo-v0.6.safetensors", "HaDeS-MOSS-Turbo-Diverse-v0.6.safetensors"
 TURBO_8STEPS = "HaDeS-MOSS-Turbo-8steps-v0.7.safetensors"
+TURBO_V10 = "HaDeS-MOSS-Turbo-8steps-v1.0.safetensors"  # for Base
 UPSCALER = "RealESRGAN_x2plus.pth"
 HF_TURBO = "https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo/resolve/main"
 # file -> (models folder, download URL)
 MODEL_FILES = {SFT: ("diffusion_models", f"{HF}/diffusion_models/{SFT}"), BASE: ("diffusion_models", f"{HF}/diffusion_models/{BASE}"),
                TE: ("text_encoders", f"{HF}/text_encoders/{TE}"), VAE: ("vae", f"{HF}/vae/{VAE}"),
                TURBO: ("loras", f"{HF_TURBO}/{TURBO}"), TURBO_DIVERSE: ("loras", f"{HF_TURBO}/{TURBO_DIVERSE}"),
-               TURBO_8STEPS: ("loras", f"{HF_TURBO}/{TURBO_8STEPS}"),
+               TURBO_8STEPS: ("loras", f"{HF_TURBO}/{TURBO_8STEPS}"), TURBO_V10: ("loras", f"{HF_TURBO}/{TURBO_V10}"),
                UPSCALER: ("upscale_models", f"https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/{UPSCALER}")}
 LORA = "moss_lora.safetensors"
 CONTROL_ADAPTER = "moss-color-depth-control.safetensors"  # darask0/MOSS-Image-color-depth-control (Hugging Face), trained on Base
@@ -327,6 +328,27 @@ EXAMPLES = {
         "_groups": [("1. Generate (Turbo 8 steps)", ["load", "turbo", "enh", "latent", "ks", "save", "tel", "report"], "#335533"),
                     ("2. Upscale x2 (model)", ["upmodel", "up", "save_up"], "#334466"),
                     ("3. Upscale x2 + MOSS pass (turn on to use)", ["enc", "ks2", "save_ref"], "#553355")],
+    },
+    "HaDeS MOSS Suite - Basic Generation": {
+        # the first video tutorial, built node by node: Base at 25 steps, then Turbo 8-steps v1.0 at 8 (tools/moss_video.py basic_generation)
+        **loader(BASE),
+        "enh": prompt("Photograph of an old fisherman with a grey beard mending a net on a wooden dock at sunrise, his face and weathered "
+                      "hands in view, thick wool sweater, seagulls in the background."),
+        "latent": latent(seed=1013),
+        "turbo": ("HaDeSMossTurbo", {"lora_name": TURBO_V10, "strength": 1.0, "steps": 8}),
+        "ks": with_turbo(ksampler(("load", 0), ("latent", 0), seed=("latent", 4)), sampler_name="euler"),
+        "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "filename_prefix": "MOSS/HaDeS_MOSS_%seed%", "hashes": True, "embed_workflow": True}),
+        "note": ("Note", {"text": "HaDeS MOSS Suite - Basic Generation (the first video tutorial)\n\n"
+                                  "MOSS Loader: MOSS-Image Base, the Qwen3.5 9B int8 text encoder and the FLUX.2 VAE.\n"
+                                  "MOSS Prompt Enhancer, 'as written': your sentence is the prompt.\n"
+                                  "MOSS KSampler: 25 steps, CFG 2.5, euler / simple when the turbo input is empty.\n"
+                                  "MOSS Turbo LoRA (Turbo 8-steps v1.0, trained for Base): 8 steps, CFG 1, euler / simple.\n"
+                                  "   For 25 steps again: switch the turbo node off or unplug its wire.\n"
+                                  "   With HaDeS MOSS v1.0 Turbo as the model, leave the turbo input empty: it is baked in.\n\n"
+                                  "Models: the turbo LoRA in models/loras (huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo).\n"
+                                  "Seed 1013 in MOSS Latent is the video's; set its after run to randomize for new images."}),
+        "_layout": {"load": (0, 0), "enh": (440, 0), "latent": (940, 0), "ks": (1380, 0), "save": (1820, 0), "turbo": (940, 450),
+                    "note": (0, 360)},
     },
     "HaDeS MOSS Suite - Control (color, depth)": {
         **loader(),

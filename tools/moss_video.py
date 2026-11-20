@@ -20,6 +20,7 @@ import contextlib
 import hashlib
 import json
 import math
+import re
 import shutil
 import subprocess
 import sys
@@ -28,7 +29,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 COMFY = ROOT.parents[1]
-W, H = 1920, 1080
+W, H = 1920, 1080  # the page and the video; 1440p is a 2560 x 1440 page (Chrome's screencast ignores device scale)
 
 # a drawn cursor (headless Chromium shows none) with a ring on each press
 CURSOR_JS = r"""
@@ -37,13 +38,14 @@ CURSOR_JS = r"""
     if (document.getElementById('__hv_cursor')) return;
     const c = document.createElement('div');
     c.id = '__hv_cursor';
-    c.innerHTML = '<svg width="28" height="28" viewBox="0 0 28 28"><path d="M3 2 L3 22 L8.5 17 L12.5 26 L16 24.5 L12 15.8 L19.5 15.8 Z" fill="#fff" stroke="#111" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+    const k = Math.max(1, innerWidth / 1920);
+    c.innerHTML = '<svg width="' + 28 * k + '" height="' + 28 * k + '" viewBox="0 0 28 28"><path d="M3 2 L3 22 L8.5 17 L12.5 26 L16 24.5 L12 15.8 L19.5 15.8 Z" fill="#fff" stroke="#111" stroke-width="1.6" stroke-linejoin="round"/></svg>';
     Object.assign(c.style, {position: 'fixed', left: '0', top: '0', zIndex: 2147483647, pointerEvents: 'none',
       transform: 'translate(960px, 540px)', filter: 'drop-shadow(0 2px 3px rgba(0,0,0,.45))'});
     document.body.appendChild(c);
     const ring = (x, y) => {
       const r = document.createElement('div');
-      Object.assign(r.style, {position: 'fixed', left: (x - 22) + 'px', top: (y - 22) + 'px', width: '44px', height: '44px',
+      Object.assign(r.style, {position: 'fixed', left: (x - 22 * k) + 'px', top: (y - 22 * k) + 'px', width: 44 * k + 'px', height: 44 * k + 'px',
         borderRadius: '50%', border: '3px solid #ffcc33', zIndex: 2147483646, pointerEvents: 'none', opacity: '0.95',
         transition: 'transform .45s ease-out, opacity .45s ease-out', transform: 'scale(.35)'});
       document.body.appendChild(r);
@@ -71,10 +73,23 @@ window.__hv = {
     const n = this.node(id), t = (window.LiteGraph?.NODE_TITLE_HEIGHT ?? 30);
     return [n.pos[0], n.pos[1] - t, n.pos[0] + n.size[0], n.pos[1] + n.size[1]];
   },
+  // graph point -> screen, and a node slot's point on screen (output when out is true)
+  g2s(x, y) {
+    const a = this.app(), r = a.canvas.canvas.getBoundingClientRect(), p = a.canvas.ds.convertOffsetToCanvas([x, y]);
+    return [r.left + p[0], r.top + p[1]];
+  },
+  slot(id, name, out) {
+    const n = this.node(id), list = out ? n.outputs : n.inputs, i = list.findIndex((s) => s.name === name);
+    if (i < 0) throw new Error(`${n.type} has no ${out ? 'output' : 'input'} ${name}`);
+    const p = n.getConnectionPos(!out, i);
+    return this.g2s(p[0], p[1]);
+  },
+  // ids: node ids, or {box: [x1, y1, x2, y2]} in graph space (an empty canvas has no nodes to frame)
   target(ids, pad, top, bottom = 150) {
     const a = this.app(), r = a.canvas.canvas.getBoundingClientRect();
     let [x1, y1, x2, y2] = [Infinity, Infinity, -Infinity, -Infinity];
-    for (const id of ids) { const b = this.rect(id); x1 = Math.min(x1, b[0]); y1 = Math.min(y1, b[1]); x2 = Math.max(x2, b[2]); y2 = Math.max(y2, b[3]); }
+    if (ids.box) [x1, y1, x2, y2] = ids.box;
+    else for (const id of ids) { const b = this.rect(id); x1 = Math.min(x1, b[0]); y1 = Math.min(y1, b[1]); x2 = Math.max(x2, b[2]); y2 = Math.max(y2, b[3]); }
     const availH = r.height - top - bottom - pad * 2, availW = r.width - pad * 2;
     const s = Math.min(availW / (x2 - x1), availH / (y2 - y1), 2.2);
     const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
@@ -116,7 +131,7 @@ window.__hv = {
     let el = document.getElementById('__hv_show');
     if (!el) {
       el = document.createElement('div'); el.id = '__hv_show';
-      Object.assign(el.style, {position: 'fixed', inset: '0', zIndex: 2147483600, background: 'rgba(10,10,12,0.96)', display: 'flex',
+      Object.assign(el.style, {zoom: String(Math.max(1, innerWidth / 1920)), position: 'fixed', inset: '0', zIndex: 2147483600, background: 'rgba(10,10,12,0.96)', display: 'flex',
         alignItems: 'flex-start', justifyContent: 'center', paddingTop: '50px', boxSizing: 'border-box', opacity: '0', transition: `opacity ${ms}ms ease`, fontFamily: 'Segoe UI, sans-serif'});
       document.body.appendChild(el);
     }
@@ -158,12 +173,20 @@ class Recorder:
         await asyncio.sleep(0.2)
 
 
+class StopScene(Exception):
+    """Raised by say() past --until: a test take of the first lines only."""
+
+
+UNTIL = None
+
+
 class Director:
     """The scene's tools: captions, fast parts, a cursor that moves like a hand, clicks, typing, the camera."""
 
-    def __init__(self, page, lines, voice_lens):
+    def __init__(self, page, lines, voice_lens, language="en"):
         self.page, self.captions, self.fast_parts, self.pos = page, [], [], (W / 2, H / 2)
         self.lines, self.voice_lens = lines, voice_lens
+        self.language = language
         self.t0, self.saved, self.voice_end, self.spoken, self.titles = time.time(), 0.0, 0.0, [], []
 
     def now(self):
@@ -178,7 +201,9 @@ class Director:
         """Caption i of the scene, and its voice when there is one; waits for the previous voice to end first."""
         await self._after_voice()
         await self.no_library()
-        en, es = self.lines[i]
+        if UNTIL is not None and i > UNTIL:
+            raise StopScene
+        en, es = self.lines[i][:2]
         self.captions.append((time.time(), en, es))
         if i in self.voice_lens:
             self.spoken.append((time.time(), i))
@@ -564,8 +589,741 @@ async def layout_sentence(d: Director):
     await d.end(1.5)
 
 
-SCENES = {"layout_test": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_test, LAYOUT_TEST_LINES),
-          "layout_sentence": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_sentence, LAYOUT_SENTENCE_LINES)}
+TURBO_UPSCALE_LINES = [
+    ("Hi, I'm HaDeS. Today I'll show you my Turbo 8 Steps plus x2 Upscale workflow for the MOSS-Image model in ComfyUI.",
+     "Hola, soy HaDeS. Hoy te enseño mi workflow Turbo de ocho pasos con escalado x2 para el modelo MOSS-Image en ComfyUI."),
+    ("And how do I install it? Open the ComfyUI Manager, go to Custom Nodes Manager, search for HaDeS MOSS Suite, and click Install. "
+     "After installation, restart ComfyUI so the nodes appear. Mine already shows it as installed because, of course, I already have it.",
+     "¿Y cómo instalo esto? Abre el Manager de ComfyUI, entra en Custom Nodes Manager, busca HaDeS MOSS Suite y pulsa Install. "
+     "Después de instalarla, reinicia ComfyUI para que aparezcan los nodos. A mí ya me sale instalada porque, obviamente, ya la tengo."),
+    ("The HaDeS models and workflows I made are free to download. I've put their links in the description, along with the links for "
+     "the base model and the upscaler.",
+     "Los modelos HaDeS y los workflows que he creado se pueden descargar gratis. He dejado sus enlaces en la descripción, junto con "
+     "los del modelo base y el upscaler."),
+    ("For this example, I'm using my Turbo 8-steps v0.7 LoRA with MOSS-Image SFT, as shown in this workflow. A newer, improved version, "
+     "v1.0, is also available.",
+     "Para este ejemplo uso mi LoRA Turbo 8-steps v0.7 con MOSS-Image SFT, tal como aparece en este workflow. También está disponible "
+     "una versión posterior y mejorada, la v1.0."),
+    ("I built this workflow in three stages: generate the image, upscale it, and optionally refine the upscaled image with MOSS.",
+     "He organizado este workflow en tres etapas: generar la imagen, escalarla y, si quiero, refinarla con MOSS."),
+    ("I generate the first image at 1024 by 1024, with eight steps, CFG one, and Euler Simple.",
+     "Genero la primera imagen a 1024 por 1024, con ocho steps, CFG uno y Euler Simple."),
+    ("Now I use RealESRGAN x2 to take the image to 2048 by 2048. This adds an upscaling stage without running another MOSS pass.",
+     "Ahora uso RealESRGAN x2 para llevar la imagen a 2048 por 2048. Así añado el escalado sin ejecutar otro pase de MOSS."),
+    ("If I want to refine the upscaled image, I can activate this MOSS pass at denoise 0.25.",
+     "Si quiero refinar la imagen escalada, puedo activar este pase de MOSS con denoise 0,25."),
+    ("In my four-image test, I preferred the texture in the full-size crops. That's a visual result from a small test, not a guarantee "
+     "for every image.",
+     "En mi prueba con cuatro imágenes, preferí la textura de los recortes al cien por cien. Es el resultado visual de una prueba "
+     "pequeña, no una garantía para todas las imágenes."),
+    ("I can stop after the upscale, or add the MOSS pass when I want to refine the result.",
+     "Puedo quedarme con el escalado o añadir el pase de MOSS cuando quiera refinar el resultado."),
+    ("If you've made it to the end and enjoyed the video, and you'd like more short, easy ComfyUI tutorials, please leave a like and "
+     "subscribe. Thank you for watching until the end.",
+     "Si has llegado hasta el final y te ha gustado el vídeo, y quieres más tutoriales cortos y sencillos para ComfyUI, déjame un like "
+     "y suscríbete. ¡Gracias por ver el vídeo hasta el final!"),
+    ("Here are the same areas at one hundred percent. On the left, I doubled the original pixels. On the right is the RealESRGAN result.",
+     "Aquí se ven las mismas zonas al cien por cien. A la izquierda, he duplicado los píxeles del original. A la derecha, está el resultado de RealESRGAN."),
+]
+
+
+async def turbo_comparison(d, images, labels, heading, crop=None, double_before=False):
+    """Display full images or matching 700 px windows in 2048 px image space."""
+    await d.js("""async ({images, labels, heading, crop, doubleBefore}) => {
+        const size = 700;
+        const columns = await Promise.all(images.map(async (src, i) => {
+            const img = new Image();
+            img.src = src;
+            await img.decode();
+            const doubled = i === 0 && doubleBefore;
+            const expected = doubled ? 1024 : 2048;
+            if (img.naturalWidth !== expected || img.naturalHeight !== expected)
+                throw new Error('Unexpected image size for the Turbo comparison');
+
+            const style = crop
+                ? 'width:2048px;height:2048px;max-width:none;margin-left:-' + crop[0] + 'px;margin-top:-' + crop[1] + 'px;'
+                : 'width:700px;height:700px;object-fit:contain;';
+            img.style.cssText = 'display:block;' + style + (crop && doubled ? 'image-rendering:pixelated;' : '');
+            return '<div><div style="margin-bottom:12px">' + labels[i] + '</div>' +
+                '<div style="width:700px;height:700px;overflow:hidden">' + img.outerHTML + '</div></div>';
+        }));
+        window.__hv.show('<section id="__hv_turbo_compare" style="color:white;font:600 26px Segoe UI,sans-serif">' +
+            '<div style="color:#ffcc33;font-size:32px;margin-bottom:18px">' + heading + '</div>' +
+            '<div style="display:flex;gap:42px">' + columns.join('') + '</div></section>', 180);
+        if (crop) {
+            const imgs = [...document.querySelectorAll('#__hv_turbo_compare img')];
+            if (imgs.length !== 2 || devicePixelRatio !== 1 || imgs.some(img => {
+                const frame = img.parentElement.getBoundingClientRect(), box = img.getBoundingClientRect();
+                return box.width !== 2048 || box.height !== 2048 || frame.width !== size || frame.height !== size
+                    || Math.abs(frame.left - box.left - crop[0]) > 0.01 || Math.abs(frame.top - box.top - crop[1]) > 0.01;
+            })) throw new Error('The crop is not rendered at 1:1');
+        }
+    }""", {"images": images, "labels": labels, "heading": heading, "crop": crop, "doubleBefore": double_before})
+
+
+async def turbo_crop_sequence(d, images, labels, voice_line, double_before=False):
+    es = d.language == "es"
+    face = "Rostro · recorte al 100 %" if es else "Face · 100% crop"
+    hands = "Manos y herramientas · recorte al 100 %" if es else "Hands and tools · 100% crop"
+    await turbo_comparison(d, images, labels, face, (950, 124), double_before)
+    await d.hold(0.2)
+    await d.say(voice_line)
+    await d.hold(max(2.6, d.voice_lens.get(voice_line, 6) / 2))
+    await turbo_comparison(d, images, labels, hands, (535, 790), double_before)
+    await d._after_voice(0.35)
+    await d.hold(0.3)
+
+
+async def turbo_render(d, output_ids):
+    """Queue the graph and return image URLs for the requested output nodes."""
+    await d.js("() => window.__hv.app().queuePrompt(0, 1)")
+    async with d.fast(2.0):
+        await d.hold(0.8)
+        for _ in range(1200):
+            if await d.js("() => fetch('/queue').then(r => r.json()).then(q => q.queue_running.length + q.queue_pending.length)") == 0:
+                break
+            await asyncio.sleep(0.25)
+        else:
+            raise SystemExit("the Turbo workflow did not finish in 5 minutes")
+        await d.hold(0.6)
+    return await d.js("""async (ids) => {
+        const hist = await fetch('/history?max_items=1').then(r => r.json());
+        const run = Object.values(hist)[0];
+        return ids.map(id => {
+            const im = run?.outputs?.[id]?.images?.[0];
+            if (!im) throw new Error('The Turbo workflow did not save output ' + id);
+            return '/view?' + new URLSearchParams({
+                filename: im.filename, subfolder: im.subfolder || '', type: im.type || 'output',
+            });
+        });
+    }""", output_ids)
+
+
+async def turbo_upscale_x2(d: Director):
+    """Show Turbo v0.7, RealESRGAN x2 and the optional MOSS refinement."""
+    all_ids = list(range(1, 13))
+    es = d.language == "es"
+    heading = "Imágenes completas" if es else "Full images"
+    first_labels = ["1024 × 1024 · " + ("original" if es else "generated"), "2048 × 2048 · RealESRGAN x2"]
+    crop_labels = ["Original ×2 · " + ("píxeles duplicados" if es else "doubled pixels"), first_labels[1]]
+    refined_labels = ["RealESRGAN x2", "x2 + MOSS · denoise " + ("0,25" if es else "0.25")]
+    await d.camera(all_ids, 10, pad=50, top=60)
+    await d.hold(0.8)
+    d.title("HaDeS MOSS Suite", "Turbo 8 Steps + Upscale x2", 6.5)
+    await d.say(0)
+
+    await d.say(1)
+    manager = d.page.get_by_role("button", name="Manager").first
+    b = await manager.bounding_box()
+    if not b:
+        raise SystemExit("the ComfyUI Manager button is not visible")
+    await d.click(b["x"] + b["width"] / 2, b["y"] + b["height"] / 2)
+    cnm = await d.page.get_by_text("Custom Nodes Manager").first.bounding_box()
+    await d.click(cnm["x"] + cnm["width"] / 2, cnm["y"] + cnm["height"] / 2)
+    await d.page.wait_for_selector("input.cn-manager-keywords", timeout=30000)
+    await d.hold(1.0)
+    search = d.page.locator("input.cn-manager-keywords").first
+    await search.fill("HaDeS MOSS")
+    await d.hold(2.0)
+    if not await d.page.get_by_text("HaDeS MOSS Suite", exact=False).count():
+        raise SystemExit("the Manager search did not show HaDeS MOSS Suite")
+    row = await d.page.get_by_text("HaDeS MOSS Suite", exact=False).last.bounding_box()
+    await d.hover(row["x"] + row["width"] / 2, row["y"] + row["height"] / 2)
+    await d._after_voice(0.2)
+    await d.hold(0.6)
+    for _ in range(3):
+        close = await d.page.evaluate("""() => {
+            const inManager = (e) => { let p = e; while (p && p.getBoundingClientRect().width < 900) p = p.parentElement;
+                return Boolean(p && p !== document.body && (p.querySelector('input.cn-manager-keywords') || /ComfyUI Manager V\\d/.test(p.innerText.slice(0, 200)))); };
+            const v = [...document.querySelectorAll('button.cm-ui-close')]
+            .map(e => [e, e.getBoundingClientRect()]).filter(([e, r]) => r.width > 0 && r.width < 60 && getComputedStyle(e).visibility !== 'hidden' && inManager(e));
+            const last = v[v.length - 1]; return last ? [last[1].x + last[1].width / 2, last[1].y + last[1].height / 2] : null; }""")
+        if not close:
+            break
+        await d.click(*close)
+        await d.hold(0.6)
+    if await d.page.locator("input.cn-manager-keywords:visible").count():
+        raise SystemExit("the Manager list did not close")
+
+    await d.camera([1], 950, pad=28, top=45)
+    await d.say(2)
+    await d.say(3)
+    await d.hold(3.0)
+    await d.camera([4], 900, pad=36, top=55)
+    await d._after_voice()
+    await d.camera(all_ids, 1100, pad=45, top=50)
+    await d.say(4)
+    await d.hold(2.0)
+    await d.camera([7, 8, 9], 850, pad=38, top=46)
+    await d.hold(1.25)
+    await d.camera([10, 11, 12], 850, pad=38, top=46)
+    await d._after_voice()
+
+    await d.camera([3, 4, 5], 950, pad=26, top=44)
+    await d.say(5)
+    await d._after_voice()
+    base, upscale = await turbo_render(d, [6, 9])
+    await d.camera([7, 8, 9], 950, pad=36, top=45)
+    await d.say(6)
+    await d._after_voice()
+    await d.move(W - 70, H - 100)
+    await turbo_comparison(d, [base, upscale], first_labels, heading, double_before=True)
+    await d.hold(3.0)
+    await turbo_crop_sequence(d, [base, upscale], crop_labels, 11, double_before=True)
+    await d.js("() => window.__hv.hide(180)")
+
+    # Change only the three in-memory nodes in the optional group.
+    await d.camera([11], 1000, pad=30, top=45)
+    await d.js("""() => {
+        const a = window.__hv.app();
+        for (const id of [10, 11, 12]) window.__hv.node(id).mode = 0;
+        a.graph.setDirtyCanvas(true, true);
+        a.canvas.setDirty(true, true);
+    }""")
+    await d.hover(*await d.js("() => window.__hv.widgetPoint(11, 'denoise')"), ms=450)
+    await d.say(7)
+    await d._after_voice()
+    refined, = await turbo_render(d, [12])
+    await d.move(W - 70, H - 100)
+    await turbo_comparison(d, [upscale, refined], refined_labels, heading)
+    await d.hold(3.0)
+    await turbo_crop_sequence(d, [upscale, refined], refined_labels, 8)
+    await d.js("() => window.__hv.hide(180)")
+    await d.camera([9, 12], 1050, pad=36, top=45)
+    await d.say(9)
+    await d._after_voice()
+
+    links = "Enlaces al workflow y los modelos en la descripción" if es else "Workflow and model links in the description"
+    await d.js("(html) => window.__hv.show(html)", '<div style="color:#fff;max-width:1200px;text-align:left">'
+               '<div style="font:900 72px Segoe UI Black,sans-serif">HaDeS MOSS Suite</div>'
+               '<div style="font:600 38px Segoe UI,sans-serif;color:#ffcc33;margin-top:18px">Turbo 8 Steps + Upscale x2</div>'
+               '<div style="font:400 26px Segoe UI,sans-serif;color:#c9c9d1;margin-top:38px">' + links + '</div></div>')
+    await d.say(10)
+    await d.end(1.5)
+
+
+# ---- basic generation from an empty canvas ----
+
+BASIC_PROMPT = ("Photograph of an old fisherman with a grey beard mending a net on a wooden dock at sunrise, his face and weathered "
+                "hands in view, thick wool sweater, seagulls in the background.")
+BASIC_SEED = 1013  # picked on the clean recording instance (sage attention): good at 25 steps and with the turbo
+BASIC_LORA = "MOSS\\turbo_v10\\HaDeS-MOSS-Turbo-8steps-v1.0.safetensors"
+BASIC_LOADER = {"unet_name": "mossImage_base_bf16.safetensors", "clip_name": "qwen3.5_9b_int8_convrot.safetensors",
+                "vae_name": "flux2-vae.safetensors"}
+# where each node goes, in graph space: one row, the turbo under the latent
+BASIC_POS = {"HaDeSMossLoader": (0, 0), "HaDeSMossPromptEnhancer": (440, 0), "HaDeSMossLatent": (940, 0),
+             "HaDeSMossKSampler": (1380, 0), "HaDeSMossImageSaver": (1820, 0), "HaDeSMossTurbo": (940, 450)}
+BASIC_BOX = [-260, -60, 2220, 800]  # room on the left: a double-click near the sidebar opens nothing
+# 100 % crops (image pixels, 512 square, top-left corners) of the seed-1013 images: face and hands, 25 steps then turbo
+BASIC_CROPS = [((214, 34), (464, 512)), ((250, 44), (280, 512))]
+
+BASIC_LINES = [
+    ("Hi, I'm HaDeS, and welcome to the first tutorial on this channel.",
+     "Hola, soy HaDeS, y bienvenido al primer tutorial de este canal."),
+    ("Today we'll build a MOSS-Image workflow in ComfyUI from a completely empty canvas, one node at a time.",
+     "Hoy vamos a montar un workflow de MOSS-Image en ComfyUI desde un lienzo completamente vacío, nodo a nodo."),
+    ("We'll make a first image at twenty-five steps, then add my Turbo LoRA and make the same image in only eight.",
+     "Haremos una primera imagen a veinticinco pasos, luego añadiremos mi LoRA Turbo y haremos la misma imagen en solo ocho."),
+    ("Everything I use is free: the workflow we build today, the HaDeS MOSS Suite, my models and the official MOSS-Image files. "
+     "All the links are in the description.",
+     "Todo lo que uso es gratis: el workflow que montamos hoy, HaDeS MOSS Suite, mis modelos y los archivos oficiales de MOSS-Image. "
+     "Tienes todos los enlaces en la descripción."),
+    # 4: install
+    ("First, the nodes. Open the Manager, go to Custom Nodes Manager and search for HaDeS MOSS.",
+     "Primero, los nodos. Abre el Manager, entra en Custom Nodes Manager y busca HaDeS MOSS."),
+    ("Click Install and restart ComfyUI. Mine is already installed, because obviously I use it every day.",
+     "Pulsa Install y reinicia ComfyUI. A mí ya me sale instalada porque, obviamente, la uso a diario."),
+    ("If you prefer the very latest updates, you can also install it from the official GitHub repository. The link is in the "
+     "description too.",
+     "Si prefieres tener siempre las últimas actualizaciones, también puedes instalarla desde el repositorio oficial de GitHub. "
+     "El enlace también está en la descripción."),
+    # 7: the empty canvas
+    ("So here's an empty workflow. To make an image, we need five things.",
+     "Aquí tenemos un workflow vacío. Para hacer una imagen necesitamos cinco cosas."),
+    ("A loader for the model, a prompt, an empty image to start from, a sampler that does the work, and a node that saves the result.",
+     "Un loader para el modelo, un prompt, una imagen vacía de la que partir, un sampler que hace el trabajo y un nodo que guarda "
+     "el resultado."),
+    # 9: loader
+    ("I double-click the empty canvas to open the node search, and type MOSS Loader.",
+     "Hago doble clic en el lienzo vacío para abrir el buscador de nodos y escribo MOSS Loader."),
+    ("MOSS-Image needs three files: the diffusion model, the Qwen text encoder and the Flux 2 VAE. This one node loads all three.",
+     "MOSS-Image necesita tres archivos: el modelo de difusión, el text encoder Qwen y el VAE de Flux 2. Este nodo carga los tres.",
+     "MOSS-Image needs three files: the diffusion model, the Qwen text encoder and the Flux two VAE. This one node loads all three."),
+    ("For the model I pick MOSS-Image Base, the original model from the MOSS team.",
+     "Como modelo elijo MOSS-Image Base, el modelo original del equipo de MOSS."),
+    ("Then the int8 text encoder and the Flux 2 VAE. They're all in the Comfy-Org MOSS-Image repository.",
+     "Después, el text encoder int8 y el VAE de Flux 2. Están todos en el repositorio MOSS-Image de Comfy-Org.",
+     "Then the int eight text encoder and the Flux two VAE. They're all in the Comfy Org MOSS-Image repository."),
+    # 13: prompt
+    ("Next, the prompt. I add the MOSS Prompt Enhancer and leave it on \"as written\", so it uses my text exactly as I type it.",
+     "Ahora el prompt. Añado el MOSS Prompt Enhancer y lo dejo en \"as written\", para que use mi texto tal cual lo escribo.",
+     "Next, the prompt. I add the MOSS Prompt Enhancer and leave it on as written, so it uses my text exactly as I type it."),
+    ("MOSS reads natural language, not lists of tags. So I just describe the picture in a sentence.",
+     "MOSS lee lenguaje natural, no listas de etiquetas. Así que describo la imagen en una frase."),
+    ("I connect the CLIP output of the loader to the enhancer. That's the text encoder.",
+     "Conecto la salida CLIP del loader al enhancer. Eso es el text encoder.",
+     "I connect the clip output of the loader to the enhancer. That's the text encoder."),
+    # 16: latent
+    ("Now the empty image. MOSS Latent sets the size: square, 1024 by 1024.",
+     "Ahora la imagen vacía. MOSS Latent fija el tamaño: cuadrada, 1024 por 1024.",
+     "Now the empty image. MOSS Latent sets the size: square, ten twenty-four by ten twenty-four."),
+    ("It also holds the seed. I keep it fixed, so we can compare the same image later.",
+     "También guarda la semilla. La dejo fija para poder comparar luego la misma imagen."),
+    # 18: sampler
+    ("The heart of the workflow is the MOSS KSampler. Let's wire it up.",
+     "El corazón del workflow es el MOSS KSampler. Vamos a conectarlo.",
+     "The heart of the workflow is the MOSS K Sampler. Let's wire it up."),
+    ("The model from the loader, the positive and negative prompts from the enhancer, and the latent and seed from MOSS Latent.",
+     "El modelo del loader, los prompts positivo y negativo del enhancer, y el latente y la semilla de MOSS Latent."),
+    ("I also connect the VAE, so the sampler hands me the finished image directly.",
+     "También conecto el VAE, para que el sampler me dé directamente la imagen terminada."),
+    ("For Base, I use twenty-five steps, CFG two point five, euler and simple.",
+     "Para Base uso veinticinco pasos, CFG dos coma cinco, euler y simple."),
+    # 22: saver
+    ("Last, the MOSS Image Saver. It saves the image with its generation settings written inside, in the format Civitai reads.",
+     "Por último, el MOSS Image Saver. Guarda la imagen con sus ajustes de generación dentro, en el formato que lee Civitai.",
+     "Last, the MOSS Image Saver. It saves the image with its generation settings written inside, in the format Civitai reads."),
+    # 23: first run
+    ("That's the whole workflow. Let's run it.",
+     "Ese es el workflow entero. Vamos a lanzarlo."),
+    ("And here's our fisherman. On my RTX 5090, twenty-five steps took about thirteen seconds.",
+     "Y aquí está nuestro pescador. En mi RTX 5090, los veinticinco pasos han tardado unos trece segundos.",
+     "And here's our fisherman. On my RTX fifty ninety, twenty-five steps took about thirteen seconds."),
+    # 25: turbo
+    ("Twenty-five steps looks great, but it takes time. This is where my Turbo LoRA comes in.",
+     "Veinticinco pasos se ve muy bien, pero lleva su tiempo. Aquí entra mi LoRA Turbo.",
+     "Twenty-five steps looks great, but it takes time. This is where my Turbo Lora comes in."),
+    ("I add the MOSS Turbo LoRA node and pick Turbo 8-steps v1.0, which I trained myself for MOSS-Image Base.",
+     "Añado el nodo MOSS Turbo LoRA y elijo Turbo 8-steps v1.0, que entrené yo mismo para MOSS-Image Base.",
+     "I add the MOSS Turbo Lora node and pick Turbo eight steps, version one, which I trained myself for MOSS-Image Base."),
+    ("It's a distilled LoRA: it learned from the full model how to draw in eight steps instead of twenty-five. "
+     "And the file is only three and a half megabytes.",
+     "Es una LoRA destilada: aprendió del modelo completo a dibujar en ocho pasos en lugar de veinticinco. "
+     "Y el archivo pesa solo tres megas y medio.",
+     "It's a distilled Lora: it learned from the full model how to draw in eight steps instead of twenty-five. "
+     "And the file is only three and a half megabytes."),
+    ("I plug it into the turbo input of the sampler. Now the sampler uses the turbo's own settings: eight steps, CFG one, euler and simple.",
+     "La conecto a la entrada turbo del sampler. Ahora el sampler usa los ajustes del turbo: ocho pasos, CFG uno, euler y simple."),
+    ("At CFG one, each step runs the model once instead of twice. That's part of why it's so fast.",
+     "Con CFG uno, cada paso ejecuta el modelo una vez en lugar de dos. Eso es parte de por qué va tan rápido."),
+    # 30: second run
+    ("Same prompt, same seed. Let's run it again.",
+     "Mismo prompt, misma semilla. Volvemos a lanzarlo."),
+    ("Eight steps: about three seconds.",
+     "Ocho pasos: unos tres segundos."),
+    ("Here they are side by side: twenty-five steps on the left, eight with the turbo on the right.",
+     "Aquí están lado a lado: veinticinco pasos a la izquierda, ocho con el turbo a la derecha."),
+    ("And up close, at full size. Not the same picture, but the same scene, with the skin, the beard and the wool all there, "
+     "in about a quarter of the time.",
+     "Y de cerca, a tamaño real. No es la misma imagen, pero sí la misma escena, con la piel, la barba y la lana, "
+     "en más o menos una cuarta parte del tiempo."),
+    # 34: tips
+    ("A few tips. Set the seed to randomize when you want a new image on every run.",
+     "Un par de consejos. Pon la semilla en randomize cuando quieras una imagen nueva en cada ejecución."),
+    ("To go back to twenty-five steps, just switch the turbo node off. No need to rewire anything.",
+     "Para volver a los veinticinco pasos, basta con apagar el nodo turbo. No hace falta tocar ningún cable."),
+    ("And if you'd rather skip the LoRA, my model HaDeS MOSS v1.0 Turbo has this turbo already baked in. Load it and leave the "
+     "turbo input empty.",
+     "Y si prefieres no usar la LoRA, mi modelo HaDeS MOSS v1.0 Turbo ya lleva este turbo dentro. Cárgalo y deja vacía la entrada turbo.",
+     "And if you'd rather skip the Lora, my model HaDeS MOSS version one Turbo has this turbo already baked in. Load it and leave "
+     "the turbo input empty."),
+    # 37: wrap-up
+    ("That's it: six nodes, from an empty canvas to an image in eight steps.",
+     "Y ya está: seis nodos, de un lienzo vacío a una imagen en ocho pasos."),
+    ("I've saved this exact workflow. You can download it for free from the description and drop it straight into ComfyUI.",
+     "He guardado este mismo workflow. Puedes descargarlo gratis desde la descripción y arrastrarlo directamente a ComfyUI."),
+    ("If you've made it to the end and enjoyed the video, and you'd like to see more content like this, leave a like and subscribe. "
+     "It's free!",
+     "Si has llegado hasta el final del vídeo, te ha gustado y quieres ver más contenido de este tipo, dale un buen like y "
+     "suscríbete. ¡Es gratis!"),
+    ("Thanks for watching, and see you in the next one.",
+     "Gracias por verlo, y nos vemos en el próximo."),
+]
+
+BASIC_BUILD_JS = r"""
+async ([pos, loader, prompt, lora, seed]) => {
+  const app = window.__hv.app(), LG = window.LiteGraph;
+  app.graph.clear();
+  const mk = (type) => { const n = LG.createNode(type); n.pos = [...pos[type]]; app.graph.add(n); return n; };
+  const L = mk('HaDeSMossLoader'), P = mk('HaDeSMossPromptEnhancer'), T = mk('HaDeSMossLatent'),
+        K = mk('HaDeSMossKSampler'), S = mk('HaDeSMossImageSaver'), U = mk('HaDeSMossTurbo');
+  const set = (n, v) => { for (const [k, x] of Object.entries(v)) { const w = n.widgets.find(w => w.name === k); w.value = x; w.callback?.(x); } };
+  set(L, loader); set(P, {idea: prompt, mode: 'as written'}); set(T, {seed});
+  set(K, {steps: 2, cfg: 2.5, sampler_name: 'euler', scheduler: 'simple'}); set(U, {lora_name: lora, steps: 8, cfg: 1.0});
+  const link = (a, out, b, inp) => a.connect(a.outputs.findIndex(s => s.name === out), b, b.inputs.findIndex(s => s.name === inp));
+  link(L, 'CLIP', P, 'clip'); link(L, 'MODEL', K, 'model'); link(L, 'VAE', K, 'vae'); link(P, 'positive', K, 'positive');
+  link(P, 'negative', K, 'negative'); link(T, 'latent', K, 'latent_image'); link(T, 'seed', K, 'seed'); link(K, 'image', S, 'images');
+  const run = async () => { const pr = await app.graphToPrompt();
+    const r = await (await fetch('/prompt', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({prompt: pr.output})})).json();
+    for (;;) { const h = await (await fetch('/history/' + r.prompt_id)).json(); if (h[r.prompt_id]?.status?.completed !== undefined) return h[r.prompt_id].status.status_str; await new Promise(f => setTimeout(f, 500)); } };
+  const a = await run();
+  link(U, 'turbo', K, 'turbo');
+  const b = await run();
+  app.graph.clear();
+  return [a, b];
+}
+"""
+
+
+async def basic_prepare(page):
+    """Off camera: one short Base run and one turbo run load the model, the text encoder, the VAE and the LoRA."""
+    print("warm-up runs:", await page.evaluate(BASIC_BUILD_JS, [BASIC_POS, BASIC_LOADER, BASIC_PROMPT, BASIC_LORA, 7]), flush=True)
+
+
+async def basic_add(d: Director, type_, query):
+    """Double-click the canvas where the node goes, type its name in the search box, Enter; returns the new node's id."""
+    gx, gy = BASIC_POS[type_]
+    x, y = await d.js("([x, y]) => window.__hv.g2s(x, y)", [gx + 40, gy + 20])
+    before = await d.js("() => window.__hv.app().graph._nodes.length")
+    await d.move(x, y)
+    await asyncio.sleep(0.2)
+    await d.page.mouse.dblclick(x, y)
+    await d.hold(0.7)
+    focused = await d.js("() => { const a = document.activeElement; return Boolean(a && a.tagName === 'INPUT' && a.closest('[role=dialog], .p-dialog, .comfy-vue-node-search-container')); }")
+    if not focused:  # fall back on the search box's own command
+        await d.js("() => window.__hv.app().extensionManager.command.execute('Workspace.SearchBox.Toggle')")
+        await d.hold(0.7)
+        focused = await d.js("() => { const a = document.activeElement; return Boolean(a && a.tagName === 'INPUT' && a.closest('[role=dialog], .p-dialog, .comfy-vue-node-search-container')); }")
+    if not focused:
+        raise SystemExit(f"the node search did not open for {query}; nothing typed")
+    await d.page.keyboard.type(query, delay=75)
+    await d.hold(0.9)
+    await d.page.keyboard.press("Enter")
+    await d.hold(0.4)
+    await d.move(x + 6, y + 4, 300)  # the new node follows the pointer until a click drops it
+    await d.click(x, y)
+    await d.hold(0.3)
+    node = await d.js("""([before, type, pos]) => { const g = window.__hv.app().graph;
+        if (g._nodes.length !== before + 1) return null; const n = g._nodes[g._nodes.length - 1];
+        if (n.type !== type) return 'wrong:' + n.type; if (n.flags?.ghost) return 'wrong: still following the pointer'; n.pos = [...pos]; g.setDirtyCanvas(true, true); return n.id; }""",
+                      [before, type_, BASIC_POS[type_]])
+    if not node or str(node).startswith("wrong"):
+        raise SystemExit(f"searching {query} did not add {type_} ({node})")
+    await d.no_library()
+    return node
+
+
+async def basic_link(d: Director, a, out, b, inp, ms=1100):
+    """Drag a wire from a's output to b's input, like a hand would; checks the link exists."""
+    x0, y0 = await d.js("([id, n]) => window.__hv.slot(id, n, true)", [a, out])
+    x1, y1 = await d.js("([id, n]) => window.__hv.slot(id, n, false)", [b, inp])
+    await d.drag(x0, y0, x1, y1, ms)
+    ok = await d.js("""([a, b, inp]) => { const n = window.__hv.node(b), s = n.inputs.find(s => s.name === inp);
+        const l = s?.link != null && window.__hv.app().graph.links[s.link] ? window.__hv.app().graph.links[s.link] : null;
+        return Boolean(l && String(l.origin_id) === String(a)); }""", [a, b, inp])
+    if not ok:
+        raise SystemExit(f"the wire {out} -> {inp} did not connect")
+
+
+async def basic_point(d: Director, node, widget, values=None, ms=None):
+    """Point at a widget (its value is set by code: a list is never opened, it would show the user's files)."""
+    x, y = await d.js("""([id, name]) => { const n = window.__hv.node(id);
+        const w = n.widgets.find(w => w.name === 'hades_combo_' + name || w.name === 'hades_text_' + name || w.name === 'hades_slider_' + name
+            || w.name === 'hades_toggle_' + name) || n.widgets.find(w => w.name === name);
+        const y = (w.last_y ?? w.y ?? 0) + (w.computedHeight ?? 24) / 2;
+        return window.__hv.screen(id, n.size[0] * 0.45, y); }""", [node, widget])
+    await d.move(x, y, ms)
+    if values:
+        await d.hold(0.3)
+        await d.js("([id, v]) => window.__hv.set(id, v)", [node, values])
+
+
+async def basic_run(d: Director, saver):
+    """Press Run, fast-forward the render; returns (image url, seconds from execution start to success)."""
+    run = d.page.locator("button:has-text('Run')").first
+    b = await run.bounding_box()
+    await d.click(b["x"] + b["width"] / 2, b["y"] + b["height"] / 2)
+    async with d.fast(1.6):
+        await d.hold(1.0)
+        for _ in range(1200):
+            if await d.js("() => fetch('/queue').then(r => r.json()).then(q => q.queue_running.length + q.queue_pending.length)") == 0:
+                break
+            await asyncio.sleep(0.25)
+        else:
+            raise SystemExit("the render did not finish in 5 minutes")
+        await d.hold(0.5)
+    run = next(iter((await d.js("() => fetch('/history?max_items=1').then(r => r.json())")).values()))
+    st = run["status"]
+    if st.get("status_str") != "success":
+        raise SystemExit(f"the render failed: {st}")
+    stamps = {m[0]: m[1]["timestamp"] for m in st["messages"]}
+    secs = (stamps["execution_success"] - stamps["execution_start"]) / 1000
+    img = run["outputs"][str(saver)]["images"][0]
+    url = f"/view?filename={img['filename']}&subfolder={img['subfolder']}&type={img['type']}"
+    print(f"render: {secs:.2f} s {img['filename']}", flush=True)
+    return url, secs
+
+
+def basic_crops_html(urls, labels):
+    """Face and hands of both images at 100 %: 512 image pixels are 512 video pixels whatever the device scale."""
+    side = 512 * 1920 / W
+    cells = []
+    for row in range(2):
+        for k, url in enumerate(urls):
+            x, y = BASIC_CROPS[k][row]
+            cells.append(f'<div style="width:{side}px;height:{side}px;overflow:hidden;border-radius:6px;position:relative">'
+                         f'<img src="{url}" style="position:absolute;width:{1024 * side / 512}px;height:{1024 * side / 512}px;'
+                         f'left:{-x * side / 512}px;top:{-y * side / 512}px;max-width:none"></div>')
+    head = "".join(f'<div style="color:#fff;font:600 24px Segoe UI,sans-serif;text-align:center">{t}</div>' for t in labels)
+    return (f'<div style="display:grid;grid-template-columns:{side}px {side}px;gap:14px 28px">{head}{"".join(cells)}</div>')
+
+
+async def basic_generation(d: Director):
+    """The first tutorial: an empty canvas, six nodes added one by one, 25 steps on Base, then Turbo 8-steps v1.0."""
+    await d.camera({"box": BASIC_BOX}, 10, pad=60, top=60)
+    await d.move(W * 0.62, H * 0.55)
+
+    # 1. introduction
+    d.title("HaDeS MOSS Suite", "Your first MOSS-Image workflow, from scratch", 7.0)
+    for i in range(4):
+        await d.say(i)
+        await d.move(W * (0.55 + 0.05 * (i % 2)), H * (0.5 + 0.04 * i), 2500)
+
+    # 2. the Manager (installed here: it lists the Suite with update / uninstall buttons)
+    await d.say(4)
+    mgr = d.page.get_by_role("button", name="Manager").first
+    b = await mgr.bounding_box()
+    await d.click(b["x"] + b["width"] / 2, b["y"] + b["height"] / 2)
+    await d.hold(1.2)
+    cnm = await d.page.get_by_text("Custom Nodes Manager").first.bounding_box()
+    await d.click(cnm["x"] + cnm["width"] / 2, cnm["y"] + cnm["height"] / 2)
+    await d.page.wait_for_selector("input.cn-manager-keywords", timeout=30000)
+    await d.hold(1.2)
+    sb = await d.page.locator("input.cn-manager-keywords").bounding_box()
+    await d.click(sb["x"] + 60, sb["y"] + sb["height"] / 2)
+    await d.page.keyboard.type("HaDeS MOSS", delay=70)
+    await d.page.keyboard.press("Enter")
+    await d.hold(1.0)
+    row = await d.page.get_by_text("HaDeS MOSS Suite", exact=False).last.bounding_box()
+    await d.hover(row["x"] + row["width"] / 2, row["y"] + row["height"] / 2)
+    await d.say(5)
+    btn = d.page.locator("button:has-text('Try update'), button:has-text('Uninstall')").first
+    if await btn.count():
+        bb = await btn.bounding_box()
+        await d.hover(bb["x"] + bb["width"] / 2, bb["y"] + bb["height"] / 2)
+    await d.say(6)
+    await d._after_voice(0.2)
+    for _ in range(3):  # only buttons whose class says close, inside the Manager (never by position)
+        close = await d.page.evaluate("""() => {
+            const inManager = (e) => { let p = e; while (p && p.getBoundingClientRect().width < 900) p = p.parentElement;
+                return Boolean(p && p !== document.body && (p.querySelector('input.cn-manager-keywords') || /ComfyUI Manager V\\d/.test(p.innerText.slice(0, 200)))); };
+            const v = [...document.querySelectorAll('button.cm-ui-close, button[class*="close"], .comfy-modal-close')]
+            .map(e => [e, e.getBoundingClientRect()]).filter(([e, r]) => r.width > 0 && r.width < 60 && getComputedStyle(e).visibility !== 'hidden' && inManager(e));
+            const last = v[v.length - 1]; return last ? [last[1].x + last[1].width / 2, last[1].y + last[1].height / 2] : null; }""")
+        if not close:
+            break
+        await d.click(*close)
+        await d.hold(0.7)
+    if await d.page.locator("input.cn-manager-keywords:visible").count():
+        raise SystemExit("the Manager list did not close")
+
+    # 3. the empty canvas: five things
+    await d.move(W * 0.6, H * 0.62)
+    await d.say(7)
+    chips = ["Loader", "Prompt", "Latent", "Sampler", "Saver"]
+    await d.js("""(labels) => { const el = document.createElement('div'); el.id = '__hv_chips';
+        Object.assign(el.style, {zoom: String(Math.max(1, innerWidth / 1920)), position: 'fixed', left: '0', right: '0', top: '28%', display: 'flex', justifyContent: 'center', gap: '26px',
+            zIndex: 2147483500, pointerEvents: 'none', transition: 'opacity .5s ease'});
+        el.innerHTML = labels.map((t, i) => `<div style="opacity:0;transform:translateY(14px);transition:all .45s ease ${0.5 + i * 0.9}s;
+            padding:16px 30px;border-radius:12px;background:#24242b;border:2px solid #ffcc33;color:#fff;font:600 30px Segoe UI,sans-serif">${t}</div>`).join(
+            '<div style="color:#ffcc33;font:600 30px Segoe UI,sans-serif;align-self:center">→</div>');
+        document.body.appendChild(el);
+        requestAnimationFrame(() => requestAnimationFrame(() => el.querySelectorAll('div').forEach(c => { c.style.opacity = '1'; c.style.transform = 'none'; }))); }""", chips)
+    await d.say(8)
+    await d._after_voice(0.3)
+    await d.js("() => { const el = document.getElementById('__hv_chips'); el.style.opacity = '0'; setTimeout(() => el.remove(), 600); }")
+    await d.hold(0.6)
+
+    # 4. MOSS Loader
+    await d.say(9)
+    loader = await basic_add(d, "HaDeSMossLoader", "MOSS Loader")
+    await d.camera([loader], 1200, pad=200, top=60)
+    await d.say(10)
+    await d._after_voice(0.1)
+    await d.say(11)
+    await basic_point(d, loader, "unet_name", {"unet_name": BASIC_LOADER["unet_name"]})
+    await d._after_voice(0.1)
+    await d.say(12)
+    await basic_point(d, loader, "clip_name", {"clip_name": BASIC_LOADER["clip_name"]})
+    await d.hold(1.2)
+    await basic_point(d, loader, "vae_name", {"vae_name": BASIC_LOADER["vae_name"]})
+
+    # 5. the prompt
+    await d.camera({"box": BASIC_BOX}, 1300, pad=60, top=60)
+    await d.say(13)
+    enhancer = await basic_add(d, "HaDeSMossPromptEnhancer", "MOSS Prompt Enhancer")
+    await d.camera([loader, enhancer], 1200, pad=50, top=60)
+    await basic_point(d, enhancer, "mode", {"mode": "as written"})
+    await d._after_voice(0.1)
+    await d.say(14)
+    box = await d.js("""(id) => { const w = window.__hv.widget(id, 'idea'); w.value = ''; if (w.element) w.element.value = '';
+        const r = w.element.getBoundingClientRect(); return [r.left, r.top]; }""", enhancer)
+    await d.click(box[0] + 40, box[1] + 30)
+    if not await d.js("() => document.activeElement?.tagName === 'TEXTAREA'"):
+        raise SystemExit("the prompt box is not focused; nothing typed")
+    await d.page.keyboard.type(BASIC_PROMPT, delay=16)
+    await d.move(W * 0.5, H * 0.85)
+    await d._after_voice(0.1)
+    await d.say(15)
+    await basic_link(d, loader, "CLIP", enhancer, "clip")
+
+    # 6. MOSS Latent
+    await d.camera({"box": BASIC_BOX}, 1300, pad=60, top=60)
+    await d.say(16)
+    latent = await basic_add(d, "HaDeSMossLatent", "MOSS Latent")
+    await d.camera([latent], 1200, pad=200, top=60)
+    await basic_point(d, latent, "aspect_ratio", {"aspect_ratio": "1:1", "megapixels": 1.0})
+    await d._after_voice(0.1)
+    await d.say(17)
+    await basic_point(d, latent, "seed", {"seed": BASIC_SEED})
+    await d.hold(0.8)
+    await basic_point(d, latent, "control_after_generate", {"control_after_generate": "fixed"})
+
+    # 7. MOSS KSampler and its wires
+    await d.camera({"box": BASIC_BOX}, 1300, pad=60, top=60)
+    await d.say(18)
+    sampler = await basic_add(d, "HaDeSMossKSampler", "MOSS KSampler")
+    await d.camera([loader, enhancer, latent, sampler], 1300, pad=40, top=60)
+    await d._after_voice(0.1)
+    await d.say(19)
+    await basic_link(d, loader, "MODEL", sampler, "model")
+    await basic_link(d, enhancer, "positive", sampler, "positive")
+    await basic_link(d, enhancer, "negative", sampler, "negative")
+    await basic_link(d, latent, "latent", sampler, "latent_image")
+    await basic_link(d, latent, "seed", sampler, "seed")
+    await d._after_voice(0.1)
+    await d.say(20)
+    await basic_link(d, loader, "VAE", sampler, "vae")
+    await d._after_voice(0.1)
+    await d.camera([sampler], 1200, pad=160, top=60)
+    await d.say(21)
+    await basic_point(d, sampler, "steps", {"steps": 25})
+    await d.hold(0.6)
+    await basic_point(d, sampler, "cfg", {"cfg": 2.5})
+    await d.hold(0.6)
+    await basic_point(d, sampler, "sampler_name", {"sampler_name": "euler"})
+    await d.hold(0.6)
+    await basic_point(d, sampler, "scheduler", {"scheduler": "simple"})
+
+    # 8. MOSS Image Saver
+    await d.camera({"box": BASIC_BOX}, 1300, pad=60, top=60)
+    await d.say(22)
+    saver = await basic_add(d, "HaDeSMossImageSaver", "MOSS Image Saver")
+    await d.camera([sampler, saver], 1200, pad=60, top=60)
+    await basic_link(d, sampler, "image", saver, "images")
+    await d._after_voice(0.1)
+
+    # 9. first run, 25 steps
+    await d.camera([loader, enhancer, latent, sampler, saver], 1300, pad=50, top=60)
+    await d.say(23)
+    await d._after_voice(0.1)
+    url25, t25 = await basic_run(d, saver)
+    await d.camera([saver], 1200, pad=120, top=60)
+    await d.hold(0.8)
+    await d.say(24)
+    await d.js("(h) => window.__hv.show(h)", f'<div style="text-align:center"><img src="{url25}" style="height:760px;border-radius:6px">'
+               f'<div style="color:#ffcc33;font:600 28px Segoe UI,sans-serif;margin-top:14px">MOSS-Image Base · 25 steps · {t25:.1f} s</div></div>')
+    await d._after_voice(0.6)
+    await d.js("() => window.__hv.hide()")
+    await d.hold(0.6)
+
+    # 10. the turbo
+    await d.camera({"box": BASIC_BOX}, 1300, pad=60, top=60)
+    await d.say(25)
+    await d._after_voice(0.1)
+    await d.say(26)
+    turbo = await basic_add(d, "HaDeSMossTurbo", "MOSS Turbo LoRA")
+    await d.camera([turbo], 1200, pad=180, top=60)
+    await basic_point(d, turbo, "lora_name", {"lora_name": BASIC_LORA, "strength": 1.0, "steps": 8, "cfg": 1.0,
+                                              "sampler_name": "euler", "scheduler": "simple"})
+    await d._after_voice(0.1)
+    await d.say(27)
+    await d.hold(1.0)
+    await basic_point(d, turbo, "steps")
+    await d._after_voice(0.1)
+    await d.camera([turbo, sampler], 1200, pad=60, top=60)
+    await d.say(28)
+    await basic_link(d, turbo, "turbo", sampler, "turbo")
+    await d.camera([turbo], 1000, pad=180, top=60)
+    await basic_point(d, turbo, "steps")
+    await d.hold(0.6)
+    await basic_point(d, turbo, "cfg")
+    await d._after_voice(0.1)
+    await d.say(29)
+    await d._after_voice(0.1)
+
+    # 11. second run, 8 steps
+    await d.camera([loader, enhancer, latent, sampler, saver, turbo], 1300, pad=50, top=60)
+    await d.say(30)
+    await d._after_voice(0.1)
+    url8, t8 = await basic_run(d, saver)
+    await d.camera([saver], 1200, pad=120, top=60)
+    await d.hold(0.8)
+    await d.say(31)
+    await d._after_voice(0.2)
+    await d.say(32)
+    side = 820
+    await d.js("(h) => window.__hv.show(h)", '<div style="display:flex;gap:40px">' + "".join(
+        f'<div style="text-align:center"><img src="{u}" style="width:{side}px;height:{side}px;border-radius:6px">'
+        f'<div style="color:#ffcc33;font:600 26px Segoe UI,sans-serif;margin-top:12px">{t}</div></div>'
+        for u, t in ((url25, f"Base · 25 steps · {t25:.1f} s"), (url8, f"Base + Turbo 8-steps v1.0 · 8 steps · {t8:.1f} s"))) + "</div>")
+    await d.move(W - 60, H - 90)
+    await d._after_voice(0.4)
+    await d.say(33)
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }",
+               basic_crops_html([url25, url8], [f"25 steps · {t25:.1f} s", f"Turbo · 8 steps · {t8:.1f} s"]))
+    await d._after_voice(0.8)
+    await d.js("() => window.__hv.hide()")
+    await d.hold(0.6)
+
+    # 12. tips
+    await d.camera([latent], 1200, pad=200, top=60)
+    await d.say(34)
+    await basic_point(d, latent, "control_after_generate")
+    await d._after_voice(0.1)
+    await d.camera([turbo], 1200, pad=180, top=60)
+    await d.say(35)
+    await basic_point(d, turbo, "enabled")
+    await d._after_voice(0.1)
+    await d.say(36)
+    await d.js("(h) => window.__hv.show(h)", '<div style="color:#fff;text-align:center;margin-top:260px">'
+               '<div style="font:900 64px Segoe UI Black,sans-serif">HaDeS MOSS v1.0 Turbo</div>'
+               '<div style="font:600 32px Segoe UI,sans-serif;color:#ffcc33;margin-top:20px">MOSS-Image Base with Turbo 8-steps v1.0 baked in'
+               ' · 8 steps · CFG 1</div><div style="font:400 26px Segoe UI,sans-serif;color:#c9c9d1;margin-top:36px">'
+               'Link in the description</div></div>')
+    await d._after_voice(0.4)
+    await d.js("() => window.__hv.hide()")
+
+    # 13. the whole workflow
+    await d.camera([loader, enhancer, latent, sampler, saver, turbo], 1400, pad=50, top=60)
+    await d.say(37)
+    await d.move(W * 0.5, H * 0.9)
+    await d._after_voice(0.1)
+    await d.say(38)
+    await d.js("(h) => window.__hv.show(h)", '<div style="color:#fff;text-align:center;margin-top:300px">'
+               '<div style="font:600 30px Segoe UI,sans-serif;color:#c9c9d1">Free download (link in the description)</div>'
+               '<div style="font:700 44px Segoe UI,sans-serif;margin-top:22px">HaDeS MOSS Suite - Basic Generation.json</div></div>')
+    await d._after_voice(0.3)
+
+    # 14. goodbye
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }",
+               f'<div style="display:flex;align-items:center;gap:80px;margin-top:60px"><img src="{url8}" style="height:780px;border-radius:6px">'
+               '<div style="color:#fff;max-width:640px"><div style="font:900 72px Segoe UI Black,sans-serif;line-height:1.05">HaDeS MOSS Suite</div>'
+               '<div style="font:600 34px Segoe UI,sans-serif;color:#ffcc33;margin-top:22px">Your first MOSS-Image workflow</div>'
+               '<div style="font:400 26px Segoe UI,sans-serif;color:#c9c9d1;margin-top:44px">Workflow, Suite and models: links in the description</div></div></div>')
+    await d.say(39)
+    await d.say(40)
+    await d.end(1.5)
+
+
+basic_generation.prepare = basic_prepare
+
+
+SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
+          "layout_test": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_test, LAYOUT_TEST_LINES),
+          "layout_sentence": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_sentence, LAYOUT_SENTENCE_LINES),
+          "turbo_8_steps_upscale_x2": ("HaDeS MOSS Suite - Turbo 8 steps + Upscale x2.json", turbo_upscale_x2,
+                                       TURBO_UPSCALE_LINES)}
 
 # spoken forms where the written caption reads badly aloud
 SPOKEN = {"DRAFT LAYOUT": "Draft layout"}
@@ -582,7 +1340,8 @@ def synth(lines, lang, ref, cache, python):
     """Each line's voice (cached), made in ComfyUI's Python; returns {line index: (wav path, seconds)}."""
     cache.mkdir(parents=True, exist_ok=True)
     k = 0 if lang == "en" else 1
-    texts = {i: l[k] for i, l in enumerate(lines)}
+    # a line may carry a third item: how the English caption is said aloud ("v1.0" -> "version one")
+    texts = {i: (l[2] if lang == "en" and len(l) > 2 else l[k]) for i, l in enumerate(lines)}
     for a, b in SPOKEN.items():
         texts = {i: t.replace(a, b) for i, t in texts.items()}
     jobs = {i: cache / voice_job(ref, lang, t) for i, t in texts.items()}
@@ -658,7 +1417,7 @@ def edit(rec_frames, d: Director, folder: Path, name: str, fps: int, cap_lang: s
         srt = [f"{i + 1}\n{ts(a)} --> {ts(b)}\n{c[k]}\n" for i, c in enumerate(caps) for a, b in [(c[0], c[1])]]
         (folder / f"{name}.{lang}.srt").write_text("\n".join(srt), encoding="utf-8")
 
-    ass = ["[Script Info]", "ScriptType: v4.00+", f"PlayResX: {W}", f"PlayResY: {H}", "WrapStyle: 0", "",
+    ass = ["[Script Info]", "ScriptType: v4.00+", "PlayResX: 1920", "PlayResY: 1080", "WrapStyle: 0", "",
            "[V4+ Styles]",
            "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, "
            "StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
@@ -700,14 +1459,17 @@ def edit(rec_frames, d: Director, folder: Path, name: str, fps: int, cap_lang: s
     return folder / f"{name}.mp4", total, caps
 
 
-async def record(scene, url, folder, unet, voice_lens):
+async def record(scene, url, folder, unet, voice_lens, lora=None, language="en"):
     unet = unet or ("HaDeS_MOSS_v1.0_Turbo.safetensors" if scene == "layout_sentence" else None)
     from playwright.async_api import async_playwright
     wf_name, play, lines = SCENES[scene]
-    workflow = json.loads((ROOT / "examples" / wf_name).read_text(encoding="utf-8"))
+    # no example workflow: the scene starts from an empty canvas
+    workflow = json.loads((ROOT / "examples" / wf_name).read_text(encoding="utf-8")) if wf_name else {"nodes": []}
     for n in workflow["nodes"]:
         if unet and n["type"] == "HaDeSMossLoader":
             n["widgets_values"][0] = unet
+        if lora and n["type"] == "HaDeSMossTurbo":
+            n["widgets_values"][0] = lora
     frames = folder / "frames"
     shutil.rmtree(frames, ignore_errors=True)
     frames.mkdir(parents=True)
@@ -721,15 +1483,24 @@ async def record(scene, url, folder, unet, voice_lens):
         await page.wait_for_timeout(2500)
         await page.keyboard.press("Escape")
         await page.evaluate(HELPERS_JS)
-        await page.evaluate("async (wf) => { await window.__hv.app().loadGraphData(wf); }", workflow)
+        if hasattr(play, "prepare"):  # off camera, before recording: e.g. load the models so on-screen times are the runs'
+            await play.prepare(page)
+        if wf_name:
+            await page.evaluate("async (wf) => { await window.__hv.app().loadGraphData(wf); }", workflow)
+        else:
+            await page.evaluate("() => { const a = window.__hv.app(); a.graph.clear(); a.canvas.ds.scale = 1; a.canvas.ds.offset[0] = 0; a.canvas.ds.offset[1] = 0; a.graph.setDirtyCanvas(true, true); }")
         await page.wait_for_timeout(1500)
         await page.mouse.move(W / 2, H / 2)
         await page.screenshot(path=str(folder / "start.png"))
         rec = Recorder(page, frames)
         await rec.start()
-        d = Director(page, lines, voice_lens)
+        d = Director(page, lines, voice_lens, language)
         await asyncio.sleep(0.6)
-        await play(d)
+        try:
+            await play(d)
+        except StopScene:
+            d.captions.append((time.time(), "", ""))
+            await asyncio.sleep(1.0)
         await rec.stop()
         d.t_stop = rec.t_stop
         await browser.close()
@@ -751,9 +1522,19 @@ def serve(url, out, python, extra_args):
     cache.mkdir(parents=True, exist_ok=True)
     for f in (COMFY / "user" / "__manager" / "cache").glob("*_nodes.json"):
         shutil.copy2(f, cache / f.name)
+    # Keep Manager on its copied local registry cache so a recording never waits on network refreshes.
+    manager_config = cache.parent / "config.ini"
+    config_text = manager_config.read_text(encoding="utf-8") if manager_config.exists() else "[default]\n"
+    if re.search(r"(?m)^network_mode\s*=.*$", config_text):
+        config_text = re.sub(r"(?m)^network_mode\s*=.*$", "network_mode = offline", config_text)
+    else:
+        config_text = config_text.rstrip() + "\nnetwork_mode = offline\n"
+    manager_config.write_text(config_text, encoding="utf-8")
     log = open(Path(out) / f"comfy_{port}.log", "w", encoding="utf-8")
     proc = subprocess.Popen([python, "main.py", "--port", str(port), "--disable-auto-launch", "--disable-all-custom-nodes",
-                             "--whitelist-custom-nodes", ROOT.name, "ComfyUI-Manager", "--user-directory", str(user.resolve())]
+                             "--whitelist-custom-nodes", ROOT.name, "ComfyUI-Manager", "--user-directory", str(user.resolve()),
+                             "--output-directory", str((Path(out) / "comfy_output").resolve()),
+                             "--temp-directory", str((Path(out) / "comfy_temp").resolve())]
                             + extra_args,
                             cwd=COMFY, stdout=log, stderr=subprocess.STDOUT)
     import urllib.request
@@ -770,6 +1551,7 @@ def serve(url, out, python, extra_args):
 
 
 def main():
+    global W, H, UNTIL
     if sys.argv[1:2] == ["_voice"]:
         return voice_worker(*sys.argv[2:5])
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -777,8 +1559,11 @@ def main():
     ap.add_argument("--url", default="http://127.0.0.1:8188")
     ap.add_argument("--out", required=True)
     ap.add_argument("--fps", type=int, default=60)
+    ap.add_argument("--resolution", choices=("1080p", "1440p"), default="1080p", help="1440p: a 2560 x 1440 page; the canvas camera, the cursor, overlays and captions scale with it")
     ap.add_argument("--unet", help="model file for the MOSS Loader, when the example's name is not the one installed")
+    ap.add_argument("--lora", help="LoRA path relative to the ComfyUI LoRA directory, as listed by MOSS Turbo")
     ap.add_argument("--keep-frames", action="store_true")
+    ap.add_argument("--until", type=int, help="test take: stop the scene before line N + 1")
     ap.add_argument("--voice", choices=["en", "es"], help="speak the captions in this language with the cloned voice")
     ap.add_argument("--ref", help="reference recording of the voice to clone (wav, 10-30 s, one speaker)")
     ap.add_argument("--captions", choices=["en", "es"], help="language of the burned captions (default: the voice's, else en)")
@@ -787,6 +1572,10 @@ def main():
     ap.add_argument("--comfy-args", default="--use-sage-attention",
                     help="extra arguments for the clean ComfyUI, as your own install is started (drafts and images can differ otherwise)")
     a = ap.parse_args()
+    if a.resolution == "1440p":
+        W, H = 2560, 1440
+    UNTIL = a.until
+    language = a.captions or a.voice or "en"
     if a.voice and not a.ref:
         ap.error("--voice needs --ref")
     folder = Path(a.out) / a.scene
@@ -794,12 +1583,12 @@ def main():
     voices = synth(SCENES[a.scene][2], a.voice, a.ref, Path(a.out) / "voice_cache", a.tts_python) if a.voice else {}
     server = serve(a.url, a.out, a.tts_python, a.comfy_args.split()) if a.serve else None
     try:
-        frames, d = asyncio.run(record(a.scene, a.url, folder, a.unet, {i: v[1] for i, v in voices.items()}))
+        frames, d = asyncio.run(record(a.scene, a.url, folder, a.unet, {i: v[1] for i, v in voices.items()}, a.lora, language))
     finally:
         if server:
             server.terminate()
             server.wait(30)
-    video, total, caps = edit(frames, d, folder / "frames", a.scene, a.fps, a.captions or a.voice or "en", voices)
+    video, total, caps = edit(frames, d, folder / "frames", a.scene, a.fps, language, voices)
     final = folder / video.name
     shutil.move(str(video), final)
     for lang in ("en", "es"):

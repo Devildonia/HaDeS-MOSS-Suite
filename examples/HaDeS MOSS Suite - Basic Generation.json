@@ -1,0 +1,541 @@
+{
+ "id": "3c85861e-7a78-569c-bee0-2fcc9ccf9b70",
+ "revision": 0,
+ "last_node_id": 7,
+ "last_link_id": 9,
+ "nodes": [
+  {
+   "id": 1,
+   "type": "HaDeSMossLoader",
+   "pos": [
+    0,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "moss_image_base_bf16.safetensors",
+    "qwen3.5_9b_int8_convrot.safetensors",
+    "flux2-vae.safetensors",
+    "default",
+    "default"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossLoader",
+    "models": [
+     {
+      "name": "moss_image_base_bf16.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_base_bf16.safetensors",
+      "directory": "diffusion_models"
+     },
+     {
+      "name": "qwen3.5_9b_int8_convrot.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_int8_convrot.safetensors",
+      "directory": "text_encoders"
+     },
+     {
+      "name": "flux2-vae.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae.safetensors",
+      "directory": "vae"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      2
+     ]
+    },
+    {
+     "name": "CLIP",
+     "type": "CLIP",
+     "links": [
+      1
+     ]
+    },
+    {
+     "name": "VAE",
+     "type": "VAE",
+     "links": [
+      7
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "type": "HaDeSMossPromptEnhancer",
+   "pos": [
+    440,
+    0
+   ],
+   "size": [
+    440,
+    100
+   ],
+   "flags": {},
+   "order": 3,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "clip",
+     "type": "CLIP",
+     "link": 1
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "Photograph of an old fisherman with a grey beard mending a net on a wooden dock at sunrise, his face and weathered hands in view, thick wool sweater, seagulls in the background.",
+    "as written",
+    1024,
+    1024,
+    0.7,
+    1,
+    "fixed",
+    1024,
+    "",
+    "off",
+    1.0
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossPromptEnhancer"
+   },
+   "outputs": [
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "links": [
+      3
+     ]
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "links": [
+      4
+     ]
+    },
+    {
+     "name": "prompt",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "draft",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "width",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "height",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "type": "HaDeSMossLatent",
+   "pos": [
+    940,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 1,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "1:1",
+    1.0,
+    1024,
+    1024,
+    1,
+    1013,
+    "fixed"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossLatent"
+   },
+   "outputs": [
+    {
+     "name": "latent",
+     "type": "LATENT",
+     "links": [
+      5
+     ]
+    },
+    {
+     "name": "width",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "height",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "seed",
+     "type": "INT",
+     "links": [
+      6
+     ]
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "type": "HaDeSMossTurbo",
+   "pos": [
+    940,
+    450
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 2,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "HaDeS-MOSS-Turbo-8steps-v1.0.safetensors",
+    1.0,
+    8,
+    1.0,
+    "euler",
+    "simple",
+    true
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossTurbo",
+    "models": [
+     {
+      "name": "HaDeS-MOSS-Turbo-8steps-v1.0.safetensors",
+      "url": "https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo/resolve/main/HaDeS-MOSS-Turbo-8steps-v1.0.safetensors",
+      "directory": "loras"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "turbo",
+     "type": "MOSS_TURBO",
+     "links": [
+      8
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "type": "HaDeSMossKSampler",
+   "pos": [
+    1380,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 4,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 2
+    },
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "link": 3
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "link": 4
+    },
+    {
+     "name": "latent_image",
+     "type": "LATENT",
+     "link": 5
+    },
+    {
+     "name": "seed",
+     "type": "INT",
+     "link": 6,
+     "widget": {
+      "name": "seed"
+     }
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": 7,
+     "shape": 7
+    },
+    {
+     "name": "turbo",
+     "type": "MOSS_TURBO",
+     "link": 8,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    0,
+    "fixed",
+    25,
+    2.5,
+    "euler",
+    "simple",
+    1.0,
+    0.0,
+    "off",
+    "steps / denoise (core)"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossKSampler"
+   },
+   "outputs": [
+    {
+     "name": "latent",
+     "type": "LATENT",
+     "links": []
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "links": [
+      9
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "type": "HaDeSMossImageSaver",
+   "pos": [
+    1820,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 5,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "images",
+     "type": "IMAGE",
+     "link": 9
+    },
+    {
+     "name": "metadata",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "primary_stage_metadata",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "positive",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "negative",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "MOSS/HaDeS_MOSS_%seed%",
+    true,
+    true
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossImageSaver"
+   },
+   "outputs": [
+    {
+     "name": "parameters",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "type": "Note",
+   "pos": [
+    0,
+    360
+   ],
+   "size": [
+    800,
+    520
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "widgets_values": [
+    "HaDeS MOSS Suite - Basic Generation (the first video tutorial)\n\nMOSS Loader: MOSS-Image Base, the Qwen3.5 9B int8 text encoder and the FLUX.2 VAE.\nMOSS Prompt Enhancer, 'as written': your sentence is the prompt.\nMOSS KSampler: 25 steps, CFG 2.5, euler / simple when the turbo input is empty.\nMOSS Turbo LoRA (Turbo 8-steps v1.0, trained for Base): 8 steps, CFG 1, euler / simple.\n   For 25 steps again: switch the turbo node off or unplug its wire.\n   With HaDeS MOSS v1.0 Turbo as the model, leave the turbo input empty: it is baked in.\n\nModels: the turbo LoRA in models/loras (huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo).\nSeed 1013 in MOSS Latent is the video's; set its after run to randomize for new images."
+   ],
+   "properties": {}
+  }
+ ],
+ "links": [
+  [
+   1,
+   1,
+   1,
+   2,
+   0,
+   "CLIP"
+  ],
+  [
+   2,
+   1,
+   0,
+   5,
+   0,
+   "MODEL"
+  ],
+  [
+   3,
+   2,
+   0,
+   5,
+   1,
+   "CONDITIONING"
+  ],
+  [
+   4,
+   2,
+   1,
+   5,
+   2,
+   "CONDITIONING"
+  ],
+  [
+   5,
+   3,
+   0,
+   5,
+   3,
+   "LATENT"
+  ],
+  [
+   6,
+   3,
+   4,
+   5,
+   4,
+   "INT"
+  ],
+  [
+   7,
+   1,
+   2,
+   5,
+   5,
+   "VAE"
+  ],
+  [
+   8,
+   4,
+   0,
+   5,
+   6,
+   "MOSS_TURBO"
+  ],
+  [
+   9,
+   5,
+   1,
+   6,
+   0,
+   "IMAGE"
+  ]
+ ],
+ "groups": [],
+ "config": {},
+ "extra": {},
+ "version": 0.4
+}
