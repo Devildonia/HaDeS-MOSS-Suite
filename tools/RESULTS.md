@@ -1913,6 +1913,16 @@ The VLM judge is not calibrated on real photographs. Maintainer's blind pairs (c
 
 **Random prompts** (detailed mode, empty idea, seeds 0-19, rendered with rc1; `<archive>/moss_eval/enhancer_random`): 17 different media out of 26 in 20 draws, prompts 166-243 words, varied people and places. Places repeated by chance in these seeds (Mongolian steppe 5, Lagos 3); over 2000 seeds each place is drawn 78-125 times. Golden-hour light dominates many images, a model preference not set by the draw.
 
+**Every mode on one short idea** (2026-11-20, for the third video tutorial). Idea `an old fisherman on a dock`; MOSS-Image Base, Qwen3.5 9B int8, FLUX.2 VAE, Turbo 8-steps v1.0 (8 steps, CFG 1, euler / simple), 1024 x 1024, image seed 1013; enhancer temperature 0.7, seeds 0-5 unless said; clean ComfyUI on port 8189 with `--use-sage-attention`, PyTorch 2.9.1+cu130, RTX 5090, models warm; `I:/HaDeS_MOSS/videos/prompt_enhancer/measure` (results.json, sheets). By eye, one image seed:
+
+- **caption:** 56-118 words (6 seeds), all photographs; the enhancer added headwear (cap or straw hat) to 5 / 6 texts and 5 / 6 images.
+- **detailed:** 173-238 words (9 seeds). With no medium in the idea it chose an oil painting in 8 / 9 seeds (one black-and-white photograph), and the images were paintings. With `a photograph of an old fisherman on a dock`, 6 / 6 texts began as a documentary photograph (35 mm lens, f/2.8) and 6 / 6 images were photographs, 168-189 words. One of the 9 texts changed the subject's age ("a young man in his late twenties" for "an old fisherman").
+- **Random prompts** (detailed, empty idea): 6 seeds, 5 different media (ukiyo-e print, food photograph, studio portrait photograph, cinematic still x 2, 3D animated still), 196-236 words.
+- **Image input** (the first video's fisherman, idea empty, caption): 64-69 words, 4 / 4 texts and images kept the white beard, brown wool sweater, white net and the birds (seagulls in 3 texts, "birds" in one). With the idea `the same man in winter, snow on the dock`: 4 / 4 texts and images added snow and kept the man.
+- **Tags** (`1boy, old man, white beard, fishing net, pier, sunrise`, caption, 4 seeds): prose of 18-61 words, an adult man in all four; seeds 0 and 1 gave the same 18-word sentence.
+- **Negative `hat`** (caption, the same 6 seeds): every text stated the absence instead of leaving it out (`wearing no hat`, `his head bare without a hat`, `No hat is present on his head`), and 0 / 6 images showed headwear, against 5 / 6 without the negative. At CFG 1 the sampler does not use the negative conditioning, so this is the written prompt's doing. One idea, one image seed.
+- **Time:** the answer alone took 1.6 s for caption and 2.2-2.5 s for detailed (3 seeds each, no image rendered); a full run with the 8-step image took 4.1-5.7 s.
+
 ## HaDeS MOSS v1.0 Turbo int8 ConvRot (2026-11-14)
 
 `HaDeS_MOSS_v1.0_Turbo.safetensors` saved by MOSS Model Saver as int8 ConvRot (Comfy-Org layout): 5.41 GB, SHA256 `e0707a51…ca7344`, the same keys, dtypes and shapes as the v0.9.4 int8 file. Against the BF16 file, 10 prompts of `prompts_40_variados.txt` (0, 6, 10, 14, 20, 25, 27, 30, 34, 35), stock nodes, seed 1001, 1344 x 1792, 8 steps, CFG 1, euler / simple, official negative (`<archive>/moss_eval/v10_int8`):

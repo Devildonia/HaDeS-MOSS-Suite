@@ -143,30 +143,37 @@ EXAMPLES = {
         **telemetry(("load", 3), ("enh", 6), ("merge", 1), ("latent", 3), ("ks", 2)),
     },
     "HaDeS MOSS Suite - Prompt Enhancer": {
-        **loader(),
-        # caption mode: MOSS-Image's own text encoder turns the idea into a detailed prompt and encodes it; the latent's seed drives
-        # both the writing and the sampling, so one seed reproduces the whole image
-        "enh": prompt("A cosy bookshop on a rainy evening, seen from the street.", mode="caption", seed=("latent", 4), image=("img", 0)),
+        # the third video tutorial (tools/moss_video.py prompt_enhancer): every mode on the first video's fisherman, Base + Turbo
+        # 8-steps v1.0; texts, word counts and times in tools/RESULTS.md, "Every mode on one short idea"
+        **loader(BASE),
+        "enh": prompt("a photograph of an old fisherman on a dock", mode="detailed", seed=1, image=("img", 0)),
         "img": ("LoadImage", {"image": "example.png", "upload": "image"}, MUTED),
-        "latent": latent(),
-        "ks": ksampler(("load", 0), ("latent", 0), seed=("latent", 4)),
+        "latent": latent(seed=1013),
+        "turbo": ("HaDeSMossTurbo", {"lora_name": TURBO_V10, "strength": 1.0, "steps": 8}),
+        "ks": with_turbo(ksampler(("load", 0), ("latent", 0), seed=("latent", 4)), sampler_name="euler"),
         "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_enhancer_%seed%", "hashes": True, "embed_workflow": True}),
         "text": ("PreviewAny", {"source": ("enh", 2)}),
-        **telemetry(("load", 3), ("enh", 6), ("latent", 3), ("ks", 2)),
-        "note": ("Note", {"text": "HaDeS MOSS Suite - Prompt Enhancer\n\n"
-                                  "MOSS Prompt Enhancer: a positive / negative prompt box that can also write the prompt,\n"
-                                  "with MOSS-Image's own text encoder (no other model is loaded).\n"
-                                  "  - caption: writes a detailed paragraph from the short idea (shown in the text preview)\n"
-                                  "  - layout: writes a layout draft with boxes (see the Layout Editor example)\n"
-                                  "  - as written: encodes the idea as typed, like a plain text encoder\n"
-                                  "  - negative: empty uses the official MOSS-Image negative; what you write is also kept out of the image\n\n"
-                                  "The MOSS Latent's seed drives both the writing and the sampler: one seed reproduces the whole image.\n"
-                                  "It starts on fixed; set the latent's after run to randomize for a new image on every run.\n\n"
-                                  "Optional (muted): Load Image. Unmute it (right-click > Mode > Always) to have the prompt written from\n"
-                                  "the picture: with an empty idea the picture is the whole brief, otherwise the starting point.\n"
-                                  "Tried on one seed per case, not measured (tools/RESULTS.md)."}),
-        "_layout": {"note": (0, -560), "load": (0, 0), "img": (0, 380), "enh": (450, 0), "latent": (950, 0), "ks": (1400, 0),
-                    "save": (1850, 0), "text": (950, 380), "tel": (1850, 480), "report": (2300, 480)},
+        **telemetry(("load", 3), ("enh", 6), ("latent", 3), ("ks", 2), ("turbo", 1)),
+        "note": ("Note", {"text": "HaDeS MOSS Suite - Prompt Enhancer (the third video tutorial)\n\n"
+                                  "MOSS Prompt Enhancer: a prompt box that can also write the prompt, with MOSS-Image's own text\n"
+                                  "encoder (Qwen3.5); no other model is loaded. The text preview shows what it wrote.\n"
+                                  "  - as written: the idea is encoded as typed (what the first two videos used)\n"
+                                  "  - caption: a paragraph that keeps to the idea (56-118 words in the video's tests)\n"
+                                  "  - detailed: a photographer's or illustrator's brief (168-238 words). With no medium in the idea it\n"
+                                  "    picks one: 8 of 9 tries chose an oil painting for this fisherman; write 'a photograph of' for a photo\n"
+                                  "  - detailed with an empty idea: a random prompt (the seed draws a medium, a subject and a place / time)\n"
+                                  "  - layout: boxes for every element (see the Layout examples)\n"
+                                  "  - tags (1boy, white beard, ...) are rewritten as prose; count tags are written as adults\n"
+                                  "The enhancer's own seed and temperature decide the text: same seed, same text; temperature 0 always\n"
+                                  "gives the same answer. MOSS Latent's seed 1013 is the image seed of the videos.\n\n"
+                                  "Negative: empty uses the official MOSS-Image negative. What you write is also told to the enhancer:\n"
+                                  "with 'hat', the six test captions said 'no hat' and no image had one (5 of 6 had one without it).\n"
+                                  "At CFG 1 (the turbo) the sampler does not use the negative itself.\n\n"
+                                  "Optional (muted): Load Image. Unmute it (right-click > Mode > Always) to have the prompt written\n"
+                                  "from the picture: with an empty idea the picture is the whole brief, otherwise the starting point.\n\n"
+                                  "About 2 s per answer on an RTX 5090. Measurements: tools/RESULTS.md in the HaDeS MOSS Suite."}),
+        "_layout": {"note": (0, -640), "load": (0, 0), "img": (0, 420), "enh": (440, 0), "latent": (940, 0), "ks": (1380, 0),
+                    "save": (1820, 0), "turbo": (940, 450), "text": (440, 720), "tel": (1380, 640), "report": (1820, 640)},
     },
     "HaDeS MOSS Suite - Layout Poster": {
         **loader(),

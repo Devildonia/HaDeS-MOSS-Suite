@@ -1769,12 +1769,492 @@ async def upscale_telemetry(d: Director):
 upscale_telemetry.prepare = up_prepare
 
 
+# ---- the Prompt Enhancer, every mode (the third tutorial) ----
+
+PE_LINES = [
+    ("Hi, I'm HaDeS, and welcome back.",
+     "Hola, soy HaDeS, y bienvenido de nuevo."),
+    ("Today it's all about one node: the MOSS Prompt Enhancer. It can take your text as it is, or write the whole prompt for you.",
+     "Hoy todo va de un solo nodo: el MOSS Prompt Enhancer. Puede usar tu texto tal cual, o escribirte el prompt entero."),
+    ("We'll go through every mode, with the same fisherman as in the last two videos, and see what each one writes and draws.",
+     "Vamos a ver todos sus modos, con el mismo pescador de los dos vídeos anteriores, y lo que escribe y dibuja cada uno."),
+    ("As always, everything is free, and all the links are in the description.",
+     "Como siempre, todo es gratis y tienes todos los enlaces en la descripción."),
+    # 4: quick rebuild
+    ("Quick rebuild of the first video's workflow: loader, prompt enhancer, latent, sampler with my Turbo LoRA, and the image saver.",
+     "Montaje rápido del workflow del primer vídeo: loader, prompt enhancer, latent, sampler con mi LoRA Turbo, y el image saver.",
+     "Quick rebuild of the first video's workflow: loader, prompt enhancer, latent, sampler with my Turbo Lora, and the image saver."),
+    ("One addition: a Preview as Text on the enhancer's prompt output, so we can read what it writes.",
+     "Una novedad: un Preview as Text en la salida prompt del enhancer, para poder leer lo que escribe."),
+    # 6: the node
+    ("Here's the trick: MOSS-Image's text encoder is Qwen 3.5, a full language model. The enhancer uses that same file to write "
+     "the prompt, and then to encode it.",
+     "El truco es este: el text encoder de MOSS-Image es Qwen 3.5, un modelo de lenguaje completo. El enhancer usa ese mismo "
+     "archivo para escribir el prompt y luego para codificarlo.",
+     "Here's the trick: MOSS-Image's text encoder is Qwen three point five, a full language model. The enhancer uses that same "
+     "file to write the prompt, and then to encode it."),
+    ("So there's no extra model to download. On my RTX 5090, an answer takes about two seconds.",
+     "Así que no hay que descargar ningún modelo más. En mi RTX 5090, cada respuesta tarda unos dos segundos.",
+     "So there's no extra model to download. On my RTX fifty ninety, an answer takes about two seconds."),
+    ("You write a short idea, pick a mode, and the seed and temperature decide how it's written.",
+     "Escribes una idea corta, eliges un modo, y la semilla y la temperatura deciden cómo se escribe."),
+    # 9: as written
+    ("Let's start with a short idea: an old fisherman on a dock.",
+     "Empezamos con una idea corta: un pescador viejo en un muelle."),
+    ("In \"as written\" mode nothing is generated: the text is encoded exactly as you type it. That's what we used in the first two videos.",
+     "En el modo \"as written\" no se genera nada: el texto se codifica tal cual lo escribes. Es lo que usamos en los dos primeros vídeos.",
+     "In as written mode nothing is generated: the text is encoded exactly as you type it. That's what we used in the first two videos."),
+    ("With so few words, MOSS has to guess the rest: a small figure from behind, fishing on a stony shore. Not even a dock.",
+     "Con tan pocas palabras, MOSS tiene que adivinar el resto: una figura pequeña de espaldas, pescando en una orilla de piedras. "
+     "Ni siquiera hay muelle."),
+    # 12: caption
+    ("Now caption mode. Same idea, but now the enhancer writes a paragraph that keeps to it.",
+     "Ahora el modo caption. La misma idea, pero ahora el enhancer escribe un párrafo que se ciñe a ella."),
+    ("Here's what it wrote: a face lined by age and salt, a faded blue cap and a wool coat, a fishing rod, calm grey water and a few seagulls.",
+     "Esto es lo que ha escrito: una cara marcada por la edad y la sal, una gorra azul desteñida y un abrigo de lana, una caña de "
+     "pescar, agua gris en calma y unas gaviotas."),
+    ("About ninety words. In six tries, caption wrote between about sixty and a hundred and twenty. And here's the image.",
+     "Unas noventa palabras. En seis pruebas, caption escribió entre unas sesenta y ciento veinte. Y aquí está la imagen."),
+    # 15: detailed
+    ("Detailed mode goes further: a brief of about two hundred words, written like a photographer or an illustrator would.",
+     "El modo detailed va más allá: un encargo de unas doscientas palabras, escrito como lo haría un fotógrafo o un ilustrador."),
+    ("Where the light comes from, the lens and the shot for a photo, the technique and materials for other media.",
+     "De dónde viene la luz, el objetivo y el plano en una foto, la técnica y los materiales en otros medios."),
+    ("Look at the first words: oil painting on textured canvas. Our idea didn't name a medium, so detailed picked one.",
+     "Fíjate en las primeras palabras: óleo sobre lienzo con textura. Nuestra idea no decía el medio, así que detailed eligió uno."),
+    ("With this fisherman it chose an oil painting in eight of nine tries. And here it is.",
+     "Con este pescador eligió un óleo en ocho de nueve pruebas. Y aquí está."),
+    ("If you want a photo, say so. I add \"a photograph of\" to the idea.",
+     "Si quieres una foto, dilo. Añado \"a photograph of\" a la idea.",
+     "If you want a photo, say so. I add, a photograph of, to the idea."),
+    ("Now it writes a documentary photograph: the lens, the aperture, the light. Six of six tries were photos.",
+     "Ahora escribe una fotografía documental: el objetivo, la apertura, la luz. Seis de seis pruebas fueron fotos."),
+    ("Side by side: as written, caption and detailed. Same idea, same image seed.",
+     "Lado a lado: as written, caption y detailed. La misma idea, la misma semilla de imagen."),
+    ("My impression is that detailed prompts give much better images. But that's my eye, not a measurement, so try them yourself.",
+     "Mi impresión es que los prompts detailed dan imágenes mucho mejores. Pero es mi ojo, no una medición, así que pruébalos tú."),
+    ("And read what it writes. Detailed may add a setting and props. Once in nine tries it even made our old fisherman a young man.",
+     "Y lee lo que escribe. Detailed puede añadir escenario y atrezo. Una vez de nueve hasta convirtió a nuestro pescador viejo en "
+     "un hombre joven."),
+    # 24: seed and temperature
+    ("The enhancer has its own seed. Same seed, same text. Change it, and you get another version of the prompt.",
+     "El enhancer tiene su propia semilla. Misma semilla, mismo texto. Si la cambias, sale otra versión del prompt."),
+    ("Temperature sets how free the writing is. At zero you always get the same answer.",
+     "La temperatura decide cuánta libertad tiene al escribir. A cero, siempre da la misma respuesta."),
+    # 26: random prompts
+    ("Now a fun one: leave the idea empty in detailed mode, and the enhancer invents a prompt for you.",
+     "Ahora una divertida: deja la idea vacía en modo detailed y el enhancer se inventa un prompt por ti."),
+    ("The seed draws a medium from twenty-six, a subject from twenty, and a place or time from twenty. Same seed, same prompt.",
+     "La semilla elige un medio entre veintiséis, un tema entre veinte y un lugar o época entre veinte. Misma semilla, mismo prompt."),
+    ("Seed zero: a Japanese woodblock print of a Paris street. Seed four: a film still of a storm on a Nordic island.",
+     "Semilla cero: un grabado japonés de una calle de París. Semilla cuatro: un fotograma de cine de una tormenta en una isla nórdica."),
+    ("It's a great way to explore what MOSS can do when you're out of ideas.",
+     "Es una buena forma de explorar lo que sabe hacer MOSS cuando te quedas sin ideas."),
+    # 30: image input
+    ("The enhancer can also see. Qwen 3.5 has a vision part, so you can connect an image.",
+     "El enhancer también ve. Qwen 3.5 tiene una parte de visión, así que puedes conectarle una imagen.",
+     "The enhancer can also see. Qwen three point five has a vision part, so you can connect an image."),
+    ("With no idea, the image is the whole brief: it describes our fisherman, the white beard, the wool sweater, the net and the "
+     "gulls, and MOSS draws a new picture from that.",
+     "Sin idea, la imagen es todo el encargo: describe a nuestro pescador, la barba blanca, el jersey de lana, la red y las gaviotas, "
+     "y MOSS dibuja una imagen nueva a partir de eso."),
+    ("With an idea too, the image is the starting point. The same man in winter: the same beard and net, now with snow on the dock.",
+     "Con una idea además, la imagen es el punto de partida. El mismo hombre en invierno: la misma barba y la misma red, ahora con "
+     "nieve en el muelle."),
+    # 33: negative
+    ("The negative box. Leave it empty and you get MOSS-Image's official negative prompt.",
+     "La caja del negativo. Si la dejas vacía, se usa el negativo oficial de MOSS-Image."),
+    ("What you write there is also told to the enhancer. Our caption kept adding a hat, so I write \"hat\" as the negative. "
+     "Now the text says \"no hat\".",
+     "Lo que escribes ahí también se le dice al enhancer. Nuestro caption no paraba de añadir un sombrero, así que escribo \"hat\" "
+     "en el negativo. Ahora el texto dice \"no hat\".",
+     "What you write there is also told to the enhancer. Our caption kept adding a hat, so I write, hat, as the negative. "
+     "Now the text says, no hat."),
+    ("In six tries without the negative, five men wore a hat. With it, none did. That's the written prompt at work: at CFG one, "
+     "the sampler doesn't use the negative at all.",
+     "En seis pruebas sin el negativo, cinco hombres llevaban sombrero. Con él, ninguno. Eso es obra del prompt escrito: a CFG uno, "
+     "el sampler no usa el negativo para nada."),
+    # 36: tags
+    ("Coming from other models with tag prompts? Paste your tags as the idea.",
+     "¿Vienes de otros modelos con prompts de etiquetas? Pega tus tags como idea."),
+    ("MOSS reads natural language, so the enhancer turns the tags into prose.",
+     "MOSS lee lenguaje natural, así que el enhancer convierte las etiquetas en prosa."),
+    ("And count tags like one boy or one girl give no age, so they're written as adults unless your idea says otherwise.",
+     "Y los tags de cantidad como 1boy o 1girl no dicen la edad, así que se escriben como adultos salvo que tu idea diga otra cosa."),
+    # 39: layout
+    ("There's one more mode, layout, which places every element in a box. It deserves its own video, and it's coming.",
+     "Queda un modo más, layout, que coloca cada elemento en una caja. Se merece su propio vídeo, y llegará."),
+    # 40: goodbye
+    ("That's the Prompt Enhancer: as written, caption, detailed, random prompts, images, negatives and tags, all with the text "
+     "encoder you already have.",
+     "Ese es el Prompt Enhancer: as written, caption, detailed, prompts aleatorios, imágenes, negativos y tags, todo con el text "
+     "encoder que ya tienes."),
+    ("This workflow is free to download from the description.",
+     "Este workflow se puede descargar gratis desde la descripción."),
+    ("If you've made it to the end and enjoyed the video, and you'd like to see more content like this, leave a like and subscribe. "
+     "It's free!",
+     "Si has llegado hasta el final del vídeo, te ha gustado y quieres ver más contenido de este tipo, dale un buen like y "
+     "suscríbete. ¡Es gratis!"),
+    ("Thanks for watching, and see you in the next one.",
+     "Gracias por verlo, y nos vemos en el próximo."),
+]
+
+PE_POS = {"loader": (0, 0), "enhancer": (440, 0), "latent": (940, 0), "sampler": (1380, 0), "saver": (1820, 0), "turbo": (940, 450),
+          "preview": (440, 720), "image": (0, 420)}
+PE_BOX = [-260, -60, 2220, 1200]
+PE_IDEA = "an old fisherman on a dock"
+PE_TAGS = "1boy, old man, white beard, fishing net, pier, sunrise"
+PE_WINTER = "the same man in winter, snow on the dock"
+PE_IMAGE = "fisherman_video1.png"  # the first video's image, uploaded by pe_prepare into the recording instance's own input folder
+# the measured texts (tools/RESULTS.md, "Every mode on one short idea"): a run whose text lacks its words is reported
+PE_EXPECT = {"caption": "faded blue cap", "detailed": "oil painting", "photo": "documentary photograph", "random0": "ukiyo-e",
+             "random4": "Nordic", "image": "white beard", "winter": "snow", "tags": "man", "negative": "hat"}
+# the 6 + 6 measured images of the negative check (same clean instance, seeds 0-5)
+PE_NEG_SHEET = [(f"/view?filename=caption_s{s}_00001_.png&subfolder=pe_measure&type=output",
+                 f"/view?filename=negative_hat_s{s}_00001_.png&subfolder=pe_measure&type=output") for s in range(6)]
+
+
+async def pe_prepare(page):
+    """Off camera: the first video's fisherman into the recording instance's input folder, then one run loads the models, the LoRA and the
+    enhancer's language head."""
+    import urllib.request
+    import uuid
+    url = page.url.split("/", 3)
+    base = f"{url[0]}//{url[2]}"
+    b = "----" + uuid.uuid4().hex
+    body = (f"--{b}\r\nContent-Disposition: form-data; name=\"overwrite\"\r\n\r\ntrue\r\n"
+            f"--{b}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"fisherman_video1.png\"\r\nContent-Type: image/png\r\n\r\n").encode() \
+        + UP_VIDEO1.read_bytes() + f"\r\n--{b}--\r\n".encode()
+    urllib.request.urlopen(urllib.request.Request(base + "/upload/image", body, {"Content-Type": f"multipart/form-data; boundary={b}"}))
+    # the page listed the input folder before the upload: refresh, or the Load Image node is framed red as a missing file
+    await page.evaluate("() => window.__hv.app().extensionManager.command.execute('Comfy.RefreshNodeDefinitions')")
+    await page.wait_for_timeout(1500)
+    g = {k: v for k, v in up_api_graph(7, full=False).items() if k in ("1", "2", "3", "4", "5")}
+    g["2"]["inputs"].update({"mode": "caption", "idea": "a red bicycle", "seed": 99})
+    g["6"] = {"class_type": "PreviewImage", "inputs": {"images": ["5", 1]}}
+    print("warm-up run:", await page.evaluate(UP_WARM_JS, g), flush=True)
+
+
+async def pe_type(d, node, name, text):
+    """Click the node's text box, select its text and type over it (an empty text just clears it). The box is the visible
+    textarea with that placeholder nearest the node (the widget's own element can be a stale, unlaid-out copy)."""
+    find = """([id, n, focus]) => { const nd = window.__hv.node(id), c = window.__hv.screen(id, nd.size[0] / 2, nd.size[1] / 2);
+        const v = [...document.querySelectorAll('textarea')].filter(e => e.placeholder === n && e.getBoundingClientRect().width > 0);
+        if (!v.length) return null;
+        const dist = (e) => { const r = e.getBoundingClientRect(); return Math.hypot(r.x + r.width / 2 - c[0], r.y + r.height / 2 - c[1]); };
+        const e = v.sort((a, b) => dist(a) - dist(b))[0], r = e.getBoundingClientRect();
+        if (focus) { e.focus(); return document.activeElement === e; }
+        return [r.left, r.top, r.width, r.height]; }"""
+    box = await d.js(find, [node, name, False])
+    if not box:
+        print(f"{name}: no visible box on screen; text set by code", flush=True)
+        await d.js("([id, n, t]) => window.__hv.set(id, {[n]: t})", [node, name, text])
+        return
+    await d.click(box[0] + min(60, box[2] / 3), box[1] + min(24, box[3] / 2))
+    if not await d.js(find.replace("if (focus) { e.focus(); return", "if (focus) { return"), [node, name, True]):
+        if not await d.js(find, [node, name, True]):  # focus the box itself, never the canvas
+            raise SystemExit(f"the {name} box is not focused; nothing typed")
+    await d.page.keyboard.press("Control+A")
+    await d.page.keyboard.press("Backspace")
+    if text:
+        await d.page.keyboard.type(text, delay=22)
+    await d.js("([id, n, t]) => window.__hv.set(id, {[n]: t})", [node, name, text])  # the widget value, as typed
+
+
+async def pe_run(d, saver, enhancer, expect=None):
+    """Run; returns (image url, seconds, the enhancer's text). A text without its measured words is reported, not hidden."""
+    url, t = await basic_run(d, saver)
+    await d.move(W * 0.5, H * 0.92)
+    run = next(iter((await d.js("() => fetch('/history?max_items=1').then(r => r.json())")).values()))
+    text = (run["outputs"].get(str(enhancer), {}).get("text") or [""])[0]
+    if expect and PE_EXPECT[expect].lower() not in text.lower():
+        print(f"WARNING {expect}: the text lacks {PE_EXPECT[expect]!r}: {text[:200]!r}", flush=True)
+    return url, t, text
+
+
+async def pe_show(d, url, label, h=760):
+    await d.js("(h) => window.__hv.show(h)", f'<div style="text-align:center"><img src="{url}" style="height:{h}px;border-radius:6px">'
+               f'<div style="color:#ffcc33;font:600 28px Segoe UI,sans-serif;margin-top:14px">{label}</div></div>')
+
+
+async def pe_hide(d):
+    await d.js("() => window.__hv.hide()")
+    await d.hold(0.6)
+
+
+async def prompt_enhancer(d: Director):
+    """The third tutorial: the first video's workflow rebuilt, then every Prompt Enhancer mode on the fisherman."""
+    P = PE_POS
+    await d.camera({"box": BASIC_BOX}, 10, pad=60, top=60)
+    await d.move(W * 0.62, H * 0.55)
+
+    # 1. introduction
+    d.title("HaDeS MOSS Suite", "The Prompt Enhancer: every mode", 6.0)
+    for i in range(4):
+        await d.say(i)
+        await d.move(W * (0.55 + 0.05 * (i % 2)), H * (0.5 + 0.04 * i), 2500)
+
+    # 2. quick rebuild
+    await d.say(4)
+    loader = await basic_add(d, "HaDeSMossLoader", "MOSS Loader", P["loader"])
+    await up_set(d, loader, BASIC_LOADER)
+    async with d.fast(4.0):
+        enhancer = await basic_add(d, "HaDeSMossPromptEnhancer", "MOSS Prompt Enhancer", P["enhancer"])
+        await up_set(d, enhancer, {"mode": "as written", "idea": "", "seed": 0, "temperature": 0.7})
+        await basic_link(d, loader, "CLIP", enhancer, "clip", 700)
+        latent = await basic_add(d, "HaDeSMossLatent", "MOSS Latent", P["latent"])
+        await up_set(d, latent, {"aspect_ratio": "1:1", "megapixels": 1.0, "seed": BASIC_SEED, "control_after_generate": "fixed"})
+    async with d.fast(6.0):
+        sampler = await basic_add(d, "HaDeSMossKSampler", "MOSS KSampler", P["sampler"])
+        for a, out, inp in ((loader, "MODEL", "model"), (enhancer, "positive", "positive"), (enhancer, "negative", "negative"),
+                            (latent, "latent", "latent_image"), (latent, "seed", "seed"), (loader, "VAE", "vae")):
+            await basic_link(d, a, out, sampler, inp, 700)
+        turbo = await basic_add(d, "HaDeSMossTurbo", "MOSS Turbo LoRA", P["turbo"])
+        await up_set(d, turbo, {"lora_name": BASIC_LORA, "strength": 1.0, "steps": 8, "cfg": 1.0, "sampler_name": "euler",
+                                "scheduler": "simple"})
+        await basic_link(d, turbo, "turbo", sampler, "turbo", 700)
+        saver = await basic_add(d, "HaDeSMossImageSaver", "MOSS Image Saver", P["saver"])
+        await up_set(d, saver, {"filename_prefix": "MOSS/HaDeS_MOSS_PE"})  # no metadata here: %model% and %seed% would be empty
+        await basic_link(d, sampler, "image", saver, "images", 700)
+    await d._after_voice(0.1)
+    await d.camera({"box": PE_BOX}, 1000, pad=60, top=60)
+    await d.say(5)
+    preview = await basic_add(d, "PreviewAny", "Preview as Text", P["preview"])
+    await d.js("(id) => { const n = window.__hv.node(id); n.setSize([440, 460]); n.setDirtyCanvas(true, true); }", preview)
+    await basic_link(d, enhancer, "prompt", preview, "source", 800)
+    await d._after_voice(0.1)
+
+    # 3. what the node is
+    await d.camera([enhancer], 1100, pad=60, top=60)
+    await d.say(6)
+    await d.move(*(await d.js("([id]) => window.__hv.slot(id, 'clip', false)", [enhancer])))
+    await d._after_voice(0.1)
+    await d.say(7)
+    await d._after_voice(0.1)
+    await d.say(8)
+    for w in ("idea", "mode", "seed", "temperature"):
+        await basic_point(d, enhancer, w)
+        await d.hold(0.7)
+    await d._after_voice(0.1)
+
+    # 4. as written
+    await d.say(9)
+    await pe_type(d, enhancer, "idea", PE_IDEA)
+    await d._after_voice(0.1)
+    await d.say(10)
+    await basic_point(d, enhancer, "mode")
+    await d._after_voice(0.1)
+    url_aw, t_aw, _ = await pe_run(d, saver, enhancer)
+    await d.say(11)
+    await pe_show(d, url_aw, f"as written · \"{PE_IDEA}\"")
+    await d._after_voice(0.6)
+    await pe_hide(d)
+
+    # 5. caption
+    await d.camera([enhancer, preview], 1100, pad=40, top=60)
+    await d.say(12)
+    await basic_point(d, enhancer, "mode", {"mode": "caption", "seed": 1})
+    await d.hold(0.4)
+    await basic_point(d, enhancer, "seed")
+    await d._after_voice(0.1)
+    url_cap, t_cap, text_cap = await pe_run(d, saver, enhancer, "caption")
+    await d.camera([preview], 1100, pad=40, top=60)
+    await d.say(13)
+    await d._after_voice(0.2)
+    await d.say(14)
+    await d.hold(1.8)
+    await pe_show(d, url_cap, f"caption · {len(text_cap.split())} words")
+    await d._after_voice(0.6)
+    await pe_hide(d)
+
+    # 6. detailed: an oil painting, then a photograph
+    await d.camera([enhancer, preview], 1100, pad=40, top=60)
+    await d.say(15)
+    await basic_point(d, enhancer, "mode", {"mode": "detailed", "seed": 2})
+    await d._after_voice(0.1)
+    url_det, t_det, text_det = await pe_run(d, saver, enhancer, "detailed")
+    await d.camera([preview], 1100, pad=40, top=60)
+    await d.say(16)
+    await d._after_voice(0.1)
+    await d.say(17)
+    await d._after_voice(0.1)
+    await d.say(18)
+    await d.hold(1.5)
+    await pe_show(d, url_det, f"detailed · {len(text_det.split())} words · no medium in the idea")
+    await d._after_voice(0.6)
+    await pe_hide(d)
+    await d.camera([enhancer, preview], 1100, pad=40, top=60)
+    await d.say(19)
+    await pe_type(d, enhancer, "idea", "a photograph of " + PE_IDEA)
+    await up_set(d, enhancer, {"seed": 1})
+    await d._after_voice(0.1)
+    url_ph, t_ph, text_ph = await pe_run(d, saver, enhancer, "photo")
+    await d.camera([preview], 1100, pad=40, top=60)
+    await d.say(20)
+    await d.hold(2.5)
+    await pe_show(d, url_ph, f"detailed · {len(text_ph.split())} words · \"a photograph of ...\"")
+    await d._after_voice(0.4)
+    await d.say(21)
+    side = 440
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }",
+               '<div style="display:flex;gap:24px;margin-top:150px">' + "".join(
+                   f'<div style="text-align:center"><img src="{u}" style="width:{side}px;height:{side}px;border-radius:6px">'
+                   f'<div style="color:#ffcc33;font:600 24px Segoe UI,sans-serif;margin-top:12px">{t}</div></div>'
+                   for u, t in ((url_aw, "as written"), (url_cap, "caption"), (url_det, "detailed"),
+                                (url_ph, "detailed, \"a photograph of\""))) + "</div>")
+    await d._after_voice(0.4)
+    await d.say(22)
+    await d._after_voice(0.3)
+    await pe_hide(d)
+    await d.camera([preview], 1100, pad=40, top=60)
+    await d.say(23)
+    await d._after_voice(0.2)
+
+    # 7. seed and temperature
+    await d.camera([enhancer], 1100, pad=60, top=60)
+    await d.say(24)
+    await basic_point(d, enhancer, "seed")
+    await d._after_voice(0.1)
+    await d.say(25)
+    await basic_point(d, enhancer, "temperature")
+    await d._after_voice(0.1)
+
+    # 8. random prompts
+    await d.say(26)
+    await pe_type(d, enhancer, "idea", "")
+    await up_set(d, enhancer, {"mode": "detailed", "seed": 0})
+    await basic_point(d, enhancer, "seed")
+    await d._after_voice(0.1)
+    url_r0, _, text_r0 = await pe_run(d, saver, enhancer, "random0")
+    await d.say(27)
+    await d.camera([preview], 1100, pad=40, top=60)
+    await d._after_voice(0.1)
+    await up_set(d, enhancer, {"seed": 4})
+    url_r4, _, text_r4 = await pe_run(d, saver, enhancer, "random4")
+    await d.say(28)
+    side = 640
+    await d.js("(h) => window.__hv.show(h)", '<div style="display:flex;gap:40px;margin-top:120px">' + "".join(
+        f'<div style="text-align:center"><img src="{u}" style="width:{side}px;height:{side}px;border-radius:6px">'
+        f'<div style="color:#ffcc33;font:600 26px Segoe UI,sans-serif;margin-top:12px">{t}</div></div>'
+        for u, t in ((url_r0, "random · seed 0"), (url_r4, "random · seed 4"))) + "</div>")
+    await d._after_voice(0.3)
+    await d.say(29)
+    await d._after_voice(0.3)
+    await pe_hide(d)
+
+    # 10. negative
+    await d.camera([enhancer, preview], 1100, pad=40, top=60)
+    await d.say(33)
+    await pe_type(d, enhancer, "idea", PE_IDEA)
+    await up_set(d, enhancer, {"mode": "caption", "seed": 0})
+    await d._after_voice(0.1)
+    await d.say(34)
+    await pe_type(d, enhancer, "negative", "hat")
+    url_neg, _, _ = await pe_run(d, saver, enhancer, "negative")
+    await d.camera([preview], 1100, pad=40, top=60)
+    await d._after_voice(0.3)
+    await d.say(35)
+    side = 300
+    cells = "".join(f'<img src="{a}" style="width:{side}px;height:{side}px;border-radius:4px">' for a, _ in PE_NEG_SHEET) + \
+        "".join(f'<img src="{b}" style="width:{side}px;height:{side}px;border-radius:4px">' for _, b in PE_NEG_SHEET)
+    await d.js("(h) => window.__hv.show(h)", '<div style="margin-top:110px;text-align:center;color:#fff;font:600 26px Segoe UI,sans-serif">'
+               f'<div style="display:grid;grid-template-columns:repeat(6,{side}px);gap:10px">{cells}</div>'
+               '<div style="display:flex;justify-content:space-between;margin-top:14px;color:#ffcc33">'
+               '<span>top: caption, seeds 0-5 · hat in 5 of 6</span><span>bottom: negative "hat" · hat in 0 of 6</span></div></div>')
+    await d._after_voice(0.6)
+    await pe_hide(d)
+    await pe_type(d, enhancer, "negative", "")
+
+    # 11. tags
+    await d.camera([enhancer, preview], 1100, pad=40, top=60)
+    await d.say(36)
+    await pe_type(d, enhancer, "idea", PE_TAGS)
+    await up_set(d, enhancer, {"seed": 3})
+    await d._after_voice(0.1)
+    url_tag, _, _ = await pe_run(d, saver, enhancer, "tags")
+    await d.camera([preview], 1100, pad=40, top=60)
+    await d.say(37)
+    await d._after_voice(0.2)
+    await pe_show(d, url_tag, "tags → prose")
+    await d.say(38)
+    await d._after_voice(0.4)
+    await pe_hide(d)
+
+    # 9. image input: the Load Image node is made by code (its file list would show the user's own images)
+    await d.camera({"box": PE_BOX}, 1100, pad=60, top=60)
+    await d.say(30)
+    image = await d.js("""async ([pos, file]) => { const a = window.__hv.app(), n = window.LiteGraph.createNode('LoadImage');
+        const w = n.widgets.find(w => w.name === 'image'); w.value = file; n.pos = [-20000, -20000]; a.graph.add(n); w.callback?.(file);
+        for (let i = 0; i < 60; i++) { await new Promise(f => setTimeout(f, 100));
+            const src = n.imgs?.[0]?.src || ''; if (src.includes('fisherman_video1')) break; }
+        w.value = file; w.callback?.(file); await new Promise(f => setTimeout(f, 600));
+        if (!(n.imgs?.[0]?.src || '').includes('fisherman_video1')) return null;
+        n.pos = [...pos]; a.graph.setDirtyCanvas(true, true); return n.id; }""", [P["image"], PE_IMAGE])
+    if not image:
+        raise SystemExit("the Load Image node did not show the fisherman; stopped before it reached the screen")
+    await d.camera([image, enhancer], 1100, pad=40, top=60)
+    await basic_link(d, image, "IMAGE", enhancer, "image", 900)
+    await d._after_voice(0.1)
+    await d.say(31)
+    await pe_type(d, enhancer, "idea", "")
+    await up_set(d, enhancer, {"mode": "caption", "seed": 0})
+    await basic_point(d, enhancer, "mode")
+    url_im, _, _ = await pe_run(d, saver, enhancer, "image")
+    first = "data:image/png;base64," + base64.b64encode(UP_VIDEO1.read_bytes()).decode()
+    side = 640
+    await d.js("(h) => window.__hv.show(h)", '<div style="display:flex;gap:40px;margin-top:120px">' + "".join(
+        f'<div style="text-align:center"><img src="{u}" style="width:{side}px;height:{side}px;border-radius:6px">'
+        f'<div style="color:#ffcc33;font:600 26px Segoe UI,sans-serif;margin-top:12px">{t}</div></div>'
+        for u, t in ((first, "the image in"), (url_im, "drawn from its description"))) + "</div>")
+    await d._after_voice(0.4)
+    await pe_hide(d)
+    await d.camera([image, enhancer], 1100, pad=40, top=60)
+    await d.say(32)
+    await pe_type(d, enhancer, "idea", PE_WINTER)
+    await up_set(d, enhancer, {"seed": 1})
+    url_win, _, _ = await pe_run(d, saver, enhancer, "winter")
+    await pe_show(d, url_win, f"image + \"{PE_WINTER}\"")
+    await d._after_voice(0.5)
+    await pe_hide(d)
+    await d.js("([img, enh]) => { const n = window.__hv.node(enh), i = n.inputs.findIndex(s => s.name === 'image'); n.disconnect"
+               "Input(i); window.__hv.app().graph.setDirtyCanvas(true, true); }", [image, enhancer])
+
+    # 12. layout, mentioned
+    await d.camera([enhancer], 1100, pad=60, top=60)
+    await d.say(39)
+    await basic_point(d, enhancer, "mode", {"mode": "layout"})
+    await d._after_voice(0.2)
+    await up_set(d, enhancer, {"mode": "detailed", "idea": "a photograph of " + PE_IDEA, "seed": 1})
+
+    # 13. goodbye
+    await d.camera([loader, enhancer, latent, sampler, saver, turbo, preview, image], 1300, pad=50, top=60)
+    await d.say(40)
+    await d._after_voice(0.1)
+    await d.say(41)
+    await d.js("(h) => window.__hv.show(h)", '<div style="color:#fff;text-align:center;margin-top:300px">'
+               '<div style="font:600 30px Segoe UI,sans-serif;color:#c9c9d1">Free download (link in the description)</div>'
+               '<div style="font:700 44px Segoe UI,sans-serif;margin-top:22px">HaDeS MOSS Suite - Prompt Enhancer.json</div></div>')
+    await d._after_voice(0.3)
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }",
+               f'<div style="display:flex;align-items:center;gap:80px;margin-top:60px"><img src="{url_ph}" style="height:780px;border-radius:6px">'
+               '<div style="color:#fff;max-width:640px"><div style="font:900 72px Segoe UI Black,sans-serif;line-height:1.05">HaDeS MOSS Suite</div>'
+               '<div style="font:600 34px Segoe UI,sans-serif;color:#ffcc33;margin-top:22px">The Prompt Enhancer: every mode</div>'
+               '<div style="font:400 26px Segoe UI,sans-serif;color:#c9c9d1;margin-top:44px">Workflow, Suite and models: links in the description</div></div></div>')
+    await d.say(42)
+    await d.say(43)
+    await d.end(1.5)
+
+
+prompt_enhancer.prepare = pe_prepare
+
+
 SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "layout_test": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_test, LAYOUT_TEST_LINES),
           "layout_sentence": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_sentence, LAYOUT_SENTENCE_LINES),
           "turbo_8_steps_upscale_x2": ("HaDeS MOSS Suite - Turbo 8 steps + Upscale x2.json", turbo_upscale_x2,
                                        TURBO_UPSCALE_LINES),
-          "upscale_telemetry": (None, upscale_telemetry, UP_LINES)}
+          "upscale_telemetry": (None, upscale_telemetry, UP_LINES),
+          "prompt_enhancer": (None, prompt_enhancer, PE_LINES)}
 
 # spoken forms where the written caption reads badly aloud
 SPOKEN = {"DRAFT LAYOUT": "Draft layout"}
@@ -1985,7 +2465,8 @@ def serve(url, out, python, extra_args):
     proc = subprocess.Popen([python, "main.py", "--port", str(port), "--disable-auto-launch", "--disable-all-custom-nodes",
                              "--whitelist-custom-nodes", ROOT.name, "ComfyUI-Manager", "--user-directory", str(user.resolve()),
                              "--output-directory", str((Path(out) / "comfy_output").resolve()),
-                             "--temp-directory", str((Path(out) / "comfy_temp").resolve())]
+                             "--temp-directory", str((Path(out) / "comfy_temp").resolve()),
+                             "--input-directory", str((Path(out) / "comfy_input").resolve())]  # never the user's own input folder
                             + extra_args,
                             cwd=COMFY, stdout=log, stderr=subprocess.STDOUT)
     import urllib.request
