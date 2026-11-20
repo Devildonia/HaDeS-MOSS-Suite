@@ -1,8 +1,8 @@
 {
- "id": "3c85861e-7a78-569c-bee0-2fcc9ccf9b70",
+ "id": "18052759-cf4a-5ef5-977e-04d8b30634fe",
  "revision": 0,
- "last_node_id": 7,
- "last_link_id": 9,
+ "last_node_id": 8,
+ "last_link_id": 14,
  "nodes": [
   {
    "id": 1,
@@ -71,7 +71,9 @@
     {
      "name": "info",
      "type": "STRING",
-     "links": []
+     "links": [
+      11
+     ]
     }
    ]
   },
@@ -162,7 +164,9 @@
     {
      "name": "info",
      "type": "STRING",
-     "links": []
+     "links": [
+      12
+     ]
     }
    ]
   },
@@ -221,7 +225,9 @@
     {
      "name": "info",
      "type": "STRING",
-     "links": []
+     "links": [
+      13
+     ]
     },
     {
      "name": "seed",
@@ -368,7 +374,9 @@
     {
      "name": "info",
      "type": "STRING",
-     "links": []
+     "links": [
+      14
+     ]
     }
    ]
   },
@@ -384,7 +392,7 @@
     100
    ],
    "flags": {},
-   "order": 5,
+   "order": 6,
    "mode": 0,
    "inputs": [
     {
@@ -395,7 +403,7 @@
     {
      "name": "metadata",
      "type": "STRING",
-     "link": null,
+     "link": 10,
      "shape": 7
     },
     {
@@ -440,6 +448,101 @@
   },
   {
    "id": 7,
+   "type": "HaDeSMossSuiteTelemetry",
+   "pos": [
+    1820,
+    450
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 5,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "info_1",
+     "type": "STRING",
+     "link": 11,
+     "shape": 7
+    },
+    {
+     "name": "info_2",
+     "type": "STRING",
+     "link": 12,
+     "shape": 7
+    },
+    {
+     "name": "info_3",
+     "type": "STRING",
+     "link": 13,
+     "shape": 7
+    },
+    {
+     "name": "info_4",
+     "type": "STRING",
+     "link": 14,
+     "shape": 7
+    },
+    {
+     "name": "info_5",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "info_6",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "info_7",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "info_8",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "HaDeS MOSS Suite Telemetry"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossSuiteTelemetry"
+   },
+   "outputs": [
+    {
+     "name": "report",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "json",
+     "type": "STRING",
+     "links": [
+      10
+     ]
+    },
+    {
+     "name": "summary",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 8,
    "type": "Note",
    "pos": [
     0,
@@ -455,7 +558,7 @@
    "inputs": [],
    "outputs": [],
    "widgets_values": [
-    "HaDeS MOSS Suite - Basic Generation (the first video tutorial)\n\nMOSS Loader: MOSS-Image Base, the Qwen3.5 9B int8 text encoder and the FLUX.2 VAE.\nMOSS Prompt Enhancer, 'as written': your sentence is the prompt.\nMOSS KSampler: 25 steps, CFG 2.5, euler / simple when the turbo input is empty.\nMOSS Turbo LoRA (Turbo 8-steps v1.0, trained for Base): 8 steps, CFG 1, euler / simple.\n   For 25 steps again: switch the turbo node off or unplug its wire.\n   With HaDeS MOSS v1.0 Turbo as the model, leave the turbo input empty: it is baked in.\n\nModels: the turbo LoRA in models/loras (huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo).\nSeed 1013 in MOSS Latent is the video's; set its after run to randomize for new images."
+    "HaDeS MOSS Suite - Basic Generation (the first video tutorial)\n\nMOSS Loader: MOSS-Image Base, the Qwen3.5 9B int8 text encoder and the FLUX.2 VAE.\nMOSS Prompt Enhancer, 'as written': your sentence is the prompt.\nMOSS KSampler: 25 steps, CFG 2.5, euler / simple when the turbo input is empty.\nMOSS Turbo LoRA (Turbo 8-steps v1.0, trained for Base): 8 steps, CFG 1, euler / simple.\n   For 25 steps again: switch the turbo node off or unplug its wire.\n   With HaDeS MOSS v1.0 Turbo as the model, leave the turbo input empty: it is baked in.\n\nSuite Telemetry feeds the Image Saver's metadata: the PNG gets the prompt, the settings and\n   the model / LoRA hashes as A1111 parameters (the video's graph left it out).\n\nModels: the turbo LoRA in models/loras (huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo).\nSeed 1013 in MOSS Latent is the video's; set its after run to randomize for new images."
    ],
    "properties": {}
   }
@@ -532,6 +635,46 @@
    6,
    0,
    "IMAGE"
+  ],
+  [
+   10,
+   7,
+   1,
+   6,
+   1,
+   "STRING"
+  ],
+  [
+   11,
+   1,
+   3,
+   7,
+   0,
+   "STRING"
+  ],
+  [
+   12,
+   2,
+   6,
+   7,
+   1,
+   "STRING"
+  ],
+  [
+   13,
+   3,
+   3,
+   7,
+   2,
+   "STRING"
+  ],
+  [
+   14,
+   5,
+   2,
+   7,
+   3,
+   "STRING"
   ]
  ],
  "groups": [],

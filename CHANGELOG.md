@@ -8,7 +8,7 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- **Basic Generation example:** the six nodes of the first video tutorial (Base at 25 steps, then Turbo 8-steps v1.0 at 8 in the `turbo` input), with a note; made by `tools/make_examples.py` with the official file names and download links.
+- **Basic Generation example:** the six nodes of the first video tutorial (Base at 25 steps, then Turbo 8-steps v1.0 at 8 in the `turbo` input), with a note; made by `tools/make_examples.py` with the official file names and download links. Suite Telemetry feeds the Image Saver's `metadata`, so the PNG carries the prompt, settings and model / LoRA hashes as A1111 parameters (the graph built in the video leaves `metadata` empty and its PNG has none). Run in a clean ComfyUI: the 8-step image is pixel-identical to the video's, and with the turbo node switched off the KSampler's own 25 steps run.
 - **`tools/moss_video.py basic_generation`:** builds that workflow on an empty canvas (node search by double-click, a click drops the new node, wires dragged slot to slot, list widgets set by code so no file list opens), runs it at 25 and 8 steps and shows both images and 100 % crops with the times ComfyUI's history recorded (13.4 s and 3.2 s on an RTX 5090). `--resolution 1440p` records a 2560 x 1440 page (Chrome's screencast ignores the device scale), with the cursor, overlays and captions scaled to match; `--until N` stops a test take after line N.
 
 ## [0.9.1] - 2026-11-20

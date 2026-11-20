@@ -337,7 +337,10 @@ EXAMPLES = {
         "latent": latent(seed=1013),
         "turbo": ("HaDeSMossTurbo", {"lora_name": TURBO_V10, "strength": 1.0, "steps": 8}),
         "ks": with_turbo(ksampler(("load", 0), ("latent", 0), seed=("latent", 4)), sampler_name="euler"),
-        "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "filename_prefix": "MOSS/HaDeS_MOSS_%seed%", "hashes": True, "embed_workflow": True}),
+        "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_%seed%", "hashes": True, "embed_workflow": True}),
+        # Telemetry gathers the settings for the saver's A1111 parameters (prompt, steps, CFG, seed, model and LoRA hashes)
+        "tel": ("HaDeSMossSuiteTelemetry", {"report_title": "HaDeS MOSS Suite Telemetry", "info_1": ("load", 3), "info_2": ("enh", 6),
+                                            "info_3": ("latent", 3), "info_4": ("ks", 2)}),
         "note": ("Note", {"text": "HaDeS MOSS Suite - Basic Generation (the first video tutorial)\n\n"
                                   "MOSS Loader: MOSS-Image Base, the Qwen3.5 9B int8 text encoder and the FLUX.2 VAE.\n"
                                   "MOSS Prompt Enhancer, 'as written': your sentence is the prompt.\n"
@@ -345,10 +348,12 @@ EXAMPLES = {
                                   "MOSS Turbo LoRA (Turbo 8-steps v1.0, trained for Base): 8 steps, CFG 1, euler / simple.\n"
                                   "   For 25 steps again: switch the turbo node off or unplug its wire.\n"
                                   "   With HaDeS MOSS v1.0 Turbo as the model, leave the turbo input empty: it is baked in.\n\n"
+                                  "Suite Telemetry feeds the Image Saver's metadata: the PNG gets the prompt, the settings and\n"
+                                  "   the model / LoRA hashes as A1111 parameters (the video's graph left it out).\n\n"
                                   "Models: the turbo LoRA in models/loras (huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo).\n"
                                   "Seed 1013 in MOSS Latent is the video's; set its after run to randomize for new images."}),
         "_layout": {"load": (0, 0), "enh": (440, 0), "latent": (940, 0), "ks": (1380, 0), "save": (1820, 0), "turbo": (940, 450),
-                    "note": (0, 360)},
+                    "note": (0, 360), "tel": (1820, 450)},
     },
     "HaDeS MOSS Suite - Control (color, depth)": {
         **loader(),
