@@ -11,3 +11,5 @@ Agents.md
 moss_dev_nodes.py
 web/moss_dev_tools.js
 examples/dev/
+# Chromium's log from the video recordings
+debug.log
