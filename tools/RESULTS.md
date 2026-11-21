@@ -976,6 +976,37 @@ Leave-out (the full LoRA without that group, reference: the full LoRA) agrees on
 - A fixed "style" / "identity" group preset would be wrong for some of these LoRAs, so LoRA Block Weight has none; measure a LoRA with
   `tools/moss_eval.py --mode lora --lora <name> --lora-model <model it was trained on>`.
 
+## The LoRA toolkit on Bulle d'Encre (2026-11-21, for the fourth video tutorial)
+
+Bulle d'Encre (`HaDeS_MOSS_preview_beta`) is SFT with 30 % of Base in layers 24-29, plus Turbo 8-steps v1.0 at 0.5 and the mega style LoRA
+at 0.8 (its `hades/recipe`). Clean ComfyUI on port 8189, `--use-sage-attention`, RTX 5090. Four prompts (the tutorials' fisherman, a Paris
+café, a two-panel detective comic, a red fox), seed 1013; distances are mean absolute pixel differences at 512 x 512 (0-255) divided by
+the distance between Bulle d'Encre's seeds 1013 and 1014 on the same prompt (1.0 = as different as another seed), averaged over the four
+prompts. Files in `models/loras/HaDeS_video/`; scripts and sheets in `I:/HaDeS_MOSS/videos/lora_toolkit/measure`.
+
+- **Extractor** (Bulle d'Encre minus its base, the base as the original merged file): rank 32 126 MB, 96.8 % energy, 0.33 from Bulle
+  d'Encre at 15 steps / CFG 2.5 / euler simple (the base + the extracted LoRA at 1.0 in the Multi-LoRA); rank 64 252 MB, 97.0 %, 0.19;
+  rank 128 504 MB, 97.2 %, 0.22. 92-111 s each. Rank 64 against the base rebuilt live with the Block Merger (layers 24-29 at 0.3, the
+  rest 0): 97.0 %, 0.19, the same as against the original file. By eye, rank 64 gives Bulle d'Encre's compositions and look; the base
+  alone (no LoRA) is 0.77 away and loses the look.
+- **Turbo v1.0 at 0.5 as a second Multi-LoRA row** (CFG 1, euler simple): 8 steps 0.56, 6 steps 0.57, 4 steps 0.61 from Bulle d'Encre at 15
+  steps; the same scene and look by eye, not the same image (the comic lost its second panel at all three step counts). Warm time 2.2 s
+  at 8 steps against 8.0 s for Bulle d'Encre at 15 steps / CFG 2.5.
+- **One group of layers off** (the rank-64 LoRA, the rest at 1.0, 15 steps / CFG 2.5): the share of the LoRA's change lost, as the distance
+  to the full-LoRA image over the base alone's distance to it: layers 00-05 0.44, 06-11 0.29, 12-17 0.39, 18-23 0.56, 24-29 0.75, 30-35
+  0.74, 36-41 0.48. By eye, the fisherman with 30-35 off is close to the base alone. LoRA Block Weight's info counts 24 weights in every
+  group, so the counts alone do not show this; one LoRA, one seed.
+- **Merger** (the rank-64 LoRA at 1.0 + Turbo v1.0 at 0.5, rank 72, exact for 64 + 2): 255 MB in 1 s. Rebuilt in float32, every layer is
+  `A + 0.5 B` within 0.24 % (the bf16 rounding of the stored factors). Against the two rows live at 8 steps / CFG 1 it is 0.44, above the
+  0.17 of the same two rows loaded in the opposite order: same scene and look, small details moved (most on the fisherman). At few steps
+  a rounding difference is enough to move details.
+- **Resize** of the merged file: rank 32 126 MB, 0.13 from the merged file's images (within the 0.17 floor above); `dynamic_energy` 0.90
+  (ranks 1-26 per layer) 40 MB, 0.50 (the fisherman 0.83).
+- **Metadata Reader** on the rank-32 file: the chain resize -> merge (rank 72) -> extracted from Bulle d'Encre minus the base (rank 64,
+  97.0 %) + 0.5 x Turbo 8-steps v1.0, ending in "Original files in the result: +1 x the extracted LoRA, +0.5 x the turbo".
+- The Extractor, Merger and Resize save under the root of `models/loras` whatever folder `export_filename` names (the name's folder part
+  is dropped); the files here were moved into `HaDeS_video/` by hand, and the recipes still read them.
+
 ## Community LoRA formats in the core loader
 
 Four community LoRAs on `mossImage_sft_bf16` (fused `proj.qkv`) through the stock `LoraLoaderModelOnly`, strength 1.0: the ComfyUI log

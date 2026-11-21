@@ -27,13 +27,15 @@ TURBO, TURBO_DIVERSE = "HaDeS-MOSS-Turbo-v0.6.safetensors", "HaDeS-MOSS-Turbo-Di
 TURBO_8STEPS = "HaDeS-MOSS-Turbo-8steps-v0.7.safetensors"
 TURBO_V10 = "HaDeS-MOSS-Turbo-8steps-v1.0.safetensors"  # for Base
 UPSCALER = "RealESRGAN_x2plus.pth"
+BULLE = "HaDeS_MOSS_preview_beta.safetensors"  # Bulle d'Encre, the fourth video tutorial's model
 HF_TURBO = "https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo/resolve/main"
 # file -> (models folder, download URL)
 MODEL_FILES = {SFT: ("diffusion_models", f"{HF}/diffusion_models/{SFT}"), BASE: ("diffusion_models", f"{HF}/diffusion_models/{BASE}"),
                TE: ("text_encoders", f"{HF}/text_encoders/{TE}"), VAE: ("vae", f"{HF}/vae/{VAE}"),
                TURBO: ("loras", f"{HF_TURBO}/{TURBO}"), TURBO_DIVERSE: ("loras", f"{HF_TURBO}/{TURBO_DIVERSE}"),
                TURBO_8STEPS: ("loras", f"{HF_TURBO}/{TURBO_8STEPS}"), TURBO_V10: ("loras", f"{HF_TURBO}/{TURBO_V10}"),
-               UPSCALER: ("upscale_models", f"https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/{UPSCALER}")}
+               UPSCALER: ("upscale_models", f"https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/{UPSCALER}"),
+               BULLE: ("diffusion_models", f"https://huggingface.co/DeVilDoNia/Bulle-d-Encre/resolve/main/{BULLE}")}
 LORA = "moss_lora.safetensors"
 CONTROL_ADAPTER = "moss-color-depth-control.safetensors"  # darask0/MOSS-Image-color-depth-control (Hugging Face), trained on Base
 
@@ -400,27 +402,62 @@ EXAMPLES = {
                     "ctrl": (1400, 0), "maps": (1400, 620), "ks": (1850, 0), "save": (2300, 0), "tel": (2300, 480), "report": (2750, 480)},
     },
     "HaDeS MOSS Suite - LoRA Toolkit": {
-        **loader(),
-        "tuned": ("UNETLoader", {"unet_name": "your_moss_finetune.safetensors", "weight_dtype": "default"}, MUTED),
-        # any number of LoRAs, each with on / off, strength and a weight per group of 6 layers (the row's group button)
-        "loras": ("HaDeSMossMultiLora", {"model": ("load", 0), "enabled": True,
-                                         "loras": json.dumps([{"name": LORA, "on": True, "strength": 1.0}])}),
-        "enh": prompt("Watercolor illustration of a fox reading a book under a mushroom in a rainy forest, soft pastel palette, visible paper texture."),
-        "latent": latent(),
-        "ks": ksampler(("loras", 0), ("latent", 0), seed=("latent", 4)),
-        "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_lora_%seed%", "hashes": True, "embed_workflow": True}),
-        "lmerge": ("HaDeSMossLoraMerger", {"model": ("load", 0), "lora_a": LORA, "weight_a": 1.0, "lora_b": LORA, "weight_b": 1.0, "rank": 64,
-                                           "export_filename": "HaDeS_MOSS_Merged_LoRA", "dynamic_energy": 0.0, "overwrite_existing": False}, MUTED),
-        "resize": ("HaDeSMossLoraResize", {"model": ("load", 0), "lora_name": LORA, "target_rank": 32, "export_filename": "HaDeS_MOSS_Resized_LoRA",
-                                           "dynamic_energy": 0.0, "overwrite_existing": False}, MUTED),
-        "extract": ("HaDeSMossLoraExtractor", {"model_tuned": ("tuned", 0), "model_base": ("load", 0), "rank": 32,
-                                               "export_filename": "HaDeS_MOSS_Extracted_LoRA", "overwrite_existing": False}, MUTED),
-        # one LoRA with a strength per group of 6 layers (muted: the Multi-LoRA rows do the same, folded under each row)
-        "lbw": ("HaDeSMossLoraBlockWeight", {"model": ("load", 0), "lora_name": LORA, "strength_model": 1.0}, MUTED),
-        # what a LoRA or model file says about itself (header only): rank, layers, layout and, for Suite files, the recipe
-        "meta": ("HaDeSMossMetadataReader", {"lora_name": LORA, "model_name": "(none)", "sha256": False}),
+        # the fourth video tutorial (tools/moss_video.py lora_toolkit): Bulle d'Encre's two LoRAs extracted, stacked, split by layers,
+        # merged, resized and read; measurements in tools/RESULTS.md, "The LoRA toolkit on Bulle d'Encre"
+        **loader(BASE),
+        # what a file says about itself (header only): Bulle d'Encre's recipe; later, the recipe of the LoRAs made here
+        "meta": ("HaDeSMossMetadataReader", {"lora_name": "(none)", "model_name": BULLE, "sha256": False}),
         "meta_text": ("PreviewAny", {"source": ("meta", 0)}),
-        **telemetry(("load", 3), ("enh", 6), ("loras", 1), ("latent", 3), ("ks", 2)),
+        # Bulle d'Encre's base, rebuilt: SFT with 30 % of Base in layers 24-29 only
+        "sft": ("UNETLoader", {"unet_name": SFT, "weight_dtype": "default"}),
+        "base": ("UNETLoader", {"unet_name": BASE, "weight_dtype": "default"}),
+        "bm": ("HaDeSMossModelBlockMerger", {"model1": ("sft", 0), "model2": ("base", 0), "layers_00_05": 0.0, "layers_06_11": 0.0,
+                                             "layers_12_17": 0.0, "layers_18_23": 0.0, "layers_24_29": 0.3, "layers_30_35": 0.0,
+                                             "layers_36_41": 0.0, "text_embedder": 0.0, "time_modulation": 0.0, "io": 0.0}),
+        # 1. (muted) Bulle d'Encre minus its base, saved as models/loras/bulle_extracted.safetensors (252 MB, about 100 s)
+        "bulle": ("UNETLoader", {"unet_name": BULLE, "weight_dtype": "default"}, MUTED),
+        "extract": ("HaDeSMossLoraExtractor", {"model_tuned": ("bulle", 0), "model_base": ("bm", 0), "rank": 64,
+                                               "export_filename": "bulle_extracted", "overwrite_existing": False, "tuned_name": "Bulle d'Encre",
+                                               "base_name": "SFT + 30% Base in layers 24-29 (Block Merger)"}, MUTED),
+        "extract_text": ("PreviewAny", {"source": ("extract", 1)}, MUTED),
+        # 2. the base + the extracted LoRA (switch the Multi-LoRA on once the file exists); the Turbo row at 0.5 for 8 steps / CFG 1
+        "loras": ("HaDeSMossMultiLora", {"model": ("bm", 0), "enabled": False, "loras": json.dumps(
+            [{"name": "bulle_extracted.safetensors", "on": True, "strength": 1.0}, {"name": TURBO_V10, "on": False, "strength": 0.5}])}),
+        "enh": prompt("Photograph of an old fisherman with a grey beard mending a net on a wooden dock at sunrise, his face and weathered "
+                      "hands in view, thick wool sweater, seagulls in the background."),
+        "latent": latent(seed=1013),
+        "ks": (lambda k: (k[0], {**k[1], "steps": 15, "sampler_name": "euler"}))(ksampler(("loras", 0), ("latent", 0), seed=("latent", 4))),
+        "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_lora_%seed%", "hashes": True, "embed_workflow": True}),
+        # 3. (muted) the two rows in one file, then a smaller copy
+        "lmerge": ("HaDeSMossLoraMerger", {"model": ("bm", 0), "lora_a": "bulle_extracted.safetensors", "weight_a": 1.0, "lora_b": TURBO_V10,
+                                           "weight_b": 0.5, "rank": 72, "export_filename": "bulle_turbo_merged", "dynamic_energy": 0.0,
+                                           "overwrite_existing": False}, MUTED),
+        "resize": ("HaDeSMossLoraResize", {"model": ("bm", 0), "lora_name": "bulle_turbo_merged.safetensors", "target_rank": 32,
+                                           "export_filename": "bulle_turbo_r32", "dynamic_energy": 0.0, "overwrite_existing": False}, MUTED),
+        # one LoRA with a strength per group of 6 layers (muted: the Multi-LoRA rows do the same, folded under each row)
+        "lbw": ("HaDeSMossLoraBlockWeight", {"model": ("bm", 0), "lora_name": TURBO_V10, "strength_model": 0.5}, MUTED),
+        **telemetry(("load", 3), ("enh", 6), ("loras", 1), ("latent", 3), ("ks", 2), ("bm", 1)),
+        "note": ("Note", {"text": "HaDeS MOSS Suite - LoRA Toolkit (the fourth video tutorial)\n\n"
+                                  "Bulle d'Encre (huggingface.co/DeVilDoNia/Bulle-d-Encre) is SFT with 30% of Base in layers 24-29, plus\n"
+                                  "Turbo 8-steps v1.0 at 0.5 and the author's style LoRA at 0.8. Its recipe shows in the Metadata Reader.\n\n"
+                                  "As it opens, a run gives the rebuilt base alone (the Block Merger) at 15 steps, CFG 2.5, euler / simple.\n"
+                                  "1. Unmute the Load Diffusion Model (Bulle d'Encre), the LoRA Extractor and its text preview (Ctrl+M)\n"
+                                  "   and run: models/loras/bulle_extracted.safetensors, rank 64, 252 MB, 97% of the difference, about 100 s.\n"
+                                  "   Then mute them again and press R so the lists see the new file.\n"
+                                  "2. Switch the Multi-LoRA on: the base + the extracted LoRA gives Bulle d'Encre's look back.\n"
+                                  "   Turn the Turbo row on (0.5) and set the KSampler to 8 steps, CFG 1: the same scene and look.\n"
+                                  "   Each row folds out a weight per group of 6 layers: here layers 24-35 carry most of the style.\n"
+                                  "3. Unmute the LoRA Merger and run: one file, 255 MB, the same maths as the two rows within 0.24%.\n"
+                                  "   Then the LoRA Resize at rank 32: 126 MB, within the noise of the merged file's images.\n"
+                                  "4. Pick bulle_turbo_r32 in the Metadata Reader: the whole chain back to Bulle d'Encre.\n\n"
+                                  "Files are saved at the root of models/loras. Measurements: tools/RESULTS.md in the HaDeS MOSS Suite."}),
+        "_layout": {"note": (0, -700), "meta": (0, 0), "meta_text": (420, 0), "sft": (0, 520), "base": (0, 660), "bm": (320, 520),
+                    "extract": (760, 520), "bulle": (760, 820), "extract_text": (1180, 520), "load": (0, 1160), "enh": (440, 1160),
+                    "latent": (940, 1160), "loras": (1380, 1160), "ks": (1820, 1160), "save": (2260, 1160), "tel": (1820, 1700),
+                    "report": (2260, 1700), "lmerge": (0, 1900), "resize": (440, 1900), "lbw": (880, 1900)},
+        "_groups": [("1. Extract (muted)", ["bulle", "extract", "extract_text"], "#553355"),
+                    ("2. Generate with the LoRAs", ["load", "enh", "latent", "loras", "ks", "save"], "#335533"),
+                    ("3. Merge and resize (muted)", ["lmerge", "resize"], "#334466")],
     },
 }
 
