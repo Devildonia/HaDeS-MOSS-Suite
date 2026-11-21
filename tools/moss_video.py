@@ -3899,6 +3899,329 @@ async def cm_prepare(page):
 compare_video.prepare = cm_prepare
 
 
+# ---- layout + text (the eighth tutorial) ----
+
+L8_LINES = [
+    ("Hi, I'm HaDeS, and welcome back.",
+     "Hola, soy HaDeS, y bienvenido de nuevo."),
+    ("We've generated, merged and compared. Today: deciding where each thing goes in the picture, and checking that the words came out "
+     "right.",
+     "Ya hemos generado, mezclado y comparado. Hoy: decidir dónde va cada cosa en la imagen, y comprobar que las palabras salen bien."),
+    ("As always, everything is free, and all the links are in the description.",
+     "Como siempre, todo es gratis y tienes todos los enlaces en la descripción."),
+    # 3
+    ("For this one I'm using HaDeS MOSS v1.0 Turbo, my model with the Turbo baked in: eight steps, CFG one.",
+     "Para este uso HaDeS MOSS v1.0 Turbo, mi modelo con el Turbo integrado: ocho pasos, CFG uno.",
+     "For this one I'm using HaDeS MOSS version one Turbo, my model with the Turbo baked in: eight steps, CFG one."),
+    ("The Prompt Enhancer in layout mode. Write the scene in one sentence, saying where each thing goes: the fisherman on the left, the "
+     "sun in the upper right, the title at the top, the signature in the lower right.",
+     "El Prompt Enhancer en modo layout. Escribe la escena en una frase, diciendo dónde va cada cosa: el pescador a la izquierda, el sol "
+     "arriba a la derecha, el título arriba y la firma abajo a la derecha."),
+    ("Give the exact words of any text in quotes. If you don't, it may invent them.",
+     "Pon entre comillas las palabras exactas de cualquier texto. Si no, puede inventárselas."),
+    # 6: DRAFT LAYOUT
+    ("Connect the Layout Editor and press Draft Layout. Only the enhancer runs, no image: about three seconds, and the boxes appear on "
+     "the canvas.",
+     "Conecta el Layout Editor y pulsa Draft Layout. Solo se ejecuta el enhancer, sin imagen: unos tres segundos, y las cajas aparecen "
+     "en el lienzo."),
+    ("Orange boxes are characters, blue ones objects, purple ones text, each with a short description of what goes inside.",
+     "Las cajas naranjas son personajes, las azules objetos y las moradas texto, cada una con una breve descripción de lo que va dentro."),
+    ("Check them before generating. Over six enhancer seeds, the title, the fisherman and the signature were always in place, but the "
+     "sun got its own box in only three.",
+     "Revísalas antes de generar. Con seis semillas del enhancer, el título, el pescador y la firma siempre quedaron en su sitio, pero "
+     "el sol solo tuvo caja propia en tres."),
+    # 9: GENERATE
+    ("The Layout Compiler turns the boxes into the prompt and a latent of the canvas size. Then the KSampler, eight steps, and Generate.",
+     "El Layout Compiler convierte las cajas en el prompt y en un latente del tamaño del lienzo. Después el KSampler, ocho pasos, y "
+     "Generate.",
+     "The Layout Compiler turns the boxes into the prompt and a latent of the canvas size. Then the K Sampler, eight steps, and Generate."),
+    ("Each thing lands in its box. With eight different seeds, the title, the sun and the signature were in their boxes every time.",
+     "Cada cosa cae en su caja. Con ocho semillas distintas, el título, el sol y la firma quedaron en su caja todas las veces."),
+    ("The fisherman was always on the left, but his net and legs went past his narrow box. A box is a strong hint, not a cage.",
+     "El pescador siempre quedó a la izquierda, pero su red y sus piernas salieron de su caja estrecha. Una caja es una indicación "
+     "fuerte, no una jaula."),
+    # 12: editing the boxes
+    ("Now move a box. I'll drag the sun down to the horizon, and generate again.",
+     "Ahora mueve una caja. Arrastro el sol hasta el horizonte y genero otra vez."),
+    ("The sun follows. With the same eight seeds, it was in its new box every time. Your edits are never replaced by a normal run.",
+     "El sol la sigue. Con las mismas ocho semillas, quedó en su nueva caja todas las veces. Una ejecución normal nunca sustituye tus "
+     "cambios."),
+    # 14: Text Check
+    ("And the words? MOSS Text Check reads each text box in the image, with MOSS's own text encoder. No extra model.",
+     "¿Y las palabras? MOSS Text Check lee cada caja de texto en la imagen, con el propio text encoder de MOSS. Sin modelos extra."),
+    ("For each text: exact, close, missing, or outside its box. Here both are exact, in all eight seeds, in about one second.",
+     "Para cada texto: exact, close, missing u outside its box. Aquí los dos son exact, en las ocho semillas, en un segundo más o menos."),
+    ("It's strict: one wrong letter is close, not exact. And failed mask marks the boxes that didn't pass, ready for a retry of just "
+     "those areas.",
+     "Es estricto: una letra mal es close, no exact. Y failed mask marca las cajas que no pasaron, listas para repetir solo esas zonas."),
+    # 17: goodbye
+    ("That's layout and text: say where, check the boxes, generate, and let Text Check read it back.",
+     "Eso es layout y texto: di dónde, revisa las cajas, genera y deja que Text Check lo lea."),
+    ("This workflow is free to download from the description.",
+     "Este workflow se puede descargar gratis desde la descripción."),
+    ("If you've made it to the end and enjoyed the video, and you'd like to see more content like this, leave a like and subscribe. "
+     "It's free!",
+     "Si has llegado hasta el final del vídeo, te ha gustado y quieres ver más contenido de este tipo, dale un buen like y "
+     "suscríbete. ¡Es gratis!"),
+    ("Thanks for watching, and see you in the next one.",
+     "Gracias por verlo, y nos vemos en el próximo."),
+]
+
+L8_MODEL = "HaDeS_MOSS_v1.0_Turbo.safetensors"
+L8_SENTENCE = ('A poster: an old fisherman with a grey beard mending a net on the left side, the sun rising over the sea in the upper right '
+               'with seagulls, the title "NORTH SEA" at the top, and the signature "HaDeS" in the lower right corner.')
+L8_DRAFT = Path("I:/HaDeS_MOSS/videos/layout_text/measure/drafts/draft_s2.json")  # the measured draft (enhancer seed 2)
+L8_SUN_TO = [700, 516, 980, 766]  # the measured move: the sun down to the horizon (the editor moves boxes by 16 px)
+L8_COLORS = {"object": "#6d8fd6", "character": "#c49a5a", "text": "#a786c4"}  # the Layout Editor's own colours
+L8_POS = {"loader": (0, 0), "draft": (440, 0), "editor": (940, 0), "layout": (1760, 0), "enh2": (1760, 640), "sampler": (2400, 0),
+          "saver": (2860, 0), "telemetry": (2400, 760), "check": (2860, 760), "check_text": (3300, 760)}
+L8_BOX = [-260, -60, 3900, 1500]
+
+
+async def l8_add(d, type_, query, key, values=None):
+    if values:
+        await d.js("""([type, v]) => { const g = window.__hv.app().graph, prev = g.onNodeAdded;
+            g.onNodeAdded = function (n) { if (n.type === type) { for (const [k, x] of Object.entries(v)) { const w = n.widgets?.find(w => w.name === k);
+                if (w) w.value = x; } g.onNodeAdded = prev; } return prev?.apply(this, arguments); }; }""", [type_, values])
+    n = await basic_add(d, type_, query, L8_POS[key])
+    # a large node (the Layout Compiler) can land away from its spot: put it there
+    await d.js("([id, p]) => { const n = window.__hv.node(id); n.pos = [p[0], p[1]]; n.setDirtyCanvas(true, true); }", [n, list(L8_POS[key])])
+    if values:
+        await up_set(d, n, values)
+    return n
+
+
+async def l8_editor_button(d, editor, zone):
+    z = await d.js("([id, k]) => window.__hv.zone(id, k)", [editor, zone])
+    x, y = await d.screen(editor, z["x"] + z["w"] / 2, z["y"] + z["h"] / 2)
+    await d.click(x, y)
+
+
+async def l8_wait_queue(d):
+    async with d.fast(2.0):
+        await d.hold(1.0)
+        for _ in range(2400):
+            if await d.js("() => fetch('/queue').then(r => r.json()).then(q => q.queue_running.length + q.queue_pending.length)") == 0:
+                break
+            await asyncio.sleep(0.25)
+        else:
+            raise SystemExit("the run did not finish in 10 minutes")
+        await d.hold(0.5)
+    run = next(iter((await d.js("() => fetch('/history?max_items=1').then(r => r.json())")).values()))
+    if run["status"].get("status_str") != "success":
+        raise SystemExit(f"the run failed: {run['status']}")
+    return run
+
+
+def l8_boxes_html(url, draft, ih=760):
+    iw, s = ih * draft["width"] / draft["height"], ih / draft["height"]
+    boxes = "".join(
+        f'<div class="__hv_box" style="position:absolute;left:{it["bbox"][0] * s}px;top:{it["bbox"][1] * s}px;'
+        f'width:{(it["bbox"][2] - it["bbox"][0]) * s}px;height:{(it["bbox"][3] - it["bbox"][1]) * s}px;'
+        f'border:3px solid {L8_COLORS.get(it["label"], "#fff")};border-radius:4px;opacity:0;transition:opacity .5s ease;'
+        f'box-shadow:0 0 0 1px rgba(0,0,0,.5)"></div>' for it in draft["items"])
+    return (f'<div style="margin-top:40px;display:flex;justify-content:center"><div style="position:relative;width:{iw}px;height:{ih}px">'
+            f'<img src="{url}" style="width:100%;height:100%;border-radius:6px;box-shadow:0 10px 50px rgba(0,0,0,.6)">{boxes}</div></div>')
+
+
+async def layout_text(d: Director):
+    """The eighth tutorial: a poster laid out from a sentence, a box moved, the text read back by MOSS Text Check."""
+    await d.camera({"box": BASIC_BOX}, 10, pad=60, top=60)
+    await d.move(W * 0.62, H * 0.55)
+
+    # 1. introduction
+    d.title("HaDeS MOSS Suite", "Layout + text", 6.0)
+    for i in range(3):
+        await d.say(i)
+        await d.move(W * (0.55 + 0.05 * (i % 2)), H * (0.5 + 0.04 * i), 2500)
+
+    # 2. the model and the sentence
+    await d.camera({"box": [-260, -60, 1700, 1000]}, 900, pad=60, top=60)
+    await d.say(3)
+    loader = await l8_add(d, "HaDeSMossLoader", "MOSS Loader", "loader", dict(BASIC_LOADER, unet_name=L8_MODEL))
+    await d._after_voice(0.1)
+    await d.say(4)
+    draft = await l8_add(d, "HaDeSMossPromptEnhancer", "MOSS Prompt Enhancer", "draft",
+                         {"mode": "layout", "width": 1024, "height": 1536, "seed": 2, "control_after_generate": "fixed"})
+    await basic_link(d, loader, "CLIP", draft, "clip", 600)
+    await d.camera([draft], 900, pad=100, top=60)
+    await pe_type(d, draft, "idea", L8_SENTENCE)
+    await d._after_voice(0.1)
+    await d.say(5)
+    await d._after_voice(0.3)
+
+    # 3. DRAFT LAYOUT
+    await d.camera({"box": [-260, -60, 1700, 1000]}, 900, pad=60, top=60)
+    await d.say(6)
+    editor = await l8_add(d, "HaDeSMossLayoutEditor", "MOSS Layout Editor", "editor")
+    await d.js("""(id) => { const w = window.__hv.widget(id, 'draft');
+        w.value = JSON.stringify({width: 1024, height: 1536, bbox_coord_space: 'abs', bbox_format: 'xyxy', summary: {canvas: 'single', caption: ''}, items: []}, null, 2);
+        window.__hv.node(id).setDirtyCanvas(true, true); }""", editor)
+    await basic_link(d, draft, "draft", editor, "draft_in", 700)
+    await d.camera([draft, editor], 900, pad=40, top=60)
+    before = await d.js("(id) => window.__hv.widget(id, 'draft').value", editor)
+    await l8_editor_button(d, editor, "draft_run")
+    async with d.fast():
+        for _ in range(1500):
+            if await d.js("""([id, before]) => { const n = window.__hv.node(id), v = window.__hv.widget(id, 'draft').value;
+                    return v !== before && !n._hadesDraftRun?.pendingPrompt(); }""", [editor, before]):
+                break
+            await asyncio.sleep(0.2)
+        else:
+            raise SystemExit("the draft did not arrive in 5 minutes")
+        await d.hold(0.4)
+    got = json.loads(await d.js("(id) => window.__hv.widget(id, 'draft').value", editor))
+    want = json.loads(L8_DRAFT.read_text(encoding="utf-8"))
+    if [(i["label"], i["bbox"], i.get("text")) for i in got["items"]] != [(i["label"], i["bbox"], i.get("text")) for i in want["items"]]:
+        print("draft on camera:", json.dumps(got["items"])[:1500], flush=True)
+        raise SystemExit("the draft differs from the measured one (enhancer seed 2): the measurements would not hold")
+    await d.camera([editor], 1100, pad=30, top=60)
+    await d._after_voice(0.2)
+    f = (await d.js("(id) => window.__hv.zone(id, 'canvas')", editor))["f"]
+    at = lambda bx, by: d.screen(editor, f["x"] + bx * f["s"], f["y"] + by * f["s"])  # noqa: E731
+    await d.say(7)
+    for it in got["items"][:3]:
+        b = it["bbox"]
+        await d.move(*(await at((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)))
+        await d.hold(1.0)
+    await d._after_voice(0.1)
+    await d.say(8)
+    await d._after_voice(0.3)
+
+    # 4. GENERATE
+    await d.camera({"box": L8_BOX}, 1000, pad=50, top=60)
+    await d.say(9)
+    async with d.fast(5.0):
+        layout = await l8_add(d, "HaDeSMossLayoutCompiler", "MOSS Layout Compiler", "layout")
+        await basic_link(d, editor, "draft", layout, "draft", 600)
+        enh2 = await l8_add(d, "HaDeSMossPromptEnhancer", "MOSS Prompt Enhancer", "enh2", {"mode": "as written", "seed": 1})
+        await basic_link(d, loader, "CLIP", enh2, "clip", 600)
+        await basic_link(d, layout, "prompt", enh2, "idea", 600)
+        sampler = await l8_add(d, "HaDeSMossKSampler", "MOSS KSampler", "sampler",
+                               {"seed": 1013, "control_after_generate": "fixed", "steps": 8, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple"})
+        for a, out, inp in ((loader, "MODEL", "model"), (enh2, "positive", "positive"), (enh2, "negative", "negative"),
+                            (layout, "latent", "latent_image"), (loader, "VAE", "vae")):
+            await basic_link(d, a, out, sampler, inp, 600)
+        saver = await l8_add(d, "HaDeSMossImageSaver", "MOSS Image Saver", "saver", {"filename_prefix": "MOSS/HaDeS_MOSS_layout_%seed%"})
+        await basic_link(d, sampler, "image", saver, "images", 600)
+        telemetry = await l8_add(d, "HaDeSMossSuiteTelemetry", "MOSS Suite Telemetry", "telemetry")
+        for k, (n, out) in enumerate(((loader, "info"), (editor, "info"), (layout, "info"), (enh2, "info"), (sampler, "info"))):
+            await basic_link(d, n, out, telemetry, f"info_{k + 1}", 600)
+        await basic_link(d, telemetry, "json", saver, "metadata", 600)
+    await d.camera([editor], 1000, pad=30, top=60)
+    await d._after_voice(0.1)
+    await l8_editor_button(d, editor, "generate")
+    run = await l8_wait_queue(d)
+    img = run["outputs"][str(saver)]["images"][0]
+    url1 = f"/view?filename={img['filename']}&subfolder={img['subfolder']}&type={img['type']}"
+    print("render 1:", img["filename"], flush=True)
+    await d.move(W - 6, H * 0.5)
+    await d.js("(h) => window.__hv.show(h)", l8_boxes_html(url1, got))
+    await d.say(10)
+    await d.hold(1.2)
+    await d.js("() => window.__hv.boxes(true)")
+    await d._after_voice(0.2)
+    await d.say(11)
+    await d._after_voice(0.4)
+    await d.js("() => window.__hv.boxes(false)")
+    await pe_hide(d)
+
+    # 5. move the sun
+    await d.camera([editor], 1000, pad=30, top=60)
+    await d.say(12)
+    sun = next(i for i in got["items"] if i["caption"].lower().startswith("a large, bright sun"))
+    b = sun["bbox"]
+    # grab the sun below the seagulls' box (a click takes the smallest box under the pointer), move it by the measured offset
+    gx, gy = (b[0] + b[2]) / 2, 300
+    await d.click(*(await at(gx, gy)))
+    await d.hold(0.4)
+    await d.drag(*(await at(gx, gy)), *(await at(gx + L8_SUN_TO[0] - b[0], gy + L8_SUN_TO[1] - b[1])), 1400)
+    await d.hold(0.6)
+    moved = json.loads(await d.js("(id) => window.__hv.widget(id, 'draft').value", editor))
+    want_moved = [dict(i, bbox=L8_SUN_TO) if i is sun else i for i in got["items"]]
+    if [(i["label"], [round(v) for v in i["bbox"]]) for i in moved["items"]] != [(i["label"], i["bbox"]) for i in want_moved]:
+        print("boxes after the drag:", [i["bbox"] for i in moved["items"]], flush=True)
+        raise SystemExit("the drag did not give the measured sun box")
+    await d._after_voice(0.1)
+    await l8_editor_button(d, editor, "generate")
+    run = await l8_wait_queue(d)
+    img = run["outputs"][str(saver)]["images"][0]
+    url2 = f"/view?filename={img['filename']}&subfolder={img['subfolder']}&type={img['type']}"
+    print("render 2:", img["filename"], flush=True)
+    await d.move(W - 6, H * 0.5)
+    await d.js("(h) => window.__hv.show(h)", l8_boxes_html(url2, moved))
+    await d.say(13)
+    await d.hold(1.0)
+    await d.js("() => window.__hv.boxes(true)")
+    await d._after_voice(0.4)
+    await d.js("() => window.__hv.boxes(false)")
+    await pe_hide(d)
+
+    # 6. MOSS Text Check
+    await d.camera({"box": [1900, 400, 3900, 1500]}, 1000, pad=50, top=60)
+    await d.say(14)
+    check = await l8_add(d, "HaDeSMossTextCheck", "MOSS Text Check", "check")
+    async with d.fast(3.0):
+        await d.camera({"box": L8_BOX}, 600, pad=50, top=60)
+        await basic_link(d, sampler, "image", check, "image", 600)
+        await basic_link(d, loader, "CLIP", check, "clip", 600)
+        await basic_link(d, editor, "draft", check, "layout", 600)
+        text = await l8_add(d, "PreviewAny", "Preview as Text", "check_text")
+        await d.js("([id, s]) => { const n = window.__hv.node(id); n.setSize(s); n.setDirtyCanvas(true, true); }", [text, [520, 300]])
+        await basic_link(d, check, "report", text, "source", 600)
+        await d.camera({"box": [1900, 400, 3900, 1500]}, 600, pad=50, top=60)
+    await d._after_voice(0.1)
+    await lt_run(d)
+    rep = (await ms_last_secs(d), next(iter((await d.js("() => fetch('/history?max_items=1').then(r => r.json())")).values()))["outputs"])
+    print("Text Check run:", f"{rep[0]:.1f} s", json.dumps(rep[1].get(str(text)))[:400], flush=True)
+    await d.camera([check, text], 1000, pad=40, top=60)
+    await d.say(15)
+    await d._after_voice(0.4)
+    await d.say(16)
+    await d.js("(h) => window.__hv.show(h)", ms_card(
+        '<div style="font:600 30px Segoe UI,sans-serif;color:#c9c9d1">expected_text: NORTH SEE</div>'
+        '<div style="font:700 44px Consolas,monospace;color:#ffcc33;margin-top:18px">[close] \'NORTH SEE\' \u2192 read \'NORTH SEA\' (0.89)</div>'
+        '<div style="font:600 30px Segoe UI,sans-serif;color:#c9c9d1;margin-top:40px">failed_mask: the boxes that did not pass</div>', 380))
+    await d._after_voice(0.4)
+    await pe_hide(d)
+
+    # 7. goodbye
+    await d.camera({"box": L8_BOX}, 1300, pad=50, top=60)
+    await d.move(W - 6, H * 0.5)
+    await d.say(17)
+    await d._after_voice(0.1)
+    await d.say(18)
+    await d.js("(h) => window.__hv.show(h)", '<div style="color:#fff;text-align:center;margin-top:300px">'
+               '<div style="font:600 30px Segoe UI,sans-serif;color:#c9c9d1">Free download (link in the description)</div>'
+               '<div style="font:700 44px Segoe UI,sans-serif;margin-top:22px">HaDeS MOSS Suite - Layout from a Sentence.json</div></div>')
+    await d._after_voice(0.3)
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }",
+               f'<div style="display:flex;align-items:center;gap:80px;margin-top:40px"><img src="{url1}" style="height:780px;border-radius:6px">'
+               '<div style="color:#fff;max-width:640px"><div style="font:900 72px Segoe UI Black,sans-serif;line-height:1.05">HaDeS MOSS Suite</div>'
+               '<div style="font:600 34px Segoe UI,sans-serif;color:#ffcc33;margin-top:22px">Layout + text</div>'
+               '<div style="font:400 26px Segoe UI,sans-serif;color:#c9c9d1;margin-top:44px">Workflow, Suite and models: links in the description</div></div></div>')
+    await d.say(19)
+    await d.say(20)
+    await d.end(1.5)
+
+
+async def l8_prepare(page):
+    """Off camera: one short render loads HaDeS MOSS v1.0 Turbo, the text encoder and the VAE (no Saver: the model is hashed on camera)."""
+    g = {"1": {"class_type": "HaDeSMossLoader", "inputs": dict(BASIC_LOADER, unet_name=L8_MODEL, weight_dtype="default", clip_device="default")},
+         "2": {"class_type": "HaDeSMossPromptEnhancer", "inputs": {"clip": ["1", 1], "idea": "a lighthouse", "mode": "as written", "width": 1024,
+               "height": 1024, "temperature": 0.7, "seed": 0, "max_tokens": 1024, "negative": ""}},
+         "3": {"class_type": "HaDeSMossLatent", "inputs": {"aspect_ratio": "1:1", "megapixels": 1.0, "custom_width": 1024, "custom_height": 1024,
+               "batch_size": 1, "seed": 7}},
+         "4": {"class_type": "HaDeSMossKSampler", "inputs": {"model": ["1", 0], "positive": ["2", 0], "negative": ["2", 1], "latent_image": ["3", 0],
+               "seed": 7, "steps": 2, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple", "denoise": 1.0, "flow_shift": 0.0, "slg": "off",
+               "vae": ["1", 2]}},
+         "5": {"class_type": "PreviewImage", "inputs": {"images": ["4", 1]}}}
+    print("warm-up run:", await page.evaluate(UP_WARM_JS, g), flush=True)
+
+
+layout_text.prepare = l8_prepare
+
+
 SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "layout_test": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_test, LAYOUT_TEST_LINES),
           "layout_sentence": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_sentence, LAYOUT_SENTENCE_LINES),
@@ -3909,7 +4232,8 @@ SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "lora_toolkit": (None, lora_toolkit, LT_LINES),
           "metadata": (None, metadata_video, MD_LINES),
           "merge_save": (None, merge_save, MS_LINES),
-          "compare": (None, compare_video, CM_LINES)}
+          "compare": (None, compare_video, CM_LINES),
+          "layout_text": (None, layout_text, L8_LINES)}
 
 # spoken forms where the written caption reads badly aloud
 SPOKEN = {"DRAFT LAYOUT": "Draft layout"}

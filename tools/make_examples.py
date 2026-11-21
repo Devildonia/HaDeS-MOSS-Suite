@@ -28,6 +28,7 @@ TURBO_8STEPS = "HaDeS-MOSS-Turbo-8steps-v0.7.safetensors"
 TURBO_V10 = "HaDeS-MOSS-Turbo-8steps-v1.0.safetensors"  # for Base
 UPSCALER = "RealESRGAN_x2plus.pth"
 BULLE = "HaDeS_MOSS_preview_beta.safetensors"  # Bulle d'Encre, the fourth video tutorial's model
+HADES_V10 = "HaDeS_MOSS_v1.0_Turbo.safetensors"  # Base with Turbo 8-steps v1.0 and QwenLook baked in (8 steps, CFG 1)
 HF_TURBO = "https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo/resolve/main"
 # file -> (models folder, download URL)
 MODEL_FILES = {SFT: ("diffusion_models", f"{HF}/diffusion_models/{SFT}"), BASE: ("diffusion_models", f"{HF}/diffusion_models/{BASE}"),
@@ -35,7 +36,8 @@ MODEL_FILES = {SFT: ("diffusion_models", f"{HF}/diffusion_models/{SFT}"), BASE: 
                TURBO: ("loras", f"{HF_TURBO}/{TURBO}"), TURBO_DIVERSE: ("loras", f"{HF_TURBO}/{TURBO_DIVERSE}"),
                TURBO_8STEPS: ("loras", f"{HF_TURBO}/{TURBO_8STEPS}"), TURBO_V10: ("loras", f"{HF_TURBO}/{TURBO_V10}"),
                UPSCALER: ("upscale_models", f"https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/{UPSCALER}"),
-               BULLE: ("diffusion_models", f"https://huggingface.co/DeVilDoNia/Bulle-d-Encre/resolve/main/{BULLE}")}
+               BULLE: ("diffusion_models", f"https://huggingface.co/DeVilDoNia/Bulle-d-Encre/resolve/main/{BULLE}"),
+               HADES_V10: ("diffusion_models", f"https://huggingface.co/DeVilDoNia/HaDeS-MOSS-v1.0-Turbo/resolve/main/{HADES_V10}")}
 LORA = "moss_lora.safetensors"
 CONTROL_ADAPTER = "moss-color-depth-control.safetensors"  # darask0/MOSS-Image-color-depth-control (Hugging Face), trained on Base
 
@@ -247,38 +249,45 @@ EXAMPLES = {
                     "enh": (1550, 600), "ks": (2050, 0), "save": (2500, 0), "tel": (2500, 480), "report": (2950, 480)},
     },
     "HaDeS MOSS Suite - Layout from a Sentence": {
-        **loader(),
+        # the eighth video tutorial (tools/moss_video.py layout_text): the fisherman poster on HaDeS MOSS v1.0 Turbo; measurements in
+        # tools/RESULTS.md, "Layout and Text Check on a poster"
+        **loader(HADES_V10),
         # 1. the idea in plain words, saying where each thing goes; the Prompt Enhancer in layout mode turns it into boxes
-        "draft": ("HaDeSMossPromptEnhancer", {"clip": ("load", 1), "idea": "A man seen from behind on the left side of a narrow street at night, "
-                                                                           "a full moon in the upper right, a small dog at the far end of the street, "
-                                                                           "part of an old brick building on the right, and the signature \"HaDeS\" "
-                                                                           "in the lower right corner.",
-                                              "mode": "layout", "width": 1024, "height": 1536, "temperature": 0.7, "seed": 1, "max_tokens": 1024,
+        "draft": ("HaDeSMossPromptEnhancer", {"clip": ("load", 1), "idea": "A poster: an old fisherman with a grey beard mending a net on the "
+                                                                           "left side, the sun rising over the sea in the upper right with "
+                                                                           "seagulls, the title \"NORTH SEA\" at the top, and the signature "
+                                                                           "\"HaDeS\" in the lower right corner.",
+                                              "mode": "layout", "width": 1024, "height": 1536, "temperature": 0.7, "seed": 2, "max_tokens": 1024,
                                               "negative": ""}),
         # 2. DRAFT LAYOUT brings the boxes onto the canvas; move them, then GENERATE
         "editor": ("HaDeSMossLayoutEditor", {"draft": None, "draft_in": ("draft", 3)}),
         "layout": ("HaDeSMossLayoutCompiler", {"draft": ("editor", 0), "batch_size": 1}),
         "enh": prompt(("layout", 0)),
-        "ks": ksampler(("load", 0), ("layout", 1)),
+        "ks": ("HaDeSMossKSampler", {"model": ("load", 0), "positive": ("enh", 0), "negative": ("enh", 1), "latent_image": ("layout", 1),
+                                     "seed": 1013, "steps": 8, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple", "denoise": 1.0,
+                                     "flow_shift": 0.0, "slg": "off", "vae": ("load", 2)}),
         # 3. the text boxes read back from the image
         "check": ("HaDeSMossTextCheck", {"image": ("ks", 1), "clip": ("load", 1), "layout": ("editor", 0), "expected_text": "", "max_tokens": 96}),
-        "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_layout_sentence_%seed%", "hashes": True, "embed_workflow": True}),
+        "check_report": ("PreviewAny", {"source": ("check", 0)}),
+        "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_layout_%seed%", "hashes": True, "embed_workflow": True}),
         # not the draft writer: the editor holds the canvas actually used
         **telemetry(("load", 3), ("editor", 3), ("layout", 4), ("enh", 6), ("ks", 2), ("check", 3)),
-        "note": ("Note", {"text": "HaDeS MOSS Suite - Layout from a Sentence\n\n"
+        "note": ("Note", {"text": "HaDeS MOSS Suite - Layout from a Sentence (the eighth video tutorial)\n\n"
                                   "1. Write the idea in the Prompt Enhancer on the left (layout mode), saying where each thing goes:\n"
-                                  "   left / right, upper / lower, in the centre, at the far end. Any language the text encoder reads.\n"
-                                  "   Give the exact words of any text (a title, a signature), or it may invent them.\n"
-                                  "2. Press DRAFT LAYOUT under the Layout Editor's canvas: only the enhancer and the editor run (no sampling)\n"
-                                  "   and the boxes it wrote appear on the canvas, one per thing, with its name and caption.\n"
-                                  "3. Move, resize, draw or delete boxes; select one to edit its caption or text.\n"
-                                  "4. Press GENERATE (the same as Run): the image is made with your boxes. The enhancer runs again only if\n"
-                                  "   its inputs changed; your boxes are never replaced by a normal run (it only offers the new draft with IMPORT).\n"
-                                  "5. MOSS Text Check reads each text box back from the image and says exact / close / missing.\n\n"
-                                  "Tried on 8 ideas, one seed each (tools/RESULTS.md, Layout mode): the enhancer put all 28 stated elements\n"
-                                  "in the stated region; MOSS drew 26 inside their boxes. Check the boxes before you press GENERATE."}),
+                                  "   left / right, upper / lower, at the top. Give the exact words of any text in quotes, or it may invent them.\n"
+                                  "2. Press DRAFT LAYOUT under the Layout Editor's canvas: only the enhancer runs (no image) and its boxes appear:\n"
+                                  "   characters orange, objects blue, text purple. Check them: over 6 enhancer seeds the title, the fisherman\n"
+                                  "   and the signature were always in place, the sun got its own box in 3 (this is seed 2).\n"
+                                  "3. Move, resize, draw or delete boxes. Your boxes are never replaced by a normal run (IMPORT offers a new draft).\n"
+                                  "4. GENERATE (the same as Run). HaDeS MOSS v1.0 Turbo, 8 steps, CFG 1, no turbo LoRA: it is baked in.\n"
+                                  "   Over 8 image seeds: title, sun and signature in their boxes 8 / 8; the fisherman on the left 8 / 8,\n"
+                                  "   his net and legs past his narrow box (a box is a strong hint, not a cage). The sun moved down to the\n"
+                                  "   horizon followed its box 8 / 8.\n"
+                                  "5. MOSS Text Check reads each text box: exact / close / missing / outside its box. Both texts exact 8 / 8,\n"
+                                  "   about 1 s. One wrong letter is close. failed_mask marks the boxes that did not pass."}),
         "_layout": {"note": (0, -620), "load": (0, 0), "draft": (450, 0), "editor": (950, 0), "layout": (1550, 0),
-                    "enh": (1550, 600), "ks": (2050, 0), "check": (2050, 560), "save": (2500, 0), "tel": (2500, 480), "report": (2950, 480)},
+                    "enh": (1550, 600), "ks": (2050, 0), "check": (2050, 600), "check_report": (2500, 600), "save": (2500, 0),
+                    "tel": (2950, 0), "report": (3400, 0)},
     },
     "HaDeS MOSS Suite - Compare Models": {
         # the seventh video tutorial (tools/moss_video.py compare): four models on one sheet, a LoRA at four strengths, blind mode, the

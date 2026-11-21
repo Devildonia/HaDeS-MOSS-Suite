@@ -7,6 +7,12 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **Layout from a Sentence example**, rebuilt for the eighth video tutorial: the fisherman poster on HaDeS MOSS v1.0 Turbo (was a night street on SFT), the title "NORTH SEA" and the signature "HaDeS" in quotes, enhancer seed 2, image seed 1013, 8 steps, CFG 1, with MOSS Text Check's report on a text preview and HaDeS MOSS v1.0 Turbo's download link. Run in a clean ComfyUI with the measured draft: pixel-identical to the video. Measured (`tools/RESULTS.md`, "Layout and Text Check on a poster"): over 6 enhancer seeds the title, the fisherman and the signature in their region 6 / 6, the sun its own box 3 / 6; over 8 image seeds title, sun and signature in their boxes 8 / 8 and both texts `exact` 8 / 8; the sun moved to the horizon followed its box 8 / 8; Text Check 0.7-1.0 s.
+
+### Added
+- **`tools/moss_video.py layout_text`:** the eighth tutorial (a poster laid out from a sentence, a box moved, the text read back).
+
 ## [0.9.4] - 2026-11-22
 
 ### Fixed

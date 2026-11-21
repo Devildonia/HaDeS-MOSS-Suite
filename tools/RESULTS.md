@@ -976,6 +976,27 @@ Leave-out (the full LoRA without that group, reference: the full LoRA) agrees on
 - A fixed "style" / "identity" group preset would be wrong for some of these LoRAs, so LoRA Block Weight has none; measure a LoRA with
   `tools/moss_eval.py --mode lora --lora <name> --lora-model <model it was trained on>`.
 
+## Layout and Text Check on a poster (2026-11-21, for the eighth video tutorial)
+
+HaDeS MOSS v1.0 Turbo (8 steps, CFG 1, euler / simple), 1024 x 1536, clean ComfyUI on port 8189, `--use-sage-attention`, RTX 5090. The idea,
+in `MOSS Prompt Enhancer` `layout` mode (temperature 0.7): "A poster: an old fisherman with a grey beard mending a net on the left side,
+the sun rising over the sea in the upper right with seagulls, the title "NORTH SEA" at the top, and the signature "HaDeS" in the lower
+right corner." Scripts, drafts and sheets in `I:/HaDeS_MOSS/videos/layout_text/measure`.
+
+- **Drafts, enhancer seeds 1-6** (box centres checked by script against the sentence): the title, the fisherman and the signature in their
+  region in 6 / 6, with the exact words "NORTH SEA" and "HaDeS"; the sun as its own box in the upper right in 3 / 6 (seeds 2, 4, 6), inside
+  a "sea" box covering the right half in 2 / 6, missing in 1 / 6; 3-6 items, none dropped. 2.4-3.5 s per draft (12.3 s for the first,
+  loading the text encoder). Seed 2, the first with every element in its own box and region, is the one used below.
+- **That draft at image seeds 1013-1020** (boxes drawn on each image, by eye): the title in its box at the top, the sun in its box in the
+  upper right with seagulls beside it, and the signature in its box, 8 / 8; the fisherman on the left 8 / 8, his net and legs reaching
+  past the narrow box (60-400 px wide) to the right. MOSS Text Check: `exact` for "NORTH SEA" and "HaDeS" in 8 / 8, which matches the
+  images. 4.5 s per image with Text Check (13.3 s for the first after loading).
+- **The sun box moved down to the horizon** (700-980 x 520-770, everything else unchanged), the same 8 seeds: the sun drawn in its new box
+  8 / 8; both texts still `exact` 8 / 8. Dragged in the Layout Editor the box moves in 16 px steps and lands at 516-766: measured again
+  there, the same result (8 / 8, both texts `exact` 8 / 8).
+- **Times:** 4.2 s per image without Text Check; Text Check alone 0.7-1.0 s on this image. A one-letter typo in `expected_text` ("NORTH
+  SEE") gives `close`, read 'NORTH SEA' (0.89).
+
 ## Compare models and LoRAs (2026-11-21, for the seventh video tutorial)
 
 Clean ComfyUI on port 8189, `--use-sage-attention`, RTX 5090, the tutorials' fisherman (seed 1013). Scripts and sheets in
