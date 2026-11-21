@@ -234,6 +234,8 @@ def model_recipe_parts(m, chain, depth=0):
     parts = []
     if kind == "loader" and m.get("model_file"):
         return [model_recipe(m["model_file"], chain)]
+    if kind == "files":  # a merger input made from several files without Suite nodes (e.g. the core's merge nodes)
+        return [model_recipe(f, chain) for f in m.get("model_files", [])]
     for source in (m.get("sources") or {}).values():
         parts += model_recipe_parts(source, chain, depth + 1)
     if kind in ("model_block_merger", "multi_model_merger"):

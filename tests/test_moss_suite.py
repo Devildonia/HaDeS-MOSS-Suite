@@ -267,6 +267,30 @@ class TestMergers(unittest.TestCase):
         self.assertEqual(meta["sources"]["model_1"]["layer_ratios"], ratios)
         self.assertEqual(meta["sources"]["base_model"]["model_file"], "source_a.safetensors")
 
+    def test_merger_names_models_from_core_loaders(self):
+        """A model from a core loader carries no recipe: the merger walks the workflow to its file, so the saved recipe names it
+        (Base through UNETLoader was missing from a saved SFT x Base merge); what a model carries still comes first."""
+        a, b = self.a.clone(), self.b.clone()
+        a.set_attachments("hades_moss_recipe", {"node": "loader", "model_file": "moss_loader_sft.safetensors"})
+        graph = {"1": {"class_type": "UNETLoader", "inputs": {"unet_name": "sft.safetensors", "weight_dtype": "default"}},
+                 "2": {"class_type": "UNETLoader", "inputs": {"unet_name": "base.safetensors", "weight_dtype": "default"}},
+                 "3": {"class_type": "HaDeSMossModelBlockMerger", "inputs": {"model1": ["1", 0], "model2": ["2", 0]}},
+                 "4": {"class_type": "HaDeSMossMultiModelMerger", "inputs": {"model_1": ["1", 0], "model_2": ["2", 0]}},
+                 "5": {"class_type": "ModelMergeSimple", "inputs": {"model1": ["1", 0], "model2": ["2", 0], "ratio": 0.5}},
+                 "6": {"class_type": "HaDeSMossModelBlockMerger", "inputs": {"model1": ["5", 0], "model2": ["2", 0]}}}
+        _, info = mergers.HaDeSMossModelBlockMerger().merge(a, b, 0.0, 0.0, 0.0, prompt=graph, unique_id="3", **dict.fromkeys(mergers.GROUPS, 0.5))
+        sources = common.parse_info_meta(info)["sources"]
+        self.assertEqual(sources["model1"]["model_file"], "moss_loader_sft.safetensors")
+        self.assertEqual(sources["model2"], {"node": "loader", "model_file": "base.safetensors", "from": "workflow"})
+        _, info = mergers.HaDeSMossMultiModelMerger().merge(self.a.clone(), b, "SLERP", 0.5, 1.0, 0, 1.0, 1.0, prompt=graph, unique_id="4")
+        sources = common.parse_info_meta(info)["sources"]
+        self.assertEqual([sources[k]["model_file"] for k in ("model_1", "model_2")], ["sft.safetensors", "base.safetensors"])
+        _, info = mergers.HaDeSMossModelBlockMerger().merge(self.a.clone(), b, 0.0, 0.0, 0.0, prompt=graph, unique_id="6",
+                                                            **dict.fromkeys(mergers.GROUPS, 0.5))
+        self.assertEqual(common.parse_info_meta(info)["sources"]["model1"], {"node": "files", "model_files": ["sft.safetensors", "base.safetensors"]})
+        _, info = mergers.HaDeSMossModelBlockMerger().merge(self.a.clone(), b, 0.0, 0.0, 0.0, **dict.fromkeys(mergers.GROUPS, 0.5))
+        self.assertEqual(common.parse_info_meta(info)["sources"], {"model1": None, "model2": None})  # no workflow (a script): unknown
+
 
 class TestLoras(unittest.TestCase):
     @classmethod

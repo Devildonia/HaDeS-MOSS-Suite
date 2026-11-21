@@ -7,6 +7,15 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **Model Block Merger and Multi-Model Merger, a saved merge's recipe left out a model loaded with Load Diffusion Model** (or another core loader): only a model from the MOSS Loader was named, so SFT merged with Base from Load Diffusion Model was saved with a recipe naming SFT alone and the Metadata Reader showed only SFT. A merger now follows the cable of an input that carries no Suite recipe up the workflow to its file, as the MOSS KSampler does since 0.9.3, and records it like a MOSS Loader's model. Checked in a clean ComfyUI: the test recipe saved by the Model Saver and read back names `mossImage_sft_bf16` and `mossImage_base_bf16`.
+
+### Changed
+- **Merge, Save and Telemetry example**, rebuilt for the sixth video tutorial: a test recipe made for the video, not a recommendation (SFT with half of Base in layers 18-35), on the first video's fisherman (seed 1013), with the Model Saver taking its recipe from the merger's info, a Metadata Reader and a SLERP Multi-Model Merger (muted), and a note with the measurements. Run in a clean ComfyUI: the image is pixel-identical to the video's. Measured (`tools/RESULTS.md`, "Merge, save and telemetry: a test recipe"): the recipe lands between SFT and Base in the same render time; East Asian faces on two neutral prompts, SFT 10 / 16 and 16 / 16, the recipe ~3 / 16 and ~13-14 / 16, Base ~1-2 / 16 and ~6 / 16; the bf16 file (10.16 GB) renders the live merge's image, int8 ConvRot (5.41 GB) faster with small changes; SLERP 0.5 about the Block Merger at 0.5.
+
+### Added
+- **`tools/moss_video.py merge_save`:** the sixth tutorial (the Block Merger, the bias counts, Telemetry, the Model Saver in bf16 and int8, the files loaded back, the Metadata Reader, the Multi-Model Merger).
+
 ## [0.9.3] - 2026-11-21
 
 ### Fixed

@@ -976,6 +976,39 @@ Leave-out (the full LoRA without that group, reference: the full LoRA) agrees on
 - A fixed "style" / "identity" group preset would be wrong for some of these LoRAs, so LoRA Block Weight has none; measure a LoRA with
   `tools/moss_eval.py --mode lora --lora <name> --lora-model <model it was trained on>`.
 
+## Merge, save and telemetry: a test recipe (2026-11-21, for the sixth video tutorial)
+
+A recipe made only for the video, not a recommendation: SFT with 50 % of Base in layers 18-35 (Block Merger groups 18-23, 24-29 and
+30-35 at 0.5, everything else 0). Clean ComfyUI on port 8189, `--use-sage-attention`, RTX 5090; the Merge example's KSampler settings
+(25 steps, CFG 2.5, er_sde / simple, 1024 x 1024, SLG off). Distances are mean absolute pixel differences at 512 x 512 (0-255). Scripts and
+contact sheets in `I:/HaDeS_MOSS/videos/merge_save/measure`.
+
+- **Where it lands** (the tutorials' fisherman, seeds 1013 / 1014): the recipe is 34.3 / 30.2 from SFT and 41.2 / 48.3 from Base; SFT and
+  Base are 48.2 / 47.6 apart, and two seeds of SFT 56.7. By eye it keeps SFT's polished look and moves toward Base's variety. 13-14 s per
+  image for SFT, Base and the recipe alike (the first of a session longer).
+- **Bias** (the two neutral prompts of "Bias by merge", seeds 1000-1015, East Asian faces counted by eye, approximate):
+
+| Prompt | SFT | Test recipe | Base |
+|---|---|---|---|
+| `photograph of a woman sitting in a café` | 10/16 | ~3/16 | ~1-2/16 |
+| studio fisherman portrait (`photo_portrait`) | 16/16 | ~13-14/16 | ~6/16 |
+
+  SFT and Base match the earlier counts. The recipe removes most of the bias on the café prompt and little on the portrait: as found
+  before, the bias is spread over the model. Naming the ethnicity in the prompt stays the reliable fix.
+- **Model Saver:** bfloat16 (stochastic rounding) 10.16 GB (the node shows 9.47 GiB) in 29.6 s; int8 ConvRot 5.41 GB (5.04 GiB) in 15.7 s;
+  both with the merger's info as `recipe`. The files land in ComfyUI's `output/diffusion_models`; moved to `models/diffusion_models` they
+  load with Load Diffusion Model. The bf16 file renders 0.02 from the live merge on both seeds (the same image). The int8 file renders in
+  6.3 s instead of 15 s, 5.2 and 19.5 from the live merge (0.09 and 0.33 of a seed-to-seed distance): the same scene, small changes, more
+  on one seed.
+- **Metadata Reader** on the saved file (1.0 s, header only): size, layers, parameters, precision, rounding, author, and the recipe with
+  each group's ratio. Before 0.9.4 the recipe named only SFT (from the MOSS Loader), not Base (from Load Diffusion Model); fixed, the
+  re-saved file names both.
+- **Multi-Model Merger SLERP 0.5** against the Block Merger with every group at 0.5: 6.4 / 3.2 apart, about the same image; each 33.9-36.9
+  from SFT and 30.8-40.7 from Base; the same time (16-23 s per render with the merge).
+- **Telemetry** on the recipe: "No findings", the merger's ratios layer by layer, and the KSampler's `model=mossImage_sft_bf16.safetensors
+  + mossImage_base_bf16.safetensors`. The MOSS Image Saver writes `Model: merge: mossImage_sft_bf16 + mossImage_base_bf16`, no model hash,
+  with the note "the model is a merge made in the workflow".
+
 ## What the MOSS Image Saver writes (0.9.3, 2026-11-21, for the fifth video tutorial)
 
 The Turbo 8 steps + Upscale x2 example (Base + Turbo 8-steps v1.0, the fisherman, seed 1013) on a freshly started clean ComfyUI on port

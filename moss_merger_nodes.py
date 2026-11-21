@@ -12,6 +12,23 @@ N_GROUPS = 7  # groups of 6 layers on the 42-layer model; other depths are split
 RATIO = {"min": -1.0, "max": 2.0, "step": 0.01}
 
 
+def source_of(model, prompt, unique_id, input_name):
+    """What a merger records about one input: the recipe the model carries (MOSS Loader, Multi-LoRA, another merger); for a model a core
+    loader read (UNETLoader, ...) the file found by walking the workflow up from this input, in the MOSS Loader's form so the Metadata
+    Reader and the Compare Sampler follow it; None when neither tells."""
+    recipe = model.get_attachment("hades_moss_recipe")
+    if recipe is not None:
+        return recipe
+    from .moss_sampler_nodes import model_files
+    files = [f["file"] for f in model_files(prompt, unique_id, input_name) if f["folder"] == "diffusion_models"]
+    if len(files) == 1:
+        return {"node": "loader", "model_file": files[0], "from": "workflow"}
+    return {"node": "files", "model_files": files} if files else None
+
+
+HIDDEN = {"prompt": "PROMPT", "unique_id": "UNIQUE_ID"}
+
+
 def group_name(g):
     lo, hi = g * 6, g * 6 + 5
     return f"layers_{lo:02d}_{hi:02d}"
@@ -66,6 +83,7 @@ class HaDeSMossModelBlockMerger:
             "optional": {
                 "recipe_override": ("STRING", {"default": "", "tooltip": "Optional per-layer recipe: one ratio per layer (42), then text_embedder, time_modulation, io. Replaces the sliders when set."}),
             },
+            "hidden": HIDDEN,
         }
 
     RETURN_TYPES = ("MODEL", "STRING")
@@ -74,7 +92,7 @@ class HaDeSMossModelBlockMerger:
     CATEGORY = "HaDeS/MOSS Mergers"
     DESCRIPTION = "Merges two MOSS-Image models per layer group, lazily: no merged copy in RAM, the merge is computed when the model loads."
 
-    def merge(self, model1, model2, text_embedder, time_modulation, io, recipe_override="", **groups):
+    def merge(self, model1, model2, text_embedder, time_modulation, io, recipe_override="", prompt=None, unique_id=None, **groups):
         n_layers = len(model1.model.diffusion_model.layers)
         if recipe_override.strip():
             layer_ratios, part_ratios = parse_recipe(recipe_override, n_layers)
@@ -95,8 +113,8 @@ class HaDeSMossModelBlockMerger:
                 text += " The result is quantized again into model1's format; connect the bf16 model as model1 to keep it in bf16."
         return (m, format_model_info(text, "model_block_merger", m, mode=mode, n_layers=n_layers, modified_tensors=merged, quantized=quantized,
                                      model2_residual_rescale=scale, layer_ratios=layer_ratios, part_ratios=part_ratios,
-                                     sources={"model1": model1.get_attachment("hades_moss_recipe"),
-                                              "model2": model2.get_attachment("hades_moss_recipe")}))
+                                     sources={"model1": source_of(model1, prompt, unique_id, "model1"),
+                                              "model2": source_of(model2, prompt, unique_id, "model2")}))
 
 
 # ==============================================================================
@@ -235,6 +253,7 @@ class HaDeSMossMultiModelMerger:
                 "weight_3": weight(3),
                 "weight_4": weight(4),
             },
+            "hidden": HIDDEN,
         }
 
     RETURN_TYPES = ("MODEL", "STRING")
@@ -244,7 +263,7 @@ class HaDeSMossMultiModelMerger:
     DESCRIPTION = "Merges 2-4 MOSS-Image models with TIES, DARE, Task Arithmetic, Model Stock or SLERP, lazily (no merged copy in RAM)."
 
     def merge(self, model_1, model_2, method, density, scale, seed, weight_1, weight_2,
-              base_model=None, model_3=None, model_4=None, weight_3=1.0, weight_4=1.0):
+              base_model=None, model_3=None, model_4=None, weight_3=1.0, weight_4=1.0, prompt=None, unique_id=None):
         models = [(f"model_{i}", m, w) for i, (m, w) in enumerate(((model_1, weight_1), (model_2, weight_2), (model_3, weight_3), (model_4, weight_4)), 1)
                   if m is not None]
         if method == "SLERP":
@@ -306,9 +325,9 @@ class HaDeSMossMultiModelMerger:
             if anchor_name in quantized:
                 text += f" The result is quantized again into {anchor_name}'s format; use a bf16 {anchor_name} to keep it in bf16."
             logger.warning(f"HaDeS MOSS Multi-Model Merger: {', '.join(quantized)} quantized; merging their dequantized weights.")
-        sources = {name: mm.get_attachment("hades_moss_recipe") for name, mm, _ in models}
+        sources = {name: source_of(mm, prompt, unique_id, name) for name, mm, _ in models}
         if method != "SLERP":
-            sources["base_model"] = base_model.get_attachment("hades_moss_recipe")
+            sources["base_model"] = source_of(base_model, prompt, unique_id, "base_model")
         return (m, format_model_info(text, "multi_model_merger", m, method=method, models=len(models), density=float(density), scale=float(scale),
                                      modified_tensors=merged, quantized=quantized, rescaled=rescaled,
                                      weights=model_weights_, seed=int(seed), n_layers=n_layers, sources=sources))

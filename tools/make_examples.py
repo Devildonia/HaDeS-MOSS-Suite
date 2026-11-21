@@ -127,22 +127,44 @@ EXAMPLES = {
                     "full": (900, 350), "stage": (900, 850), "saver": (1400, 350)},
     },
     "HaDeS MOSS Suite - Merge, Save and Telemetry": {
+        # the sixth video tutorial (tools/moss_video.py merge_save): a TEST recipe made for the video, not a recommendation (SFT with half
+        # of Base in layers 18-35); measurements in tools/RESULTS.md, "Merge, save and telemetry: a test recipe"
         **loader(),  # SFT, its text encoder and VAE
         "base": ("UNETLoader", {"unet_name": BASE, "weight_dtype": "default"}),
-        # SFT with layers 24-35 from Base: the groups that carry most of the SFT -> Base change (tools/RESULTS.md)
         "merge": ("HaDeSMossModelBlockMerger", {"model1": ("load", 0), "model2": ("base", 0), "layers_00_05": 0.0, "layers_06_11": 0.0, "layers_12_17": 0.0,
-                                                "layers_18_23": 0.0, "layers_24_29": 1.0, "layers_30_35": 1.0, "layers_36_41": 0.0, "text_embedder": 0.0,
+                                                "layers_18_23": 0.5, "layers_24_29": 0.5, "layers_30_35": 0.5, "layers_36_41": 0.0, "text_embedder": 0.0,
                                                 "time_modulation": 0.0, "io": 0.0, "recipe_override": ""}),
-        "enh": prompt("Studio photograph of an elderly fisherman with a weathered face and a grey knitted cap, "
-                      "soft window light from the left, shallow depth of field, 85mm lens, muted colors."),
-        "latent": latent(),
+        "enh": prompt("Photograph of an old fisherman with a grey beard mending a net on a wooden dock at sunrise, his face and weathered "
+                      "hands in view, thick wool sweater, seagulls in the background."),
+        "latent": latent(seed=1013),
         "ks": ksampler(("merge", 0), ("latent", 0), seed=("latent", 4)),
         "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_merge_%seed%", "hashes": True, "embed_workflow": True}),
-        "saver": ("HaDeSMossModelSaver", {"model": ("merge", 0), "filename_prefix": "diffusion_models/MOSS_HaDeS_Merged", "precision": "bfloat16",
-                                          "include_metadata": True, "custom_author": "HaDeS", "custom_model_title": "", "rounding": "stochastic"}, MUTED),
+        # unmute to save the merge with its recipe (output/diffusion_models; move the file to models/diffusion_models to load it)
+        "saver": ("HaDeSMossModelSaver", {"model": ("merge", 0), "recipe": ("merge", 1), "filename_prefix": "diffusion_models/MOSS_my_merge",
+                                          "precision": "bfloat16", "include_metadata": True, "custom_author": "HaDeS", "custom_model_title": "",
+                                          "rounding": "stochastic"}, MUTED),
+        # unmute and pick the saved file: its size, precision and recipe (both models, every layer's ratio)
+        "meta": ("HaDeSMossMetadataReader", {"lora_name": "(none)", "model_name": "(none)", "sha256": False}, MUTED),
+        "meta_text": ("PreviewAny", {"source": ("meta", 0)}, MUTED),
         "multi": ("HaDeSMossMultiModelMerger", {"model_1": ("load", 0), "model_2": ("base", 0), "method": "SLERP", "density": 0.5, "scale": 1.0, "seed": 0,
                                                 "weight_1": 1.0, "weight_2": 1.0}, MUTED),
         **telemetry(("load", 3), ("enh", 6), ("merge", 1), ("latent", 3), ("ks", 2)),
+        "note": ("Note", {"text": "HaDeS MOSS Suite - Merge, Save and Telemetry (the sixth video tutorial)\n\n"
+                                  "TEST RECIPE, made for the video, not a recommendation: SFT (model1) with half of Base (model2) in\n"
+                                  "layers 18-35. Each Block Merger slider is a group of 6 layers: 0 keeps model1, 1 takes model2.\n"
+                                  "Layers 24-35 carry most of the SFT -> Base change (the tooltips give the measured shares).\n"
+                                  "recipe_override: one ratio per layer (42) plus text_embedder, time_modulation, io.\n\n"
+                                  "Measured on this recipe (25 steps, CFG 2.5, er_sde / simple, seed 1013):\n"
+                                  "  - between SFT and Base: SFT's finish with some of Base's variety; the same time as SFT alone\n"
+                                  "  - 'a woman sitting in a cafe', 16 seeds, East Asian faces: SFT 10, this recipe ~3, Base ~1-2;\n"
+                                  "    a studio fisherman portrait: SFT 16, this recipe ~13-14, Base ~6. Name who you want in the prompt.\n\n"
+                                  "MOSS Model Saver (muted): bfloat16 10.2 GB (stochastic rounding keeps the smallest changes; the same\n"
+                                  "image as the live merge), int8 ConvRot 5.4 GB (faster, small changes). The merger's info goes into\n"
+                                  "recipe. The file lands in output/diffusion_models: move it to models/diffusion_models to load it.\n"
+                                  "MOSS Metadata Reader (muted): pick the saved file to read its recipe back.\n"
+                                  "Multi-Model Merger (muted): TIES, DARE, Task Arithmetic, Model Stock or SLERP for 2-4 models;\n"
+                                  "SLERP 0.5 gave about the same image as the Block Merger with every group at 0.5.\n"
+                                  "Telemetry reads the merger; the PNG says Model: merge: mossImage_sft_bf16 + mossImage_base_bf16."}),
     },
     "HaDeS MOSS Suite - Prompt Enhancer": {
         # the third video tutorial (tools/moss_video.py prompt_enhancer): every mode on the first video's fisherman, Base + Turbo

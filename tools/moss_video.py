@@ -3130,6 +3130,446 @@ async def md_prepare(page):
 metadata_video.prepare = md_prepare
 
 
+# ---- merge, save and telemetry (the sixth tutorial) ----
+
+MS_LINES = [
+    ("Hi, I'm HaDeS, and welcome back.",
+     "Hola, soy HaDeS, y bienvenido de nuevo."),
+    ("Today: merging models. How to mix two models layer by layer, save the result as your own file, and keep its recipe.",
+     "Hoy: mezclar modelos. Cómo combinar dos modelos capa a capa, guardar el resultado como tu propio archivo y conservar su receta."),
+    ("As always, everything is free, and all the links are in the description.",
+     "Como siempre, todo es gratis y tienes todos los enlaces en la descripción."),
+    # 3
+    ("Quick rebuild of the basic workflow, this time on MOSS-Image SFT, with Telemetry and the Image Saver from the last video.",
+     "Montaje rápido del workflow básico, esta vez sobre MOSS-Image SFT, con Telemetry y el Image Saver del vídeo anterior.",
+     "Quick rebuild of the basic workflow, this time on MOSS-Image S F T, with Telemetry and the Image Saver from the last video."),
+    # 4: why merge
+    ("Why merge? SFT gives polished, stock-photo pictures, but they all look alike. Base varies much more: film, black and white, "
+     "different people.",
+     "¿Por qué mezclar? SFT da fotos pulidas, de banco de imágenes, pero todas se parecen. Base varía mucho más: película, blanco y "
+     "negro, gente distinta.",
+     "Why merge? S F T gives polished, stock-photo pictures, but they all look alike. Base varies much more: film, black and white, "
+     "different people."),
+    ("And when the prompt doesn't say who, SFT leans one way. \"A woman sitting in a café\": SFT drew an East Asian woman in ten of "
+     "sixteen seeds; Base in one or two.",
+     "Y cuando el prompt no dice quién, SFT tira hacia un lado. \"Una mujer sentada en un café\": SFT dibujó una mujer asiática en "
+     "diez de dieciséis semillas; Base, en una o dos.",
+     "And when the prompt doesn't say who, S F T leans one way. A woman sitting in a café: S F T drew an East Asian woman in ten of "
+     "sixteen seeds; Base in one or two."),
+    ("So let's mix some of Base into SFT.",
+     "Así que vamos a mezclar algo de Base en SFT.",
+     "So let's mix some of Base into S F T."),
+    # 7: the Block Merger
+    ("Load Base with the core's Load Diffusion Model, and add the MOSS Model Block Merger: SFT as model one, Base as model two.",
+     "Cargamos Base con el Load Diffusion Model del core y añadimos el MOSS Model Block Merger: SFT como modelo uno, Base como modelo "
+     "dos.",
+     "Load Base with the core's Load Diffusion Model, and add the MOSS Model Block Merger: S F T as model one, Base as model two."),
+    ("Each slider is a group of six layers. Zero keeps model one, one takes model two, and half is half of each.",
+     "Cada deslizador es un grupo de seis capas. Cero se queda con el modelo uno, uno toma el modelo dos, y la mitad es mitad de cada "
+     "uno."),
+    ("The last three are the text embedder, the time modulation, and the input and output layers.",
+     "Los tres últimos son el text embedder, la modulación de tiempo y las capas de entrada y salida."),
+    ("I measured which groups carry the change from SFT to Base: layers twenty-four to thirty-five carry the most. The tooltips give "
+     "the numbers.",
+     "Medí qué grupos llevan el cambio de SFT a Base: las capas 24 a 35 llevan la mayor parte. Los tooltips dan las cifras.",
+     "I measured which groups carry the change from S F T to Base: layers twenty-four to thirty-five carry the most. The tooltips give "
+     "the numbers."),
+    ("For this video I'll use a test recipe: half of Base in layers eighteen to thirty-five, the rest SFT. It's a demonstration, not a "
+     "recommendation.",
+     "Para este vídeo usaré una receta de prueba: la mitad de Base en las capas 18 a 35, el resto SFT. Es una demostración, no una "
+     "recomendación.",
+     "For this video I'll use a test recipe: half of Base in layers eighteen to thirty-five, the rest S F T. It's a demonstration, not "
+     "a recommendation."),
+    # 12: the result
+    ("Here it is, between the two: SFT's finish, with some of Base's variety. And it generated in the same time as SFT alone: about "
+     "thirteen seconds here.",
+     "Aquí está, entre los dos: el acabado de SFT con algo de la variedad de Base. Y generó en el mismo tiempo que SFT solo: unos "
+     "trece segundos aquí.",
+     "Here it is, between the two: S F T's finish, with some of Base's variety. And it generated in the same time as S F T alone: "
+     "about thirteen seconds here."),
+    ("And the bias? On the café prompt, about three of sixteen. On a fisherman portrait, it barely moved: thirteen or fourteen of "
+     "sixteen, against sixteen on SFT.",
+     "¿Y el sesgo? Con el prompt del café, unas tres de dieciséis. Con un retrato de pescador apenas se movió: trece o catorce de "
+     "dieciséis, frente a dieciséis en SFT.",
+     "And the bias? On the café prompt, about three of sixteen. On a fisherman portrait, it barely moved: thirteen or fourteen of "
+     "sixteen, against sixteen on S F T."),
+    ("The bias is spread over the whole model. Merging reduces it in part; naming who you want in the prompt works every time.",
+     "El sesgo está repartido por todo el modelo. Mezclar lo reduce en parte; decir en el prompt a quién quieres funciona siempre."),
+    ("For full control there's recipe override: one value per layer, forty-five numbers, instead of the sliders.",
+     "Para control total está recipe override: un valor por capa, cuarenta y cinco números, en lugar de los deslizadores."),
+    # 16: telemetry
+    ("Plug the merger's info into Telemetry. The report lists the ratio of every layer, and the sampler knows it ran on SFT plus Base.",
+     "Conectamos el info del merger a Telemetry. El informe da la proporción de cada capa, y el sampler sabe que corrió sobre SFT más "
+     "Base.",
+     "Plug the merger's info into Telemetry. The report lists the ratio of every layer, and the sampler knows it ran on S F T plus "
+     "Base."),
+    ("And as we saw in the last video, the PNG says \"merge\", with both models, and no model hash.",
+     "Y como vimos en el vídeo anterior, el PNG dice \"merge\", con los dos modelos, y sin hash de modelo.",
+     "And as we saw in the last video, the P N G says merge, with both models, and no model hash."),
+    # 18: the Model Saver
+    ("Happy with it? Save it with the MOSS Model Saver. Plug the merger's info into recipe, and the recipe goes inside the file.",
+     "¿Te gusta? Guárdalo con el MOSS Model Saver. Conecta el info del merger a recipe, y la receta va dentro del archivo."),
+    ("bfloat16 keeps the original precision: ten gigabytes. Stochastic rounding keeps even the smallest changes.",
+     "bfloat16 mantiene la precisión original: diez gigas. El redondeo estocástico conserva hasta los cambios más pequeños.",
+     "B float sixteen keeps the original precision: ten gigabytes. Stochastic rounding keeps even the smallest changes."),
+    ("int8 ConvRot is Comfy-Org's smaller format: five and a half gigabytes.",
+     "int8 ConvRot es el formato pequeño de Comfy-Org: cinco gigas y medio.",
+     "Int eight Conv Rot is Comfy Org's smaller format: five and a half gigabytes."),
+    ("The file goes to ComfyUI's output folder. Move it to models, diffusion models, to load it.",
+     "El archivo va a la carpeta output de ComfyUI. Muévelo a models, diffusion_models, para cargarlo."),
+    # 22: loading it back
+    ("Load it like any other model. The bfloat16 file gives the same image as the live merge.",
+     "Lo cargas como cualquier otro modelo. El archivo bfloat16 da la misma imagen que la mezcla en vivo.",
+     "Load it like any other model. The B float sixteen file gives the same image as the live merge."),
+    ("The int8 file rendered in six seconds instead of fifteen here, with small changes in the details.",
+     "El archivo int8 generó en seis segundos en vez de quince aquí, con cambios pequeños en los detalles.",
+     "The int eight file rendered in six seconds instead of fifteen here, with small changes in the details."),
+    # 24: the Metadata Reader
+    ("And months from now, the Metadata Reader tells you what this file is: its size and precision, and the recipe, with both models "
+     "and the ratio of every layer.",
+     "Y dentro de unos meses, el Metadata Reader te dice qué es este archivo: su tamaño y su precisión, y la receta, con los dos "
+     "modelos y la proporción de cada capa."),
+    # 25: the Multi-Model Merger
+    ("One more node: the Multi-Model Merger, for two to four models with TIES, DARE, Task Arithmetic, Model Stock or SLERP.",
+     "Un nodo más: el Multi-Model Merger, para dos a cuatro modelos con TIES, DARE, Task Arithmetic, Model Stock o SLERP.",
+     "One more node: the Multi-Model Merger, for two to four models with ties, dare, task arithmetic, model stock or slerp."),
+    ("On SFT and Base, SLERP at half gave about the same image as the Block Merger at half. It's meant for finetunes: give it the "
+     "model they come from as base model.",
+     "Con SFT y Base, SLERP a la mitad dio casi la misma imagen que el Block Merger a la mitad. Está pensado para finetunes: dale como "
+     "base model el modelo del que vienen.",
+     "On S F T and Base, slerp at half gave about the same image as the Block Merger at half. It's meant for finetunes: give it the "
+     "model they come from as base model."),
+    ("Which method is best depends on your models. I haven't measured a winner, so try them.",
+     "Qué método es mejor depende de tus modelos. No he medido un ganador, así que pruébalos."),
+    # 28: goodbye
+    ("That's merging: mix, check with Telemetry, save with its recipe. And remember, the recipe here was only a test. Measure yours.",
+     "Eso es mezclar: combinar, comprobar con Telemetry y guardar con su receta. Y recuerda, la receta de aquí era solo una prueba. "
+     "Mide la tuya."),
+    ("This workflow is free to download from the description.",
+     "Este workflow se puede descargar gratis desde la descripción."),
+    ("If you've made it to the end and enjoyed the video, and you'd like to see more content like this, leave a like and subscribe. "
+     "It's free!",
+     "Si has llegado hasta el final del vídeo, te ha gustado y quieres ver más contenido de este tipo, dale un buen like y "
+     "suscríbete. ¡Es gratis!"),
+    ("Thanks for watching, and see you in the next one.",
+     "Gracias por verlo, y nos vemos en el próximo."),
+]
+
+MS_SFT, MS_BASE = "mossImage_sft_bf16.safetensors", "mossImage_base_bf16.safetensors"
+MS_RECIPE = {"layers_00_05": 0.0, "layers_06_11": 0.0, "layers_12_17": 0.0, "layers_18_23": 0.5, "layers_24_29": 0.5, "layers_30_35": 0.5,
+             "layers_36_41": 0.0, "text_embedder": 0.0, "time_modulation": 0.0, "io": 0.0}
+MS_POS = {"loader": (0, 0), "enhancer": (440, 0), "latent": (940, 0), "sampler": (1380, 0), "saver": (1820, 0),
+          "telemetry": (1380, 640), "report": (1820, 640), "base": (0, 560), "bm": (420, 560), "msaver": (900, 640),
+          "file": (0, 1360), "meta": (440, 1360), "meta_text": (880, 1360), "multi": (1700, 1360)}
+MS_BOX = [-260, -60, 2700, 1960]
+MS_TOP = [-260, -60, 2300, 1200]
+MS_OUT = Path("I:/HaDeS_MOSS/videos/comfy_output")
+MS_MODELS = Path(r"H:/Comfy_UI_V61/ComfyUI/models/diffusion_models/HaDeS_video")
+# measured images and contact sheets (tools/RESULTS.md, "Merge, save and telemetry: a test recipe"), copied by ms_prepare
+MS_MEASURE = Path("I:/HaDeS_MOSS/videos/merge_save/measure")
+MS_IMG = lambda name: f"/view?filename={name}&subfolder=ms_measure&type=output"  # noqa: E731
+MS_FILE = {}
+
+
+async def ms_add(d, type_, query, key, values=None):
+    """basic_add at MS_POS[key], with the node's values set the moment it is created."""
+    if values:
+        await d.js("""([type, v]) => { const g = window.__hv.app().graph, prev = g.onNodeAdded;
+            g.onNodeAdded = function (n) { if (n.type === type) { for (const [k, x] of Object.entries(v)) { const w = n.widgets?.find(w => w.name === k);
+                if (w) w.value = x; } g.onNodeAdded = prev; } return prev?.apply(this, arguments); }; }""", [type_, values])
+    n = await basic_add(d, type_, query, MS_POS[key])
+    if values:
+        await up_set(d, n, values)
+    return n
+
+
+async def ms_text(d, key, size):
+    n = await ms_add(d, "PreviewAny", "Preview as Text", key)
+    await d.js("([id, s]) => { const n = window.__hv.node(id); n.setSize(s); n.setDirtyCanvas(true, true); }", [n, list(size)])
+    return n
+
+
+async def ms_last_secs(d):
+    run = next(iter((await d.js("() => fetch('/history?max_items=1').then(r => r.json())")).values()))
+    st = {m[0]: m[1]["timestamp"] for m in run["status"]["messages"]}
+    return (st["execution_success"] - st["execution_start"]) / 1000
+
+
+def ms_card(html, top=300):
+    return f'<div style="color:#fff;text-align:center;margin-top:{top}px">{html}</div>'
+
+
+def ms_bias_html(recipe=True):
+    cell = "padding:14px 30px;border-bottom:1px solid #333"
+    rows = [("", "SFT", "Test recipe", "Base"), ("\u201ca woman sitting in a caf\u00e9\u201d", "10 / 16", "~3 / 16", "~1-2 / 16"),
+            ("studio fisherman portrait", "16 / 16", "~13-14 / 16", "~6 / 16")]
+    rows = rows if recipe else [(r[0], r[1], r[3]) for r in rows[:2]]
+    body = "".join("<tr>" + "".join(f'<td style="{cell};{"color:#ffcc33;font-weight:700" if i == 0 or j == 0 else ""}">{c}</td>'
+                                     for j, c in enumerate(r)) + "</tr>" for i, r in enumerate(rows))
+    return ('<div style="margin-top:250px;color:#e6e6ea;display:flex;flex-direction:column;align-items:center">'
+            '<div style="font:700 34px Segoe UI,sans-serif;color:#fff;margin-bottom:20px">East Asian faces, 16 seeds, counted by eye</div>'
+            f'<table style="border-collapse:collapse;font:500 32px Segoe UI,sans-serif;background:#141418;border:2px solid #333;'
+            f'border-radius:12px">{body}</table></div>')
+
+
+async def merge_save(d: Director):
+    """The sixth tutorial: SFT and Base mixed with the Block Merger, checked with Telemetry, saved with the Model Saver, read back."""
+    await d.camera({"box": BASIC_BOX}, 10, pad=60, top=60)
+    await d.move(W * 0.62, H * 0.55)
+
+    # 1. introduction
+    d.title("HaDeS MOSS Suite", "Merge, Save and Telemetry", 6.0)
+    for i in range(3):
+        await d.say(i)
+        await d.move(W * (0.55 + 0.05 * (i % 2)), H * (0.5 + 0.04 * i), 2500)
+
+    # 2. quick rebuild on SFT, Telemetry and the Image Saver
+    await d.camera({"box": MS_TOP}, 900, pad=60, top=60)
+    await d.say(3)
+    async with d.fast(6.0):
+        loader = await ms_add(d, "HaDeSMossLoader", "MOSS Loader", "loader", dict(BASIC_LOADER, unet_name=MS_SFT))
+        enhancer = await ms_add(d, "HaDeSMossPromptEnhancer", "MOSS Prompt Enhancer", "enhancer",
+                                {"mode": "as written", "idea": BASIC_PROMPT, "seed": 1})
+        await basic_link(d, loader, "CLIP", enhancer, "clip", 600)
+        latent = await ms_add(d, "HaDeSMossLatent", "MOSS Latent", "latent",
+                              {"aspect_ratio": "1:1", "megapixels": 1.0, "seed": BASIC_SEED, "control_after_generate": "fixed"})
+        sampler = await ms_add(d, "HaDeSMossKSampler", "MOSS KSampler", "sampler",
+                               {"steps": 25, "cfg": 2.5, "sampler_name": "er_sde", "scheduler": "simple"})
+        for a, out, inp in ((loader, "MODEL", "model"), (enhancer, "positive", "positive"), (enhancer, "negative", "negative"),
+                            (latent, "latent", "latent_image"), (latent, "seed", "seed"), (loader, "VAE", "vae")):
+            await basic_link(d, a, out, sampler, inp, 600)
+        saver = await ms_add(d, "HaDeSMossImageSaver", "MOSS Image Saver", "saver")
+        await basic_link(d, sampler, "image", saver, "images", 600)
+        telemetry = await ms_add(d, "HaDeSMossSuiteTelemetry", "MOSS Suite Telemetry", "telemetry")
+        for k, n in enumerate((loader, enhancer, latent, sampler)):
+            await basic_link(d, n, "info", telemetry, f"info_{k + 1}", 600)
+        await basic_link(d, telemetry, "json", saver, "metadata", 600)
+        url_sft, t_sft = await lt_run(d, saver)
+    await d._after_voice(0.1)
+
+    # 3. why merge: the café prompt on SFT and on Base
+    await d.say(4)
+    await d.js("(h) => window.__hv.show(h)", lt_cols([(MS_IMG(MS_FILE["sheet_cafe_sft"]), "SFT · 16 seeds"),
+                                                      (MS_IMG(MS_FILE["sheet_cafe_base"]), "Base · 16 seeds")], side=760, top=110))
+    await d._after_voice(0.2)
+    await d.say(5)
+    await d._after_voice(0.3)
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }",
+               ms_bias_html(recipe=False))
+    await d.say(6)
+    await d._after_voice(0.2)
+    await pe_hide(d)
+
+    # 4. the Block Merger
+    await d.camera({"box": MS_TOP}, 1000, pad=60, top=60)
+    await d.say(7)
+    base = await ms_add(d, "UNETLoader", "Load Diffusion Model", "base", {"unet_name": MS_BASE, "weight_dtype": "default"})
+    bm = await ms_add(d, "HaDeSMossModelBlockMerger", "MOSS Model Block Merger", "bm", MS_RECIPE)
+    async with d.fast(2.0):
+        await basic_link(d, loader, "MODEL", bm, "model1", 700)
+        await basic_link(d, base, "MODEL", bm, "model2", 700)
+        await basic_link(d, bm, "MODEL", sampler, "model", 700)
+    await d._after_voice(0.1)
+    await d.camera([bm], 1000, pad=120, top=60)
+    await d.say(8)
+    await basic_point(d, bm, "layers_00_05")
+    await d._after_voice(0.1)
+    await d.say(9)
+    await basic_point(d, bm, "text_embedder")
+    await d.hold(0.8)
+    await basic_point(d, bm, "io")
+    await d._after_voice(0.1)
+    await d.say(10)
+    await basic_point(d, bm, "layers_24_29")
+    await d.hold(1.0)
+    await basic_point(d, bm, "layers_30_35")
+    await d._after_voice(0.1)
+    await d.say(11)
+    await basic_point(d, bm, "layers_18_23")
+    await d._after_voice(0.2)
+
+    # 5. the result
+    url_merge, t_merge = await lt_run(d, saver)
+    print(f"SFT {t_sft:.1f} s, recipe {t_merge:.1f} s", flush=True)
+    await d.say(12)
+    await d.js("(h) => window.__hv.show(h)", lt_cols([(url_sft, "SFT"), (url_merge, "test recipe"),
+                                                      (MS_IMG(MS_FILE["base_fisherman_1013"]), "Base")]))
+    await d._after_voice(0.4)
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }", ms_bias_html())
+    await d.say(13)
+    await d._after_voice(0.3)
+    await d.say(14)
+    await d._after_voice(0.4)
+    await pe_hide(d)
+    await d.camera([bm], 1000, pad=120, top=60)
+    await d.say(15)
+    await basic_point(d, bm, "recipe_override")
+    await d._after_voice(0.3)
+
+    # 6. Telemetry
+    await d.camera({"box": MS_TOP}, 1000, pad=60, top=60)
+    await d.say(16)
+    await basic_link(d, bm, "info", telemetry, "info_5", 900)
+    report = await ms_text(d, "report", (600, 520))
+    await basic_link(d, telemetry, "report", report, "source", 700)
+    url_tel, _ = await lt_run(d, saver)
+    await d.camera([report], 1000, pad=40, top=60)
+    await d._after_voice(0.4)
+    await d.say(17)
+    chunks = await md_chunks(d, url_tel)
+    await d.js("(h) => window.__hv.show(h)", md_params_html(chunks, "The PNG of the merge", mark=("Model",)))
+    await d._after_voice(0.4)
+    await pe_hide(d)
+
+    # 7. the Model Saver
+    await d.camera({"box": MS_TOP}, 1000, pad=60, top=60)
+    await d.say(18)
+    msaver = await ms_add(d, "HaDeSMossModelSaver", "MOSS Model Saver", "msaver",
+                          {"filename_prefix": "diffusion_models/MOSS_video_recipe", "precision": "bfloat16", "include_metadata": True,
+                           "custom_author": "HaDeS", "custom_model_title": "", "rounding": "stochastic"})
+    async with d.fast(2.0):
+        await basic_link(d, bm, "MODEL", msaver, "model", 700)
+        await basic_link(d, bm, "info", msaver, "recipe", 700)
+    await d.camera([msaver], 1000, pad=140, top=60)
+    await d._after_voice(0.1)
+    import os
+    files = {}
+    for prec, prefix, line, label in (("bfloat16", "MOSS_video_recipe", 19, "bfloat16 · stochastic rounding"),
+                                      ("int8 ConvRot (Comfy-Org layout)", "MOSS_video_recipe_int8", 20, "int8 ConvRot")):
+        if prefix != "MOSS_video_recipe":
+            await basic_point(d, msaver, "precision", {"precision": prec, "filename_prefix": f"diffusion_models/{prefix}"})
+        await lt_run(d)
+        secs = await ms_last_secs(d)
+        f = sorted((MS_OUT / "diffusion_models").glob(prefix + "_0*.safetensors"), key=os.path.getmtime)[-1]
+        files[prefix] = f
+        size = os.path.getsize(f) / 1e9
+        print(f"saved {f.name}: {size:.2f} GB in {secs:.1f} s", flush=True)
+        await d.say(line)
+        await d.js("(h) => window.__hv.show(h)", ms_card(
+            f'<div style="font:700 44px Segoe UI,sans-serif">{label}</div>'
+            f'<div style="font:600 34px Segoe UI,sans-serif;color:#ffcc33;margin-top:18px">{size:.2f} GB on disk · saved in {secs:.0f} s</div>'
+            f'<div style="font:500 28px Consolas,monospace;color:#c9c9d1;margin-top:18px">output/diffusion_models/{f.name}</div>', 340))
+        await d._after_voice(0.3)
+        await pe_hide(d)
+    # the files are moved where Load Diffusion Model reads them
+    MS_MODELS.mkdir(parents=True, exist_ok=True)
+    import shutil
+    moving = asyncio.ensure_future(asyncio.gather(*(asyncio.to_thread(shutil.move, str(f), str(MS_MODELS / f.name)) for f in files.values())))
+    await d.say(21)
+    await d.js("(h) => window.__hv.show(h)", ms_card(
+        '<div style="font:500 32px Consolas,monospace;color:#c9c9d1">ComfyUI/output/diffusion_models/</div>'
+        '<div style="font:700 50px Segoe UI,sans-serif;color:#ffcc33;margin:16px 0">\u2193 move \u2193</div>'
+        '<div style="font:600 34px Consolas,monospace;color:#fff">ComfyUI/models/diffusion_models/</div>', 360))
+    await d._after_voice(0.4)
+    async with d.fast(4.0):
+        while not moving.done():
+            await d.hold(0.5)
+    moving.result()
+    await lt_refresh(d)
+    await pe_hide(d)
+
+    # 8. loading it back
+    bf = "HaDeS_video\\" + files["MOSS_video_recipe"].name
+    i8 = "HaDeS_video\\" + files["MOSS_video_recipe_int8"].name
+    await d.camera({"box": MS_BOX}, 1000, pad=50, top=60)
+    await d.say(22)
+    file = await ms_add(d, "UNETLoader", "Load Diffusion Model", "file", {"unet_name": bf, "weight_dtype": "default"})
+    await basic_link(d, file, "MODEL", sampler, "model", 900)
+    url_file, t_file = await lt_run(d, saver)
+    await d.js("(h) => window.__hv.show(h)", lt_cols([(url_merge, "live merge"), (url_file, "the saved bfloat16 file")], side=720))
+    await d._after_voice(0.4)
+    await pe_hide(d)
+    await d.camera([file], 1000, pad=140, top=60)
+    await basic_point(d, file, "unet_name", {"unet_name": i8})
+    url_i8, t_i8 = await lt_run(d, saver)
+    print(f"bf16 file {t_file:.1f} s, int8 file {t_i8:.1f} s", flush=True)
+    await d.say(23)
+    await d.js("(h) => window.__hv.show(h)", lt_cols([(url_file, "the bfloat16 file"), (url_i8, "the int8 ConvRot file")], side=720))
+    await d._after_voice(0.4)
+    await pe_hide(d)
+
+    # 9. the Metadata Reader
+    await d.camera({"box": [-260, 1200, 2300, 1960]}, 1000, pad=50, top=60)
+    meta = await ms_add(d, "HaDeSMossMetadataReader", "MOSS Metadata Reader", "meta", {"lora_name": "(none)", "model_name": bf})
+    meta_text = await ms_text(d, "meta_text", (780, 560))
+    await basic_link(d, meta, "info", meta_text, "source", 700)
+    await lt_run(d)
+    await d.camera([meta_text], 1000, pad=30, top=60)
+    await d.say(24)
+    await d._after_voice(0.6)
+
+    # 10. the Multi-Model Merger
+    await d.camera({"box": [-260, 400, 2700, 1960]}, 1000, pad=50, top=60)
+    await d.say(25)
+    multi = await ms_add(d, "HaDeSMossMultiModelMerger", "MOSS Multi-Model Merger", "multi",
+                         {"method": "SLERP", "density": 0.5, "scale": 1.0, "weight_1": 1.0, "weight_2": 1.0})
+    async with d.fast(2.0):
+        await d.camera({"box": MS_BOX}, 600, pad=50, top=60)
+        await basic_link(d, loader, "MODEL", multi, "model_1", 700)
+        await basic_link(d, base, "MODEL", multi, "model_2", 700)
+    await d.camera([multi], 1000, pad=140, top=60)
+    await basic_point(d, multi, "method")
+    await d._after_voice(0.1)
+    await d.say(26)
+    await d.js("(h) => window.__hv.show(h)", lt_cols([(MS_IMG(MS_FILE["half_fisherman_1013"]), "Block Merger, every group 0.5"),
+                                                      (MS_IMG(MS_FILE["slerp_fisherman_1013"]), "SLERP 0.5")], side=720))
+    await d._after_voice(0.3)
+    await pe_hide(d)
+    await d.say(27)
+    await d._after_voice(0.4)
+
+    # 11. goodbye
+    await d.camera({"box": MS_BOX}, 1300, pad=50, top=60)
+    await d.move(W - 6, H * 0.5)
+    await d.say(28)
+    await d._after_voice(0.1)
+    await d.say(29)
+    await d.js("(h) => window.__hv.show(h)", '<div style="color:#fff;text-align:center;margin-top:300px">'
+               '<div style="font:600 30px Segoe UI,sans-serif;color:#c9c9d1">Free download (link in the description)</div>'
+               '<div style="font:700 44px Segoe UI,sans-serif;margin-top:22px">HaDeS MOSS Suite - Merge, Save and Telemetry.json</div></div>')
+    await d._after_voice(0.3)
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }",
+               f'<div style="display:flex;align-items:center;gap:80px;margin-top:60px"><img src="{url_merge}" style="height:780px;border-radius:6px">'
+               '<div style="color:#fff;max-width:640px"><div style="font:900 72px Segoe UI Black,sans-serif;line-height:1.05">HaDeS MOSS Suite</div>'
+               '<div style="font:600 34px Segoe UI,sans-serif;color:#ffcc33;margin-top:22px">Merge, Save and Telemetry</div>'
+               '<div style="font:400 26px Segoe UI,sans-serif;color:#c9c9d1;margin-top:44px">Workflow, Suite and models: links in the description</div></div></div>')
+    await d.say(30)
+    await d.say(31)
+    await d.end(1.5)
+
+
+async def ms_prepare(page):
+    """Off camera: the measured images and sheets served from comfy_output/ms_measure, last take's files out of the way, and one
+    short merge render that loads the text encoder, the VAE, SFT and Base."""
+    import glob, os, shutil
+    dst = MS_OUT / "ms_measure"
+    for name in ("sheet_cafe_sft", "sheet_cafe_base"):
+        shutil.copy(MS_MEASURE / (name + ".png"), dst / (name + ".png"))
+        MS_FILE[name] = name + ".png"
+    for prefix in ("base_fisherman_1013", "half_fisherman_1013", "slerp_fisherman_1013"):
+        f = sorted(glob.glob(str(dst / (prefix + "_*.png"))), key=os.path.getmtime)
+        if not f:
+            raise SystemExit(f"measured image {prefix} missing")
+        MS_FILE[prefix] = Path(f[-1]).name
+    for f in (MS_OUT / "diffusion_models").glob("MOSS_video_recipe*.safetensors"):
+        raise SystemExit(f"{f} is in the output folder: the counter would not start at 00001")
+    g = {"1": {"class_type": "HaDeSMossLoader", "inputs": dict(BASIC_LOADER, unet_name=MS_SFT, weight_dtype="default", clip_device="default")},
+         "2": {"class_type": "UNETLoader", "inputs": {"unet_name": MS_BASE, "weight_dtype": "default"}},
+         "3": {"class_type": "HaDeSMossModelBlockMerger", "inputs": {"model1": ["1", 0], "model2": ["2", 0], **MS_RECIPE, "recipe_override": ""}},
+         "4": {"class_type": "HaDeSMossPromptEnhancer", "inputs": {"clip": ["1", 1], "idea": "a lighthouse", "mode": "as written", "width": 1024,
+               "height": 1024, "temperature": 0.7, "seed": 0, "max_tokens": 1024, "negative": ""}},
+         "5": {"class_type": "HaDeSMossLatent", "inputs": {"aspect_ratio": "1:1", "megapixels": 1.0, "custom_width": 1024, "custom_height": 1024,
+               "batch_size": 1, "seed": 7}},
+         "6": {"class_type": "HaDeSMossKSampler", "inputs": {"model": ["3", 0], "positive": ["4", 0], "negative": ["4", 1], "latent_image": ["5", 0],
+               "seed": 7, "steps": 2, "cfg": 2.5, "sampler_name": "er_sde", "scheduler": "simple", "denoise": 1.0, "flow_shift": 0.0, "slg": "off",
+               "vae": ["1", 2]}},
+         "7": {"class_type": "PreviewImage", "inputs": {"images": ["6", 1]}}}
+    print("warm-up run:", await page.evaluate(UP_WARM_JS, g), flush=True)
+
+
+merge_save.prepare = ms_prepare
+
+
 SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "layout_test": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_test, LAYOUT_TEST_LINES),
           "layout_sentence": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_sentence, LAYOUT_SENTENCE_LINES),
@@ -3138,7 +3578,8 @@ SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "upscale_telemetry": (None, upscale_telemetry, UP_LINES),
           "prompt_enhancer": (None, prompt_enhancer, PE_LINES),
           "lora_toolkit": (None, lora_toolkit, LT_LINES),
-          "metadata": (None, metadata_video, MD_LINES)}
+          "metadata": (None, metadata_video, MD_LINES),
+          "merge_save": (None, merge_save, MS_LINES)}
 
 # spoken forms where the written caption reads badly aloud
 SPOKEN = {"DRAFT LAYOUT": "Draft layout"}
