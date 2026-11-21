@@ -3570,6 +3570,335 @@ async def ms_prepare(page):
 merge_save.prepare = ms_prepare
 
 
+# ---- compare models and LoRAs (the seventh tutorial) ----
+
+CM_LINES = [
+    ("Hi, I'm HaDeS, and welcome back.",
+     "Hola, soy HaDeS, y bienvenido de nuevo."),
+    ("Last time I said: measure your merge. Today, how: comparing models and LoRAs side by side, fairly, and even blind.",
+     "La última vez dije: mide tu mezcla. Hoy, cómo: comparar modelos y LoRAs lado a lado, de forma justa, e incluso a ciegas.",
+     "Last time I said: measure your merge. Today, how: comparing models and Loras side by side, fairly, and even blind."),
+    ("As always, everything is free, and all the links are in the description.",
+     "Como siempre, todo es gratis y tienes todos los enlaces en la descripción."),
+    # 3
+    ("Quick setup: SFT in the MOSS Loader, Base and Bulle d'Encre with Load Diffusion Model, and last video's test recipe in the Block "
+     "Merger.",
+     "Preparación rápida: SFT en el MOSS Loader, Base y Bulle d'Encre con Load Diffusion Model, y la receta de prueba del vídeo anterior "
+     "en el Block Merger.",
+     "Quick setup: S F T in the MOSS Loader, Base and Bulle d'Encre with Load Diffusion Model, and last video's test recipe in the Block "
+     "Merger."),
+    # 4: the Compare Sampler
+    ("Instead of a KSampler, the MOSS Compare Sampler. Up to four models, A to D, and the same prompt, latent, seed and settings for all "
+     "of them.",
+     "En lugar de un KSampler, el MOSS Compare Sampler. Hasta cuatro modelos, de la A a la D, y el mismo prompt, latente, semilla y "
+     "ajustes para todos.",
+     "Instead of a K Sampler, the MOSS Compare Sampler. Up to four models, A to D, and the same prompt, latent, seed and settings for "
+     "all of them."),
+    ("Twenty-five steps, CFG two point five. Run it.",
+     "Veinticinco pasos, CFG dos coma cinco. Lo lanzamos."),
+    # 6: the sheet
+    ("One sheet, four models. Each label comes from what the model carries: its file, or \"merge\" with both models. You don't type them.",
+     "Una hoja, cuatro modelos. Cada etiqueta sale de lo que lleva el modelo: su archivo, o \"merge\" con los dos modelos. No las "
+     "escribes tú.",
+     "One sheet, four models. Each label comes from what the model carries: its file, or merge with both models. You don't type them."),
+    ("Underneath, what they all share: seed, steps, CFG, sampler and the prompt.",
+     "Debajo, lo que comparten todos: semilla, pasos, CFG, sampler y el prompt."),
+    ("Each column is exactly the image a MOSS KSampler gives with that model. It isn't faster than four KSamplers, and it needs no more "
+     "memory: it just puts them side by side for you.",
+     "Cada columna es exactamente la imagen que da un MOSS KSampler con ese modelo. No es más rápido que cuatro KSamplers, ni necesita "
+     "más memoria: simplemente te los pone lado a lado.",
+     "Each column is exactly the image a MOSS K Sampler gives with that model. It isn't faster than four K Samplers, and it needs no "
+     "more memory: it just puts them side by side for you."),
+    # 9: LoRAs
+    ("Now LoRAs. Remember the LoRA we extracted from Bulle d'Encre in the fourth video? Here it is, on Bulle's base, rebuilt with the "
+     "Block Merger.",
+     "Ahora LoRAs. ¿Recuerdas la LoRA que sacamos de Bulle d'Encre en el cuarto vídeo? Aquí está, sobre la base de Bulle, reconstruida "
+     "con el Block Merger.",
+     "Now Loras. Remember the Lora we extracted from Bulle d'Encre in the fourth video? Here it is, on Bulle's base, rebuilt with the "
+     "Block Merger."),
+    ("Four Multi-LoRAs: one switched off, then strength zero point five, zero point eight and one.",
+     "Cuatro Multi-LoRA: uno apagado, y luego fuerza cero coma cinco, cero coma ocho y uno.",
+     "Four Multi-Loras: one switched off, then strength zero point five, zero point eight and one."),
+    ("Fifteen steps and euler, Bulle d'Encre's settings. Run.",
+     "Quince pasos y euler, los ajustes de Bulle d'Encre. Lanzamos.",
+     "Fifteen steps and oiler, Bulle d'Encre's settings. Run."),
+    # 12: the result
+    ("The labels write themselves: the bare base when the Multi-LoRA is off, then the LoRA with its strength. Switching a row off "
+     "compares without rewiring.",
+     "Las etiquetas se escriben solas: la base sola cuando el Multi-LoRA está apagado, y luego la LoRA con su fuerza. Apagar una fila "
+     "compara sin recablear.",
+     "The labels write themselves: the bare base when the Multi-Lora is off, then the Lora with its strength. Switching a row off "
+     "compares without rewiring."),
+    ("And strength isn't linear. Against Bulle d'Encre itself, zero point five barely moved, zero point eight got part of the way, and "
+     "most of the look arrived between zero point eight and one.",
+     "Y la fuerza no es lineal. Comparado con la propia Bulle d'Encre, cero coma cinco apenas se movió, cero coma ocho hizo parte del "
+     "camino, y casi todo el estilo llegó entre cero coma ocho y uno."),
+    ("A Turbo LoRA on the turbo input applies to every column, so you can compare at eight steps too.",
+     "Una LoRA Turbo en la entrada turbo se aplica a todas las columnas, así que también puedes comparar a ocho pasos.",
+     "A Turbo Lora on the turbo input applies to every column, so you can compare at eight steps too."),
+    # 15: blind
+    ("Now the fair way: blind. Switch blind on, and the panels are shuffled and numbered, with no names.",
+     "Ahora la forma justa: a ciegas. Activa blind, y los paneles se barajan y se numeran, sin nombres."),
+    ("Pick your favourite first. Then look at the key: it's in the info output and inside the PNG, never on the sheet.",
+     "Elige primero tu favorita. Después mira la clave: está en la salida info y dentro del PNG, nunca en la hoja.",
+     "Pick your favourite first. Then look at the key: it's in the info output and inside the P N G, never on the sheet."),
+    ("Blind seed gives a new order of the same images, so you can vote again without remembering positions.",
+     "Blind seed da un orden nuevo de las mismas imágenes, para votar otra vez sin recordar posiciones."),
+    # 18: the Compare Sheet
+    ("And for anything else, the MOSS Compare Sheet: any images side by side, here two seeds, labelled from each KSampler's info.",
+     "Y para todo lo demás, el MOSS Compare Sheet: cualquier imagen lado a lado, aquí dos semillas, con la etiqueta sacada del info de "
+     "cada KSampler.",
+     "And for anything else, the MOSS Compare Sheet: any images side by side, here two seeds, labelled from each K Sampler's info."),
+    # 19: goodbye
+    ("That's comparing: same seed, same settings, labels you can trust, and blind when it matters.",
+     "Eso es comparar: misma semilla, mismos ajustes, etiquetas fiables y a ciegas cuando importa."),
+    ("This workflow is free to download from the description.",
+     "Este workflow se puede descargar gratis desde la descripción."),
+    ("If you've made it to the end and enjoyed the video, and you'd like to see more content like this, leave a like and subscribe. "
+     "It's free!",
+     "Si has llegado hasta el final del vídeo, te ha gustado y quieres ver más contenido de este tipo, dale un buen like y "
+     "suscríbete. ¡Es gratis!"),
+    ("Thanks for watching, and see you in the next one.",
+     "Gracias por verlo, y nos vemos en el próximo."),
+]
+
+CM_BULLE = "HaDeS_MOSS_preview_beta.safetensors"
+CM_LORA = "bulle_extracted.safetensors"
+CM_BULLE_BASE = {**dict.fromkeys(MS_RECIPE, 0.0), "layers_24_29": 0.3}
+CM_POS = {"loader": (0, 0), "enhancer": (440, 0), "latent": (940, 0), "base": (0, 520), "bulle": (0, 660), "rec": (440, 780),
+          "cmp": (1400, 0), "bb": (0, 1300), "ml0": (440, 1300), "ml1": (880, 1300), "ml2": (440, 1620), "ml3": (880, 1620),
+          "cmp2": (1400, 1300), "info2": (1900, 1300), "ks_a": (0, 2500), "ks_b": (440, 2500), "sheet": (880, 2500)}
+CM_TOP = [-260, -60, 2300, 1280]
+CM_MID = [-260, 1200, 2700, 2400]
+CM_LOW = [-260, 2400, 1800, 3300]
+CM_BOX = [-260, -60, 2700, 3300]
+CM_IMG = lambda name: f"/view?filename={name}&subfolder=cm_measure&type=output"  # noqa: E731
+CM_FILE = {}
+
+
+async def cm_add(d, type_, query, key, values=None):
+    if values:
+        await d.js("""([type, v]) => { const g = window.__hv.app().graph, prev = g.onNodeAdded;
+            g.onNodeAdded = function (n) { if (n.type === type) { for (const [k, x] of Object.entries(v)) { const w = n.widgets?.find(w => w.name === k);
+                if (w) w.value = x; } g.onNodeAdded = prev; } return prev?.apply(this, arguments); }; }""", [type_, values])
+    n = await basic_add(d, type_, query, CM_POS[key])
+    if values:
+        await up_set(d, n, values)
+    return n
+
+
+def cm_sheet_html(url, top=260, width=1800):
+    return f'<div style="margin-top:{top}px;display:flex;justify-content:center"><img src="{url}" style="width:{width}px;border-radius:6px"></div>'
+
+
+async def cm_compare(d, key, values, models, enhancer, latent, loader):
+    cmp = await cm_add(d, "HaDeSMossCompareSampler", "MOSS Compare Sampler", key, values)
+    for s, m in zip("ABCD", models):
+        await basic_link(d, m, "MODEL", cmp, f"model_{s}", 600)
+    for a, out, inp in ((enhancer, "positive", "positive"), (enhancer, "negative", "negative"), (latent, "latent", "latent_image"),
+                        (latent, "seed", "seed"), (loader, "VAE", "vae"), (enhancer, "info", "prompt_info")):
+        await basic_link(d, a, out, cmp, inp, 600)
+    return cmp
+
+
+async def compare_video(d: Director):
+    """The seventh tutorial: four models on one sheet, a LoRA at four strengths, blind mode, the Compare Sheet."""
+    await d.camera({"box": BASIC_BOX}, 10, pad=60, top=60)
+    await d.move(W * 0.62, H * 0.55)
+
+    # 1. introduction
+    d.title("HaDeS MOSS Suite", "Compare models and LoRAs", 6.0)
+    for i in range(3):
+        await d.say(i)
+        await d.move(W * (0.55 + 0.05 * (i % 2)), H * (0.5 + 0.04 * i), 2500)
+
+    # 2. quick setup
+    await d.camera({"box": CM_TOP}, 900, pad=60, top=60)
+    await d.say(3)
+    async with d.fast(6.0):
+        loader = await cm_add(d, "HaDeSMossLoader", "MOSS Loader", "loader", dict(BASIC_LOADER, unet_name=MS_SFT))
+        enhancer = await cm_add(d, "HaDeSMossPromptEnhancer", "MOSS Prompt Enhancer", "enhancer",
+                                {"mode": "as written", "idea": BASIC_PROMPT, "seed": 1})
+        await basic_link(d, loader, "CLIP", enhancer, "clip", 600)
+        latent = await cm_add(d, "HaDeSMossLatent", "MOSS Latent", "latent",
+                              {"aspect_ratio": "1:1", "megapixels": 1.0, "seed": BASIC_SEED, "control_after_generate": "fixed"})
+        base = await cm_add(d, "UNETLoader", "Load Diffusion Model", "base", {"unet_name": MS_BASE, "weight_dtype": "default"})
+        bulle = await cm_add(d, "UNETLoader", "Load Diffusion Model", "bulle", {"unet_name": CM_BULLE, "weight_dtype": "default"})
+        rec = await cm_add(d, "HaDeSMossModelBlockMerger", "MOSS Model Block Merger", "rec", MS_RECIPE)
+        await basic_link(d, loader, "MODEL", rec, "model1", 600)
+        await basic_link(d, base, "MODEL", rec, "model2", 600)
+    await d._after_voice(0.1)
+
+    # 3. the Compare Sampler
+    await d.say(4)
+    async with d.fast(3.0):
+        cmp = await cm_compare(d, "cmp", {"steps": 25, "cfg": 2.5, "sampler_name": "er_sde", "scheduler": "simple",
+                                          "filename_prefix": "MOSS/compare/HaDeS_MOSS_models"},
+                               (loader, base, rec, bulle), enhancer, latent, loader)
+    await d._after_voice(0.1)
+    await d.camera([cmp], 1000, pad=120, top=60)
+    await d.say(5)
+    await basic_point(d, cmp, "steps")
+    await d.hold(0.6)
+    await basic_point(d, cmp, "cfg")
+    await d._after_voice(0.1)
+    url_models, t_models = await lt_run(d, cmp)
+    print(f"models sheet {t_models:.1f} s", flush=True)
+
+    # 4. the sheet
+    await d.js("(h) => window.__hv.show(h)", cm_sheet_html(url_models))
+    await d.say(6)
+    await d._after_voice(0.2)
+    await d.say(7)
+    await d._after_voice(0.2)
+    await d.say(8)
+    await d._after_voice(0.4)
+    await pe_hide(d)
+
+    # 5. LoRAs
+    await d.camera({"box": CM_MID}, 1000, pad=60, top=60)
+    await d.say(9)
+    bb = await cm_add(d, "HaDeSMossModelBlockMerger", "MOSS Model Block Merger", "bb", CM_BULLE_BASE)
+    async with d.fast(2.0):
+        await d.camera({"box": CM_BOX}, 600, pad=50, top=60)
+        await basic_link(d, loader, "MODEL", bb, "model1", 600)
+        await basic_link(d, base, "MODEL", bb, "model2", 600)
+        await d.camera({"box": CM_MID}, 600, pad=60, top=60)
+    await d._after_voice(0.1)
+    await d.say(10)
+    mls = []
+    for i, st in enumerate((None, 0.5, 0.8, 1.0)):
+        rows = [{"name": CM_LORA, "on": True, "strength": st if st is not None else 1.0}]
+        ml = await cm_add(d, "HaDeSMossMultiLora", "MOSS Multi-LoRA", f"ml{i}", {"loras": json.dumps(rows), "enabled": st is not None})
+        await basic_link(d, bb, "MODEL", ml, "model", 500)
+        mls.append(ml)
+    await d._after_voice(0.1)
+    await d.say(11)
+    async with d.fast(3.0):
+        await d.camera({"box": CM_BOX}, 600, pad=50, top=60)
+        cmp2 = await cm_compare(d, "cmp2", {"steps": 15, "cfg": 2.5, "sampler_name": "euler", "scheduler": "simple",
+                                            "filename_prefix": "MOSS/compare/HaDeS_MOSS_loras"}, mls, enhancer, latent, loader)
+        info2 = await cm_add(d, "PreviewAny", "Preview as Text", "info2")
+        await d.js("([id, s]) => { const n = window.__hv.node(id); n.setSize(s); n.setDirtyCanvas(true, true); }", [info2, [700, 420]])
+        await basic_link(d, cmp2, "info", info2, "source", 600)
+        await d.camera({"box": CM_MID}, 600, pad=60, top=60)
+    await d._after_voice(0.1)
+    url_loras, t_loras = await lt_run(d, cmp2)
+    print(f"LoRA sheet {t_loras:.1f} s", flush=True)
+
+    # 6. the result
+    await d.js("(h) => window.__hv.show(h)", cm_sheet_html(url_loras))
+    await d.say(12)
+    await d._after_voice(0.3)
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }", '<div style="display:flex;flex-direction:column;align-items:center">' + lt_cols(
+        [(CM_IMG(CM_FILE[k]), t) for k, t in (("off", "LoRA off · 0.86"), ("x0.5", "x0.5 · 0.74"), ("x0.8", "x0.8 · 0.59"),
+                                                ("x1.0", "x1.0 · 0.26"), ("bulle", "Bulle d'Encre"))], side=330, top=330)
+        + '<div style="text-align:center;color:#c9c9d1;font:600 26px Segoe UI,sans-serif;margin-top:26px">'
+          'distance to Bulle d\'Encre itself (1 = another seed)</div></div>')
+    await d.say(13)
+    await d._after_voice(0.4)
+    await pe_hide(d)
+    await d.camera([cmp2], 1000, pad=140, top=60)
+    await d.say(14)
+    await d._after_voice(0.3)
+
+    # 7. blind
+    await d.say(15)
+    await basic_point(d, cmp2, "blind", {"blind": True})
+    await d._after_voice(0.1)
+    url_blind, _ = await lt_run(d, cmp2)
+    await d.js("(h) => window.__hv.show(h)", cm_sheet_html(url_blind))
+    await d.hold(2.0)
+    await d.say(16)
+    await d._after_voice(0.3)
+    await pe_hide(d)
+    await d.camera([info2], 1000, pad=40, top=60)
+    await d.hold(2.5)
+    await d.camera([cmp2], 1000, pad=140, top=60)
+    await d.say(17)
+    await basic_point(d, cmp2, "blind_seed", {"blind_seed": 1})
+    await d._after_voice(0.1)
+    url_blind1, _ = await lt_run(d, cmp2)
+    await d.js("(h) => window.__hv.show(h)", cm_sheet_html(url_blind1))
+    await d.hold(2.5)
+    await pe_hide(d)
+
+    # 8. the Compare Sheet
+    await d.camera({"box": CM_LOW}, 1000, pad=60, top=60)
+    await d.say(18)
+    async with d.fast(4.0):
+        kss = []
+        for key, seed in (("ks_a", 1013), ("ks_b", 1014)):
+            k = await cm_add(d, "HaDeSMossKSampler", "MOSS KSampler", key,
+                             {"seed": seed, "steps": 25, "cfg": 2.5, "sampler_name": "er_sde", "scheduler": "simple"})
+            kss.append(k)
+        sheet = await cm_add(d, "HaDeSMossCompareSheet", "MOSS Compare Sheet", "sheet", {"filename_prefix": "MOSS/compare/HaDeS_MOSS_sheet"})
+        await d.camera({"box": CM_BOX}, 600, pad=50, top=60)
+        for k in kss:
+            for a, out, inp in ((base, "MODEL", "model"), (enhancer, "positive", "positive"), (enhancer, "negative", "negative"),
+                                (latent, "latent", "latent_image"), (loader, "VAE", "vae")):
+                await basic_link(d, a, out, k, inp, 500)
+        for s, k in zip("AB", kss):
+            await basic_link(d, k, "image", sheet, f"image_{s}", 500)
+            await basic_link(d, k, "info", sheet, f"info_{s}", 500)
+        await d.camera({"box": CM_LOW}, 600, pad=60, top=60)
+    url_sheet, _ = await lt_run(d, sheet)
+    await d.js("(h) => window.__hv.show(h)", cm_sheet_html(url_sheet, top=220, width=1400))
+    await d._after_voice(0.4)
+    await pe_hide(d)
+
+    # 9. goodbye
+    await d.camera({"box": CM_BOX}, 1300, pad=50, top=60)
+    await d.move(W - 6, H * 0.5)
+    await d.say(19)
+    await d._after_voice(0.1)
+    await d.say(20)
+    await d.js("(h) => window.__hv.show(h)", '<div style="color:#fff;text-align:center;margin-top:300px">'
+               '<div style="font:600 30px Segoe UI,sans-serif;color:#c9c9d1">Free download (link in the description)</div>'
+               '<div style="font:700 44px Segoe UI,sans-serif;margin-top:22px">HaDeS MOSS Suite - Compare Models.json</div></div>')
+    await d._after_voice(0.3)
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }",
+               f'<div style="margin-top:160px;display:flex;flex-direction:column;align-items:center;gap:50px">'
+               f'<img src="{url_models}" style="width:1700px;border-radius:6px">'
+               '<div style="color:#fff;text-align:center"><div style="font:900 64px Segoe UI Black,sans-serif">HaDeS MOSS Suite</div>'
+               '<div style="font:600 34px Segoe UI,sans-serif;color:#ffcc33;margin-top:14px">Compare models and LoRAs</div>'
+               '<div style="font:400 26px Segoe UI,sans-serif;color:#c9c9d1;margin-top:24px">Workflow, Suite and models: links in the description</div></div></div>')
+    await d.say(21)
+    await d.say(22)
+    await d.end(1.5)
+
+
+async def cm_prepare(page):
+    """Off camera: the measured LoRA columns and Bulle d'Encre's image, the LoRA in models/loras, and one short render that loads the
+    text encoder, the VAE, SFT, Base and Bulle d'Encre."""
+    import glob, os
+    dst = MS_OUT / "cm_measure"
+    cols = sorted(glob.glob(str(dst / "loras_l1_col_*.png")), key=os.path.getmtime)[-4:]
+    if len(cols) != 4:
+        raise SystemExit("measured LoRA columns missing")
+    for k, f in zip(("off", "x0.5", "x0.8", "x1.0"), cols):
+        CM_FILE[k] = Path(f).name
+    CM_FILE["bulle"] = Path(sorted(glob.glob(str(dst / "bulle_15_1013_*.png")), key=os.path.getmtime)[-1]).name
+    if not (COMFY / "models" / "loras" / CM_LORA).exists():
+        raise SystemExit(f"{CM_LORA} missing from models/loras (extract it as in the fourth video)")
+    g = {"1": {"class_type": "HaDeSMossLoader", "inputs": dict(BASIC_LOADER, unet_name=MS_SFT, weight_dtype="default", clip_device="default")},
+         "2": {"class_type": "UNETLoader", "inputs": {"unet_name": MS_BASE, "weight_dtype": "default"}},
+         "3": {"class_type": "UNETLoader", "inputs": {"unet_name": CM_BULLE, "weight_dtype": "default"}},
+         "4": {"class_type": "HaDeSMossPromptEnhancer", "inputs": {"clip": ["1", 1], "idea": "a lighthouse", "mode": "as written", "width": 1024,
+               "height": 1024, "temperature": 0.7, "seed": 0, "max_tokens": 1024, "negative": ""}},
+         "5": {"class_type": "HaDeSMossLatent", "inputs": {"aspect_ratio": "1:1", "megapixels": 1.0, "custom_width": 1024, "custom_height": 1024,
+               "batch_size": 1, "seed": 7}}}
+    for i, m in enumerate((["1", 0], ["2", 0], ["3", 0])):
+        g[f"k{i}"] = {"class_type": "HaDeSMossKSampler", "inputs": {"model": m, "positive": ["4", 0], "negative": ["4", 1], "latent_image": ["5", 0],
+                      "seed": 7, "steps": 2, "cfg": 2.5, "sampler_name": "er_sde", "scheduler": "simple", "denoise": 1.0, "flow_shift": 0.0,
+                      "slg": "off", "vae": ["1", 2]}}
+        g[f"p{i}"] = {"class_type": "PreviewImage", "inputs": {"images": [f"k{i}", 1]}}
+    print("warm-up run:", await page.evaluate(UP_WARM_JS, g), flush=True)
+
+
+compare_video.prepare = cm_prepare
+
+
 SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "layout_test": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_test, LAYOUT_TEST_LINES),
           "layout_sentence": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_sentence, LAYOUT_SENTENCE_LINES),
@@ -3579,7 +3908,8 @@ SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "prompt_enhancer": (None, prompt_enhancer, PE_LINES),
           "lora_toolkit": (None, lora_toolkit, LT_LINES),
           "metadata": (None, metadata_video, MD_LINES),
-          "merge_save": (None, merge_save, MS_LINES)}
+          "merge_save": (None, merge_save, MS_LINES),
+          "compare": (None, compare_video, CM_LINES)}
 
 # spoken forms where the written caption reads badly aloud
 SPOKEN = {"DRAFT LAYOUT": "Draft layout"}

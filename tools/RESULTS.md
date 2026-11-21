@@ -976,6 +976,28 @@ Leave-out (the full LoRA without that group, reference: the full LoRA) agrees on
 - A fixed "style" / "identity" group preset would be wrong for some of these LoRAs, so LoRA Block Weight has none; measure a LoRA with
   `tools/moss_eval.py --mode lora --lora <name> --lora-model <model it was trained on>`.
 
+## Compare models and LoRAs (2026-11-21, for the seventh video tutorial)
+
+Clean ComfyUI on port 8189, `--use-sage-attention`, RTX 5090, the tutorials' fisherman (seed 1013). Scripts and sheets in
+`I:/HaDeS_MOSS/videos/compare/measure`; images in `comfy_output/cm_measure`.
+
+- **Models sheet** (MOSS Compare Sampler, SFT / Base / the sixth video's test recipe / Bulle d'Encre, 25 steps, CFG 2.5, er_sde / simple):
+  each column is the MOSS KSampler's image of the same model and settings (max pixel difference 0, 0, 1, 0). 66.2 / 67.7 s for the four;
+  the same four from four MOSS KSamplers 56.4 / 77.8 s (the models are swapped in and out of VRAM either way), so the sheet saves no time.
+  Peak VRAM about 31.4-31.7 GB of 32 either way; peak RAM of the ComfyUI process about 14.5 GB (21 GB on the first run after loading).
+  Before the 0.9.4 fix, Base and Bulle d'Encre (Load Diffusion Model) were labelled "unknown model"; now `mossImage_base_bf16` and
+  `HaDeS_MOSS_preview_beta`.
+- **LoRA sheet** (Bulle d'Encre's LoRA extracted again at rank 64 against its base rebuilt with the Block Merger, as in the fourth video:
+  252 MB, 97.0 % energy, 104 s; on that base through four Multi-LoRAs, 15 steps, CFG 2.5, euler / simple): labels `merge: mossImage_sft_bf16
+  + mossImage_base_bf16` (the Multi-LoRA switched off), `bulle_extracted x0.5`, `bulle_extracted x0.8`, `bulle_extracted`. Distance to
+  Bulle d'Encre at the same settings, over the distance between its seeds 1013 and 1014 (46.4 / 255): off 0.86, x0.5 0.74, x0.8 0.59,
+  x1.0 0.26. Strength is not linear: most of the look arrives between 0.8 and 1.0. 39.8 s for the four.
+- **Blind:** panels numbered 1-4 with no names; blind_seed 0 and 1 give different orders; the key (number -> slot and label) is in the info
+  output and in the PNG's `hades_moss_compare` chunk, not on the sheet. The footer keeps what every panel shares (the base model, seed,
+  steps, prompt).
+- **MOSS Compare Sheet** (two MOSS KSamplers on Base from Load Diffusion Model, seeds 1013 / 1014, labels empty): `mossImage_base_bf16 ·
+  seed 1013` and `· seed 1014`, read from the KSamplers' infos (0.9.4; before, the panels read `A` and `B`).
+
 ## Merge, save and telemetry: a test recipe (2026-11-21, for the sixth video tutorial)
 
 A recipe made only for the video, not a recommendation: SFT with 50 % of Base in layers 18-35 (Block Merger groups 18-23, 24-29 and

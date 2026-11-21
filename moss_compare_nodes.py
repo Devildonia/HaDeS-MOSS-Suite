@@ -16,7 +16,7 @@ from comfy.cli_args import args
 import comfy.samplers
 
 from .moss_common import format_info, parse_info_meta
-from .moss_sampler_nodes import DENOISE_CORE, SLG_MODES, HaDeSMossKSampler
+from .moss_sampler_nodes import DENOISE_CORE, SLG_MODES, HaDeSMossKSampler, model_files
 
 SLOTS = "ABCD"
 GAP, PAD = 16, 12
@@ -59,9 +59,19 @@ def auto_label(metas):
     return " + ".join(parts + turbo)
 
 
+def files_label(files):
+    """A label from model files found in the workflow: one file's name, or 'merge: a + b'."""
+    names = [stem(f["file"] if isinstance(f, dict) else f) for f in files or []]
+    return names[0] if len(names) == 1 else ("merge: " + " + ".join(names) if names else "")
+
+
 def model_of(metas):
     loader = next((m for m in metas if m.get("node") == "loader"), None)
-    return stem(loader.get("model_file") or loader.get("model", "")) if loader else ""
+    if loader:
+        return stem(loader.get("model_file") or loader.get("model", ""))
+    # no MOSS Loader in the branch (a core loader): the files the KSampler traced its model to (0.9.3)
+    ks = next((m for m in metas if m.get("node") == "ksampler" and m.get("model_files")), None)
+    return files_label(ks["model_files"]) if ks else ""
 
 
 def settings_of(metas):
@@ -351,7 +361,7 @@ class HaDeSMossCompareSampler:
                 "save": sheet["required"]["save"], "embed_workflow": sheet["required"]["embed_workflow"],
             },
             "optional": optional,
-            "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},
+            "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO", "unique_id": "UNIQUE_ID"},
         }
 
     RETURN_TYPES = ("IMAGE", "IMAGE", "STRING")
@@ -367,7 +377,7 @@ class HaDeSMossCompareSampler:
 
     def compare(self, model_A, positive, negative, latent_image, vae, seed, steps, cfg, sampler_name, scheduler, filename_prefix, save,
                 embed_workflow, prompt=None, extra_pnginfo=None, turbo=None, prompt_info=None, flow_shift=0.0, slg="off", footer="",
-                blind=False, blind_seed=0, **kw):
+                blind=False, blind_seed=0, unique_id=None, **kw):
         models = [(s, model_A if s == "A" else kw.get(f"model_{s}")) for s in SLOTS]
         models = [(s, m) for s, m in models if m is not None]
         extra = [m for m in [parse_info_meta(prompt_info)] if m and m.get("node") == "prompt_enhancer"] if prompt_info else []
@@ -376,6 +386,8 @@ class HaDeSMossCompareSampler:
             _, image, ks_info = HaDeSMossKSampler().sample(model, positive, negative, latent_image, seed, steps, cfg, sampler_name, scheduler,
                                                            1.0, flow_shift, slg, vae=vae, turbo=turbo, denoise_mode=DENOISE_CORE)
             loras, model_name, base = recipe_chain(model.get_attachment("hades_moss_recipe"))
+            if not model_name:  # a core loader (Load Diffusion Model ...): the file its cable comes from, through LoRA nodes and mergers
+                model_name = files_label(model_files(prompt, unique_id, f"model_{s}"))
             if not model_name and not (kw.get(f"label_{s}") or "").strip():
                 notes.append(f"model_{s} carries no HaDeS MOSS recipe (not from a MOSS Loader): name it with label_{s}")
             # LoRAs in the order they were applied, then the KSampler (its turbo goes last on the label), the model, the prompt

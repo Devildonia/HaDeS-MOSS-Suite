@@ -1,8 +1,8 @@
 {
- "id": "3508b696-7e0f-50c1-9565-c25660b73861",
+ "id": "5dd5e816-9148-51a3-abfb-e540ac674730",
  "revision": 0,
- "last_node_id": 11,
- "last_link_id": 28,
+ "last_node_id": 20,
+ "last_link_id": 49,
  "nodes": [
   {
    "id": 1,
@@ -51,32 +51,33 @@
      "name": "MODEL",
      "type": "MODEL",
      "links": [
-      2,
-      10,
-      15
+      1,
+      4,
+      14
      ]
     },
     {
      "name": "CLIP",
      "type": "CLIP",
      "links": [
-      1
+      3
      ]
     },
     {
      "name": "VAE",
      "type": "VAE",
      "links": [
-      6,
-      14,
-      19
+      8,
+      24,
+      35,
+      40
      ]
     },
     {
      "name": "info",
      "type": "STRING",
      "links": [
-      24
+      45
      ]
     }
    ]
@@ -115,30 +116,130 @@
      "name": "MODEL",
      "type": "MODEL",
      "links": [
-      8
+      2,
+      10,
+      15,
+      31,
+      36
      ]
     }
    ]
   },
   {
    "id": 3,
+   "type": "UNETLoader",
+   "pos": [
+    0,
+    520
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 2,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "HaDeS_MOSS_preview_beta.safetensors",
+    "default"
+   ],
+   "properties": {
+    "Node name for S&R": "UNETLoader",
+    "models": [
+     {
+      "name": "HaDeS_MOSS_preview_beta.safetensors",
+      "url": "https://huggingface.co/DeVilDoNia/Bulle-d-Encre/resolve/main/HaDeS_MOSS_preview_beta.safetensors",
+      "directory": "diffusion_models"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      12
+     ]
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "type": "HaDeSMossModelBlockMerger",
+   "pos": [
+    450,
+    380
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 4,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "model1",
+     "type": "MODEL",
+     "link": 1
+    },
+    {
+     "name": "model2",
+     "type": "MODEL",
+     "link": 2
+    }
+   ],
+   "widgets_values": [
+    0.0,
+    0.0,
+    0.0,
+    0.5,
+    0.5,
+    0.5,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    ""
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossModelBlockMerger"
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      11
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 5,
    "type": "HaDeSMossPromptEnhancer",
    "pos": [
     450,
-    0
+    -40
    ],
    "size": [
     440,
     100
    ],
    "flags": {},
-   "order": 3,
+   "order": 5,
    "mode": 0,
    "inputs": [
     {
      "name": "clip",
      "type": "CLIP",
-     "link": 1
+     "link": 3
     },
     {
      "name": "image",
@@ -154,7 +255,7 @@
     }
    ],
    "widgets_values": [
-    "Photograph of a street musician playing a battered accordion in a rainy square at dusk, warm shop lights, puddles.",
+    "Photograph of an old fisherman with a grey beard mending a net on a wooden dock at sunrise, his face and weathered hands in view, thick wool sweater, seagulls in the background.",
     "as written",
     1024,
     1024,
@@ -174,18 +275,20 @@
      "name": "positive",
      "type": "CONDITIONING",
      "links": [
-      3,
-      11,
-      16
+      5,
+      21,
+      32,
+      37
      ]
     },
     {
      "name": "negative",
      "type": "CONDITIONING",
      "links": [
-      4,
-      12,
-      17
+      6,
+      22,
+      33,
+      38
      ]
     },
     {
@@ -212,14 +315,15 @@
      "name": "info",
      "type": "STRING",
      "links": [
-      9,
-      25
+      13,
+      29,
+      46
      ]
     }
    ]
   },
   {
-   "id": 4,
+   "id": 6,
    "type": "HaDeSMossLatent",
    "pos": [
     950,
@@ -230,7 +334,7 @@
     100
    ],
    "flags": {},
-   "order": 2,
+   "order": 3,
    "mode": 0,
    "inputs": [
     {
@@ -246,7 +350,7 @@
     1024,
     1024,
     1,
-    1000,
+    1013,
     "fixed"
    ],
    "properties": {
@@ -257,9 +361,10 @@
      "name": "latent",
      "type": "LATENT",
      "links": [
-      5,
-      13,
-      18
+      7,
+      23,
+      34,
+      39
      ]
     },
     {
@@ -276,20 +381,21 @@
      "name": "info",
      "type": "STRING",
      "links": [
-      26
+      47
      ]
     },
     {
      "name": "seed",
      "type": "INT",
      "links": [
-      7
+      9,
+      25
      ]
     }
    ]
   },
   {
-   "id": 5,
+   "id": 7,
    "type": "HaDeSMossCompareSampler",
    "pos": [
     1400,
@@ -300,38 +406,38 @@
     100
    ],
    "flags": {},
-   "order": 4,
+   "order": 7,
    "mode": 0,
    "inputs": [
     {
      "name": "model_A",
      "type": "MODEL",
-     "link": 2
+     "link": 4
     },
     {
      "name": "positive",
      "type": "CONDITIONING",
-     "link": 3
+     "link": 5
     },
     {
      "name": "negative",
      "type": "CONDITIONING",
-     "link": 4
+     "link": 6
     },
     {
      "name": "latent_image",
      "type": "LATENT",
-     "link": 5
+     "link": 7
     },
     {
      "name": "vae",
      "type": "VAE",
-     "link": 6
+     "link": 8
     },
     {
      "name": "seed",
      "type": "INT",
-     "link": 7,
+     "link": 9,
      "widget": {
       "name": "seed"
      }
@@ -339,19 +445,19 @@
     {
      "name": "model_B",
      "type": "MODEL",
-     "link": 8,
+     "link": 10,
      "shape": 7
     },
     {
      "name": "model_C",
      "type": "MODEL",
-     "link": null,
+     "link": 11,
      "shape": 7
     },
     {
      "name": "model_D",
      "type": "MODEL",
-     "link": null,
+     "link": 12,
      "shape": 7
     },
     {
@@ -363,7 +469,7 @@
     {
      "name": "prompt_info",
      "type": "STRING",
-     "link": 9,
+     "link": 13,
      "shape": 7
     }
    ],
@@ -374,7 +480,7 @@
     2.5,
     "er_sde",
     "simple",
-    "MOSS/compare/HaDeS_MOSS_compare",
+    "MOSS/compare/HaDeS_MOSS_models",
     true,
     true,
     0.0,
@@ -405,102 +511,17 @@
      "name": "info",
      "type": "STRING",
      "links": [
-      27
+      48
      ]
     }
    ]
   },
   {
-   "id": 6,
-   "type": "HaDeSMossKSampler",
+   "id": 8,
+   "type": "HaDeSMossModelBlockMerger",
    "pos": [
-    950,
-    900
-   ],
-   "size": [
-    380,
-    100
-   ],
-   "flags": {},
-   "order": 5,
-   "mode": 2,
-   "inputs": [
-    {
-     "name": "model",
-     "type": "MODEL",
-     "link": 10
-    },
-    {
-     "name": "positive",
-     "type": "CONDITIONING",
-     "link": 11
-    },
-    {
-     "name": "negative",
-     "type": "CONDITIONING",
-     "link": 12
-    },
-    {
-     "name": "latent_image",
-     "type": "LATENT",
-     "link": 13
-    },
-    {
-     "name": "vae",
-     "type": "VAE",
-     "link": 14,
-     "shape": 7
-    },
-    {
-     "name": "turbo",
-     "type": "MOSS_TURBO",
-     "link": null,
-     "shape": 7
-    }
-   ],
-   "widgets_values": [
-    1000,
-    "fixed",
-    25,
-    2.5,
-    "er_sde",
-    "simple",
-    1.0,
-    0.0,
-    "off",
-    "steps / denoise (core)"
-   ],
-   "properties": {
-    "Node name for S&R": "HaDeSMossKSampler"
-   },
-   "outputs": [
-    {
-     "name": "latent",
-     "type": "LATENT",
-     "links": []
-    },
-    {
-     "name": "image",
-     "type": "IMAGE",
-     "links": [
-      20
-     ]
-    },
-    {
-     "name": "info",
-     "type": "STRING",
-     "links": [
-      22
-     ]
-    }
-   ]
-  },
-  {
-   "id": 7,
-   "type": "HaDeSMossKSampler",
-   "pos": [
-    1400,
-    900
+    0,
+    1000
    ],
    "size": [
     380,
@@ -511,29 +532,416 @@
    "mode": 2,
    "inputs": [
     {
-     "name": "model",
+     "name": "model1",
+     "type": "MODEL",
+     "link": 14
+    },
+    {
+     "name": "model2",
      "type": "MODEL",
      "link": 15
+    }
+   ],
+   "widgets_values": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.3,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    ""
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossModelBlockMerger"
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      16,
+      17,
+      18,
+      19
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "type": "HaDeSMossMultiLora",
+   "pos": [
+    450,
+    1000
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 8,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 16
+    }
+   ],
+   "widgets_values": [
+    false,
+    "[{\"name\": \"bulle_extracted.safetensors\", \"on\": true, \"strength\": 1.0}]"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossMultiLora"
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      20
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "type": "HaDeSMossMultiLora",
+   "pos": [
+    450,
+    1320
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 9,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 17
+    }
+   ],
+   "widgets_values": [
+    true,
+    "[{\"name\": \"bulle_extracted.safetensors\", \"on\": true, \"strength\": 0.5}]"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossMultiLora"
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      26
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "type": "HaDeSMossMultiLora",
+   "pos": [
+    900,
+    1000
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 10,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 18
+    }
+   ],
+   "widgets_values": [
+    true,
+    "[{\"name\": \"bulle_extracted.safetensors\", \"on\": true, \"strength\": 0.8}]"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossMultiLora"
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      27
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "type": "HaDeSMossMultiLora",
+   "pos": [
+    900,
+    1320
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 11,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 19
+    }
+   ],
+   "widgets_values": [
+    true,
+    "[{\"name\": \"bulle_extracted.safetensors\", \"on\": true, \"strength\": 1.0}]"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossMultiLora"
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      28
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "type": "HaDeSMossCompareSampler",
+   "pos": [
+    1400,
+    1000
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 14,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "model_A",
+     "type": "MODEL",
+     "link": 20
     },
     {
      "name": "positive",
      "type": "CONDITIONING",
-     "link": 16
+     "link": 21
     },
     {
      "name": "negative",
      "type": "CONDITIONING",
-     "link": 17
+     "link": 22
     },
     {
      "name": "latent_image",
      "type": "LATENT",
-     "link": 18
+     "link": 23
     },
     {
      "name": "vae",
      "type": "VAE",
-     "link": 19,
+     "link": 24
+    },
+    {
+     "name": "seed",
+     "type": "INT",
+     "link": 25,
+     "widget": {
+      "name": "seed"
+     }
+    },
+    {
+     "name": "model_B",
+     "type": "MODEL",
+     "link": 26,
+     "shape": 7
+    },
+    {
+     "name": "model_C",
+     "type": "MODEL",
+     "link": 27,
+     "shape": 7
+    },
+    {
+     "name": "model_D",
+     "type": "MODEL",
+     "link": 28,
+     "shape": 7
+    },
+    {
+     "name": "turbo",
+     "type": "MOSS_TURBO",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "prompt_info",
+     "type": "STRING",
+     "link": 29,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    0,
+    "fixed",
+    15,
+    2.5,
+    "euler",
+    "simple",
+    "MOSS/compare/HaDeS_MOSS_loras",
+    true,
+    true,
+    0.0,
+    "off",
+    "",
+    "",
+    "",
+    "",
+    false,
+    0,
+    ""
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossCompareSampler"
+   },
+   "outputs": [
+    {
+     "name": "sheet",
+     "type": "IMAGE",
+     "links": []
+    },
+    {
+     "name": "images",
+     "type": "IMAGE",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      30
+     ]
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "type": "PreviewAny",
+   "pos": [
+    1850,
+    1000
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 17,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "source",
+     "type": "*",
+     "link": 30
+    }
+   ],
+   "widgets_values": [],
+   "properties": {
+    "Node name for S&R": "PreviewAny"
+   },
+   "outputs": [
+    {
+     "name": "STRING",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "type": "HaDeSMossKSampler",
+   "pos": [
+    950,
+    1900
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 12,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 31
+    },
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "link": 32
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "link": 33
+    },
+    {
+     "name": "latent_image",
+     "type": "LATENT",
+     "link": 34
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": 35,
      "shape": 7
     },
     {
@@ -544,7 +952,7 @@
     }
    ],
    "widgets_values": [
-    1001,
+    1013,
     "fixed",
     25,
     2.5,
@@ -568,42 +976,127 @@
      "name": "image",
      "type": "IMAGE",
      "links": [
-      21
+      41
      ]
     },
     {
      "name": "info",
      "type": "STRING",
      "links": [
-      23
+      43
      ]
     }
    ]
   },
   {
-   "id": 8,
-   "type": "HaDeSMossCompareSheet",
+   "id": 16,
+   "type": "HaDeSMossKSampler",
    "pos": [
-    1850,
-    900
+    1400,
+    1900
    ],
    "size": [
     380,
     100
    ],
    "flags": {},
-   "order": 7,
+   "order": 13,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 36
+    },
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "link": 37
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "link": 38
+    },
+    {
+     "name": "latent_image",
+     "type": "LATENT",
+     "link": 39
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": 40,
+     "shape": 7
+    },
+    {
+     "name": "turbo",
+     "type": "MOSS_TURBO",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    1014,
+    "fixed",
+    25,
+    2.5,
+    "er_sde",
+    "simple",
+    1.0,
+    0.0,
+    "off",
+    "steps / denoise (core)"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossKSampler"
+   },
+   "outputs": [
+    {
+     "name": "latent",
+     "type": "LATENT",
+     "links": []
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "links": [
+      42
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      44
+     ]
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "type": "HaDeSMossCompareSheet",
+   "pos": [
+    1850,
+    1900
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 15,
    "mode": 2,
    "inputs": [
     {
      "name": "image_A",
      "type": "IMAGE",
-     "link": 20
+     "link": 41
     },
     {
      "name": "image_B",
      "type": "IMAGE",
-     "link": 21,
+     "link": 42,
      "shape": 7
     },
     {
@@ -621,13 +1114,13 @@
     {
      "name": "info_A",
      "type": "STRING",
-     "link": 22,
+     "link": 43,
      "shape": 7
     },
     {
      "name": "info_B",
      "type": "STRING",
-     "link": 23,
+     "link": 44,
      "shape": 7
     },
     {
@@ -647,8 +1140,8 @@
     "MOSS/compare/HaDeS_MOSS_sheet",
     true,
     true,
-    "seed 1000",
-    "seed 1001",
+    "",
+    "",
     "",
     "",
     false,
@@ -672,7 +1165,7 @@
    ]
   },
   {
-   "id": 9,
+   "id": 18,
    "type": "HaDeSMossSuiteTelemetry",
    "pos": [
     1850,
@@ -683,31 +1176,31 @@
     100
    ],
    "flags": {},
-   "order": 8,
+   "order": 16,
    "mode": 0,
    "inputs": [
     {
      "name": "info_1",
      "type": "STRING",
-     "link": 24,
+     "link": 45,
      "shape": 7
     },
     {
      "name": "info_2",
      "type": "STRING",
-     "link": 25,
+     "link": 46,
      "shape": 7
     },
     {
      "name": "info_3",
      "type": "STRING",
-     "link": 26,
+     "link": 47,
      "shape": 7
     },
     {
      "name": "info_4",
      "type": "STRING",
-     "link": 27,
+     "link": 48,
      "shape": 7
     },
     {
@@ -746,7 +1239,7 @@
      "name": "report",
      "type": "STRING",
      "links": [
-      28
+      49
      ]
     },
     {
@@ -767,7 +1260,7 @@
    ]
   },
   {
-   "id": 10,
+   "id": 19,
    "type": "PreviewAny",
    "pos": [
     2300,
@@ -778,13 +1271,13 @@
     100
    ],
    "flags": {},
-   "order": 9,
+   "order": 18,
    "mode": 0,
    "inputs": [
     {
      "name": "source",
      "type": "*",
-     "link": 28
+     "link": 49
     }
    ],
    "widgets_values": [],
@@ -800,11 +1293,11 @@
    ]
   },
   {
-   "id": 11,
+   "id": 20,
    "type": "Note",
    "pos": [
     0,
-    -560
+    -620
    ],
    "size": [
     800,
@@ -816,7 +1309,7 @@
    "inputs": [],
    "outputs": [],
    "widgets_values": [
-    "HaDeS MOSS Suite - Compare Models\n\n1. MOSS Compare Sampler (on): SFT (A) against Base (B) with the same prompt, latent, seed and settings,\n   saved as one sheet. Plug up to four models into model_A..model_D. Each column is labelled from what\n   the model carries (its file, merge or LoRAs), not from the wiring: a Multi-LoRA switched off shows the bare model.\n   A MOSS Turbo LoRA on the turbo input applies to every column. blind shuffles and numbers the columns;\n   the key goes to info and the PNG, never onto the sheet.\n\n2. MOSS Compare Sheet (muted, right-click > Mode > Always to use): puts any images side by side,\n   here two seeds of one model, each labelled from its sampler's info or from label_A..label_D."
+    "HaDeS MOSS Suite - Compare Models (the seventh video tutorial)\n\n1. MOSS Compare Sampler: SFT, Base, the sixth video's TEST recipe and Bulle d'Encre with the same prompt,\n   latent, seed and settings, on one sheet. Labels come from what each model carries (its file, a merge, its\n   LoRAs), the footer from what they share. Each column is the MOSS KSampler's image of that model; it is not\n   faster than four KSamplers and needs no more memory (RESULTS: 66-68 s for the four, ~31.7 GB VRAM).\n   A MOSS Turbo LoRA on the turbo input applies to every column.\n\n2. (muted) A LoRA at four strengths: Bulle d'Encre's LoRA (extract it first: LoRA Toolkit example, rank 64,\n   export_filename bulle_extracted) on its base, off / 0.5 / 0.8 / 1.0, 15 steps, euler. Against Bulle d'Encre\n   itself (1 = another seed): off 0.86, 0.5 0.74, 0.8 0.59, 1.0 0.26: strength is not linear.\n   blind: panels shuffled and numbered; the key is in info and in the PNG, never on the sheet;\n   blind_seed gives a new order of the same images.\n\n3. (muted) MOSS Compare Sheet: any images side by side, here two seeds of Base, labelled from each\n   KSampler's info. To use a muted group: select it, Ctrl+M."
    ],
    "properties": {}
   }
@@ -825,224 +1318,392 @@
   [
    1,
    1,
+   0,
+   4,
+   0,
+   "MODEL"
+  ],
+  [
+   2,
+   2,
+   0,
+   4,
    1,
+   "MODEL"
+  ],
+  [
    3,
+   1,
+   1,
+   5,
    0,
    "CLIP"
   ],
   [
-   2,
+   4,
    1,
    0,
-   5,
+   7,
    0,
    "MODEL"
   ],
   [
-   3,
-   3,
-   0,
    5,
+   5,
+   0,
+   7,
    1,
    "CONDITIONING"
   ],
   [
-   4,
-   3,
-   1,
+   6,
    5,
+   1,
+   7,
    2,
    "CONDITIONING"
   ],
   [
-   5,
-   4,
+   7,
+   6,
    0,
-   5,
+   7,
    3,
    "LATENT"
   ],
   [
-   6,
+   8,
    1,
    2,
-   5,
+   7,
    4,
    "VAE"
   ],
   [
+   9,
+   6,
+   4,
    7,
-   4,
-   4,
-   5,
    5,
    "INT"
   ],
   [
-   8,
+   10,
    2,
    0,
-   5,
+   7,
    6,
-   "MODEL"
-  ],
-  [
-   9,
-   3,
-   6,
-   5,
-   10,
-   "STRING"
-  ],
-  [
-   10,
-   1,
-   0,
-   6,
-   0,
    "MODEL"
   ],
   [
    11,
-   3,
+   4,
    0,
-   6,
-   1,
-   "CONDITIONING"
+   7,
+   7,
+   "MODEL"
   ],
   [
    12,
    3,
-   1,
-   6,
-   2,
-   "CONDITIONING"
+   0,
+   7,
+   8,
+   "MODEL"
   ],
   [
    13,
-   4,
-   0,
+   5,
    6,
-   3,
-   "LATENT"
+   7,
+   10,
+   "STRING"
   ],
   [
    14,
    1,
-   2,
-   6,
-   4,
-   "VAE"
-  ],
-  [
-   15,
-   1,
    0,
-   7,
+   8,
    0,
    "MODEL"
   ],
   [
-   16,
-   3,
+   15,
+   2,
    0,
-   7,
+   8,
+   1,
+   "MODEL"
+  ],
+  [
+   16,
+   8,
+   0,
+   9,
+   0,
+   "MODEL"
+  ],
+  [
+   17,
+   8,
+   0,
+   10,
+   0,
+   "MODEL"
+  ],
+  [
+   18,
+   8,
+   0,
+   11,
+   0,
+   "MODEL"
+  ],
+  [
+   19,
+   8,
+   0,
+   12,
+   0,
+   "MODEL"
+  ],
+  [
+   20,
+   9,
+   0,
+   13,
+   0,
+   "MODEL"
+  ],
+  [
+   21,
+   5,
+   0,
+   13,
    1,
    "CONDITIONING"
   ],
   [
-   17,
-   3,
+   22,
+   5,
    1,
-   7,
+   13,
    2,
    "CONDITIONING"
   ],
   [
-   18,
-   4,
+   23,
+   6,
    0,
-   7,
+   13,
    3,
    "LATENT"
   ],
   [
-   19,
+   24,
    1,
    2,
-   7,
+   13,
    4,
    "VAE"
   ],
   [
-   20,
-   6,
-   1,
-   8,
-   0,
-   "IMAGE"
-  ],
-  [
-   21,
-   7,
-   1,
-   8,
-   1,
-   "IMAGE"
-  ],
-  [
-   22,
-   6,
-   2,
-   8,
-   4,
-   "STRING"
-  ],
-  [
-   23,
-   7,
-   2,
-   8,
-   5,
-   "STRING"
-  ],
-  [
-   24,
-   1,
-   3,
-   9,
-   0,
-   "STRING"
-  ],
-  [
    25,
-   3,
    6,
-   9,
-   1,
-   "STRING"
+   4,
+   13,
+   5,
+   "INT"
   ],
   [
    26,
-   4,
-   3,
-   9,
-   2,
-   "STRING"
+   10,
+   0,
+   13,
+   6,
+   "MODEL"
   ],
   [
    27,
+   11,
+   0,
+   13,
+   7,
+   "MODEL"
+  ],
+  [
+   28,
+   12,
+   0,
+   13,
+   8,
+   "MODEL"
+  ],
+  [
+   29,
    5,
+   6,
+   13,
+   10,
+   "STRING"
+  ],
+  [
+   30,
+   13,
    2,
-   9,
+   14,
+   0,
+   "STRING"
+  ],
+  [
+   31,
+   2,
+   0,
+   15,
+   0,
+   "MODEL"
+  ],
+  [
+   32,
+   5,
+   0,
+   15,
+   1,
+   "CONDITIONING"
+  ],
+  [
+   33,
+   5,
+   1,
+   15,
+   2,
+   "CONDITIONING"
+  ],
+  [
+   34,
+   6,
+   0,
+   15,
+   3,
+   "LATENT"
+  ],
+  [
+   35,
+   1,
+   2,
+   15,
+   4,
+   "VAE"
+  ],
+  [
+   36,
+   2,
+   0,
+   16,
+   0,
+   "MODEL"
+  ],
+  [
+   37,
+   5,
+   0,
+   16,
+   1,
+   "CONDITIONING"
+  ],
+  [
+   38,
+   5,
+   1,
+   16,
+   2,
+   "CONDITIONING"
+  ],
+  [
+   39,
+   6,
+   0,
+   16,
+   3,
+   "LATENT"
+  ],
+  [
+   40,
+   1,
+   2,
+   16,
+   4,
+   "VAE"
+  ],
+  [
+   41,
+   15,
+   1,
+   17,
+   0,
+   "IMAGE"
+  ],
+  [
+   42,
+   16,
+   1,
+   17,
+   1,
+   "IMAGE"
+  ],
+  [
+   43,
+   15,
+   2,
+   17,
+   4,
+   "STRING"
+  ],
+  [
+   44,
+   16,
+   2,
+   17,
+   5,
+   "STRING"
+  ],
+  [
+   45,
+   1,
+   3,
+   18,
+   0,
+   "STRING"
+  ],
+  [
+   46,
+   5,
+   6,
+   18,
+   1,
+   "STRING"
+  ],
+  [
+   47,
+   6,
+   3,
+   18,
+   2,
+   "STRING"
+  ],
+  [
+   48,
+   7,
+   2,
+   18,
    3,
    "STRING"
   ],
   [
-   28,
-   9,
+   49,
+   18,
    0,
-   10,
+   19,
    0,
    "STRING"
   ]
@@ -1050,12 +1711,12 @@
  "groups": [
   {
    "id": 1,
-   "title": "1. Compare Sampler",
+   "title": "1. Four models",
    "bounding": [
     -30,
-    -80,
+    -120,
     2740,
-    1170
+    1210
    ],
    "color": "#335533",
    "font_size": 24,
@@ -1063,14 +1724,27 @@
   },
   {
    "id": 2,
-   "title": "2. Compare Sheet (turn on to use)",
+   "title": "2. One LoRA at four strengths (muted)",
+   "bounding": [
+    -30,
+    920,
+    2290,
+    1170
+   ],
+   "color": "#553355",
+   "font_size": 24,
+   "flags": {}
+  },
+  {
+   "id": 3,
+   "title": "3. Compare Sheet (muted)",
    "bounding": [
     920,
-    820,
+    1820,
     1340,
     840
    ],
-   "color": "#553355",
+   "color": "#335555",
    "font_size": 24,
    "flags": {}
   }

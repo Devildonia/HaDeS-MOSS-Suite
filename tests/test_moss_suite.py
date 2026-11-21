@@ -267,6 +267,21 @@ class TestMergers(unittest.TestCase):
         self.assertEqual(meta["sources"]["model_1"]["layer_ratios"], ratios)
         self.assertEqual(meta["sources"]["base_model"]["model_file"], "source_a.safetensors")
 
+    def test_compare_labels_name_models_from_core_loaders(self):
+        """A model from Load Diffusion Model was labelled 'unknown model' on the Compare Sampler's sheet; its file is found in the
+        workflow (through LoRA nodes and mergers), and a Compare Sheet branch with only a KSampler info uses its model files."""
+        cmp = importlib.import_module(f"{PACK}.moss_compare_nodes")
+        self.assertEqual(cmp.files_label([{"file": "x\\base.safetensors", "folder": "diffusion_models"}]), "base")
+        self.assertEqual(cmp.files_label(["a.safetensors", "b.safetensors"]), "merge: a + b")
+        self.assertEqual(cmp.files_label([]), "")
+        self.assertEqual(cmp.model_of([{"node": "ksampler", "model_files": [{"file": "base.safetensors", "folder": "diffusion_models"}]}]), "base")
+        self.assertEqual(cmp.model_of([{"node": "loader", "model_file": "sft.safetensors"},
+                                       {"node": "ksampler", "model_files": [{"file": "base.safetensors"}]}]), "sft")
+        graph = {"1": {"class_type": "UNETLoader", "inputs": {"unet_name": "base.safetensors", "weight_dtype": "default"}},
+                 "2": {"class_type": "HaDeSMossMultiLora", "inputs": {"model": ["1", 0], "enabled": True, "loras": "[]"}},
+                 "3": {"class_type": "HaDeSMossCompareSampler", "inputs": {"model_A": ["1", 0], "model_B": ["2", 0]}}}
+        self.assertEqual(cmp.files_label(cmp.model_files(graph, "3", "model_B")), "base")
+
     def test_merger_names_models_from_core_loaders(self):
         """A model from a core loader carries no recipe: the merger walks the workflow to its file, so the saved recipe names it
         (Base through UNETLoader was missing from a saved SFT x Base merge); what a model carries still comes first."""

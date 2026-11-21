@@ -281,34 +281,64 @@ EXAMPLES = {
                     "enh": (1550, 600), "ks": (2050, 0), "check": (2050, 560), "save": (2500, 0), "tel": (2500, 480), "report": (2950, 480)},
     },
     "HaDeS MOSS Suite - Compare Models": {
+        # the seventh video tutorial (tools/moss_video.py compare): four models on one sheet, a LoRA at four strengths, blind mode, the
+        # Compare Sheet; measurements in tools/RESULTS.md, "Compare models and LoRAs"
         **loader(),  # SFT, its text encoder and VAE
         "base": ("UNETLoader", {"unet_name": BASE, "weight_dtype": "default"}),
-        "enh": prompt("Photograph of a street musician playing a battered accordion in a rainy square at dusk, warm shop lights, puddles."),
-        "latent": latent(),
-        # 1. MOSS Compare Sampler: every model sampled with the same prompt, latent, seed and settings, saved as one labelled sheet
-        "cmp": ("HaDeSMossCompareSampler", {"model_A": ("load", 0), "model_B": ("base", 0), "positive": ("enh", 0), "negative": ("enh", 1),
-                                            "latent_image": ("latent", 0), "vae": ("load", 2), "seed": ("latent", 4), "steps": 25, "cfg": 2.5,
-                                            "sampler_name": "er_sde", "scheduler": "simple", "filename_prefix": "MOSS/compare/HaDeS_MOSS_compare",
-                                            "save": True, "embed_workflow": True, "prompt_info": ("enh", 6), "blind": False, "blind_seed": 0}),
-        # 2. MOSS Compare Sheet (muted): any images side by side, here two seeds of one model, labelled from each sampler's info
-        "ks_a": ksampler(("load", 0), ("latent", 0), seed=1000) + (MUTED,),
-        "ks_b": ksampler(("load", 0), ("latent", 0), seed=1001) + (MUTED,),
+        "bulle": ("UNETLoader", {"unet_name": BULLE, "weight_dtype": "default"}),
+        # the sixth video's TEST recipe (not a recommendation): SFT with half of Base in layers 18-35
+        "rec": ("HaDeSMossModelBlockMerger", {"model1": ("load", 0), "model2": ("base", 0), "layers_00_05": 0.0, "layers_06_11": 0.0, "layers_12_17": 0.0,
+                                              "layers_18_23": 0.5, "layers_24_29": 0.5, "layers_30_35": 0.5, "layers_36_41": 0.0, "text_embedder": 0.0,
+                                              "time_modulation": 0.0, "io": 0.0, "recipe_override": ""}),
+        "enh": prompt("Photograph of an old fisherman with a grey beard mending a net on a wooden dock at sunrise, his face and weathered "
+                      "hands in view, thick wool sweater, seagulls in the background."),
+        "latent": latent(seed=1013),
+        # 1. four models, the same prompt, latent, seed and settings, one labelled sheet
+        "cmp": ("HaDeSMossCompareSampler", {"model_A": ("load", 0), "model_B": ("base", 0), "model_C": ("rec", 0), "model_D": ("bulle", 0),
+                                            "positive": ("enh", 0), "negative": ("enh", 1), "latent_image": ("latent", 0), "vae": ("load", 2),
+                                            "seed": ("latent", 4), "steps": 25, "cfg": 2.5, "sampler_name": "er_sde", "scheduler": "simple",
+                                            "filename_prefix": "MOSS/compare/HaDeS_MOSS_models", "save": True, "embed_workflow": True,
+                                            "prompt_info": ("enh", 6), "blind": False, "blind_seed": 0}),
+        # 2. (muted) one LoRA at four strengths: Bulle d'Encre's LoRA, extracted as in the LoRA Toolkit example, on its base
+        "bb": ("HaDeSMossModelBlockMerger", {"model1": ("load", 0), "model2": ("base", 0), "layers_00_05": 0.0, "layers_06_11": 0.0, "layers_12_17": 0.0,
+                                             "layers_18_23": 0.0, "layers_24_29": 0.3, "layers_30_35": 0.0, "layers_36_41": 0.0, "text_embedder": 0.0,
+                                             "time_modulation": 0.0, "io": 0.0, "recipe_override": ""}, MUTED),
+        **{f"ml{i}": ("HaDeSMossMultiLora", {"model": ("bb", 0), "enabled": st is not None, "loras": json.dumps(
+            [{"name": "bulle_extracted.safetensors", "on": True, "strength": st if st is not None else 1.0}])}, MUTED)
+           for i, st in enumerate((None, 0.5, 0.8, 1.0))},
+        "cmp2": ("HaDeSMossCompareSampler", {"model_A": ("ml0", 0), "model_B": ("ml1", 0), "model_C": ("ml2", 0), "model_D": ("ml3", 0),
+                                             "positive": ("enh", 0), "negative": ("enh", 1), "latent_image": ("latent", 0), "vae": ("load", 2),
+                                             "seed": ("latent", 4), "steps": 15, "cfg": 2.5, "sampler_name": "euler", "scheduler": "simple",
+                                             "filename_prefix": "MOSS/compare/HaDeS_MOSS_loras", "save": True, "embed_workflow": True,
+                                             "prompt_info": ("enh", 6), "blind": False, "blind_seed": 0}, MUTED),
+        "cmp2_info": ("PreviewAny", {"source": ("cmp2", 2)}, MUTED),
+        # 3. (muted) MOSS Compare Sheet: any images side by side, here two seeds of Base, labelled from each KSampler's info
+        "ks_a": ksampler(("base", 0), ("latent", 0), seed=1013) + (MUTED,),
+        "ks_b": ksampler(("base", 0), ("latent", 0), seed=1014) + (MUTED,),
         "sheet": ("HaDeSMossCompareSheet", {"image_A": ("ks_a", 1), "image_B": ("ks_b", 1), "info_A": ("ks_a", 2), "info_B": ("ks_b", 2),
-                                            "label_A": "seed 1000", "label_B": "seed 1001", "filename_prefix": "MOSS/compare/HaDeS_MOSS_sheet",
+                                            "label_A": "", "label_B": "", "filename_prefix": "MOSS/compare/HaDeS_MOSS_sheet",
                                             "save": True, "embed_workflow": True, "blind": False, "blind_seed": 0}, MUTED),
         **telemetry(("load", 3), ("enh", 6), ("latent", 3), ("cmp", 2)),
-        "note": ("Note", {"text": "HaDeS MOSS Suite - Compare Models\n\n"
-                                  "1. MOSS Compare Sampler (on): SFT (A) against Base (B) with the same prompt, latent, seed and settings,\n"
-                                  "   saved as one sheet. Plug up to four models into model_A..model_D. Each column is labelled from what\n"
-                                  "   the model carries (its file, merge or LoRAs), not from the wiring: a Multi-LoRA switched off shows the bare model.\n"
-                                  "   A MOSS Turbo LoRA on the turbo input applies to every column. blind shuffles and numbers the columns;\n"
-                                  "   the key goes to info and the PNG, never onto the sheet.\n\n"
-                                  "2. MOSS Compare Sheet (muted, right-click > Mode > Always to use): puts any images side by side,\n"
-                                  "   here two seeds of one model, each labelled from its sampler's info or from label_A..label_D."}),
-        "_layout": {"note": (0, -560), "load": (0, 0), "base": (0, 380), "enh": (450, 0), "latent": (950, 0), "cmp": (1400, 0),
-                    "tel": (1850, 0), "report": (2300, 0), "ks_a": (950, 900), "ks_b": (1400, 900), "sheet": (1850, 900)},
-        "_groups": [("1. Compare Sampler", ["load", "base", "enh", "latent", "cmp", "tel", "report"], "#335533"),
-                    ("2. Compare Sheet (turn on to use)", ["ks_a", "ks_b", "sheet"], "#553355")],
+        "note": ("Note", {"text": "HaDeS MOSS Suite - Compare Models (the seventh video tutorial)\n\n"
+                                  "1. MOSS Compare Sampler: SFT, Base, the sixth video's TEST recipe and Bulle d'Encre with the same prompt,\n"
+                                  "   latent, seed and settings, on one sheet. Labels come from what each model carries (its file, a merge, its\n"
+                                  "   LoRAs), the footer from what they share. Each column is the MOSS KSampler's image of that model; it is not\n"
+                                  "   faster than four KSamplers and needs no more memory (RESULTS: 66-68 s for the four, ~31.7 GB VRAM).\n"
+                                  "   A MOSS Turbo LoRA on the turbo input applies to every column.\n\n"
+                                  "2. (muted) A LoRA at four strengths: Bulle d'Encre's LoRA (extract it first: LoRA Toolkit example, rank 64,\n"
+                                  "   export_filename bulle_extracted) on its base, off / 0.5 / 0.8 / 1.0, 15 steps, euler. Against Bulle d'Encre\n"
+                                  "   itself (1 = another seed): off 0.86, 0.5 0.74, 0.8 0.59, 1.0 0.26: strength is not linear.\n"
+                                  "   blind: panels shuffled and numbered; the key is in info and in the PNG, never on the sheet;\n"
+                                  "   blind_seed gives a new order of the same images.\n\n"
+                                  "3. (muted) MOSS Compare Sheet: any images side by side, here two seeds of Base, labelled from each\n"
+                                  "   KSampler's info. To use a muted group: select it, Ctrl+M."}),
+        "_layout": {"note": (0, -620), "load": (0, 0), "base": (0, 380), "bulle": (0, 520), "rec": (450, 380), "enh": (450, -40),
+                    "latent": (950, 0), "cmp": (1400, 0), "tel": (1850, 0), "report": (2300, 0),
+                    "bb": (0, 1000), "ml0": (450, 1000), "ml1": (450, 1320), "ml2": (900, 1000), "ml3": (900, 1320), "cmp2": (1400, 1000),
+                    "cmp2_info": (1850, 1000), "ks_a": (950, 1900), "ks_b": (1400, 1900), "sheet": (1850, 1900)},
+        "_groups": [("1. Four models", ["load", "base", "bulle", "rec", "enh", "latent", "cmp", "tel", "report"], "#335533"),
+                    ("2. One LoRA at four strengths (muted)", ["bb", "ml0", "ml1", "ml2", "ml3", "cmp2", "cmp2_info"], "#553355"),
+                    ("3. Compare Sheet (muted)", ["ks_a", "ks_b", "sheet"], "#335555")],
     },
     "HaDeS MOSS Suite - Turbo": {
         **loader(),
