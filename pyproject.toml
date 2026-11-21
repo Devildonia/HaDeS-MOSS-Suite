@@ -1,7 +1,7 @@
 [project]
 name = "hades-moss-suite"
 description = "ComfyUI nodes for the MOSS-Image model family: a one-node loader, block and multi-model mergers (TIES, DARE, Model Stock, SLERP), a model saver (bf16 with stochastic rounding, float32, int8 ConvRot) that stores the recipe, a metadata reader, a multi-LoRA loader with per-layer-group strength and LoRA tools (extractor, merger, resize), color / depth control, a prompt enhancer that writes captions, detailed or random prompts, layouts or edit references with the model's own text encoder, a layout editor that drafts the boxes from a sentence before generating, a KSampler with metadata and a turbo input for our 4- and 8-step LoRAs, an image saver with A1111 metadata for Civitai, a compare sampler and compare sheet for up to four models or LoRAs (blind mode too), a text check that reads the text in an image, and a telemetry node."
-version = "0.9.2"
+version = "0.9.3"
 authors = [
     { name = "Devildonia" }
 ]

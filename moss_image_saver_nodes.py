@@ -52,20 +52,42 @@ def stem(name):
     return os.path.splitext(os.path.basename(str(name)))[0]
 
 
-def resources(metas):
-    """[(kind, folder, file name, strength)] the image was made with: the diffusion model (MOSS Loader) and every LoRA
-    (Multi-LoRA rows, LoRA Block Weight, the KSampler's turbo input)."""
-    out = []
+def sampled_model(metas):
+    """(kind, folder, file) of the model the first KSampler sampled with: the file its model input was walked up to ("model"),
+    or a merge made in the workflow ("merge", None, "a + b"); else the first MOSS Loader's file (workflows saved before the
+    KSampler recorded it, or a model it could not trace); None when nothing names it."""
+    ks = first(metas, "ksampler") or {}
+    files = ks.get("model_files") or []
+    if len(files) == 1:
+        return ("model", files[0].get("folder", "diffusion_models"), files[0]["file"])
+    if len(files) > 1:
+        return ("merge", None, " + ".join(stem(f["file"]) for f in files))
     loader = first(metas, "loader")
     if loader and loader.get("model_file"):
-        out.append(("model", "diffusion_models", loader["model_file"], None))
+        return ("model", "diffusion_models", loader["model_file"])
+    return None
+
+
+def resources(metas):
+    """[(kind, folder, file name, strength)] the image was made with: the diffusion model the KSampler sampled with (see
+    sampled_model) and every LoRA (Multi-LoRA rows, LoRA Block Weight, the KSampler's turbo input), each LoRA file once."""
+    out = []
+    model = sampled_model(metas)
+    if model:
+        out.append((*model, None))
+    seen = set()
     for m in metas:
+        rows = []
         if m.get("node") == "multi_lora":
-            out += [("lora", "loras", r["name"], r.get("strength", 1.0)) for r in m.get("loras", [])]
+            rows = [(r["name"], r.get("strength", 1.0)) for r in m.get("loras", [])]
         elif m.get("node") == "lora_block_weight":
-            out.append(("lora", "loras", m["lora"], m.get("strength_model", 1.0)))
+            rows = [(m["lora"], m.get("strength_model", 1.0))]
         elif m.get("node") == "ksampler" and m.get("turbo"):
-            out.append(("lora", "loras", m["turbo"], m.get("turbo_strength", 1.0)))
+            rows = [(m["turbo"], m.get("turbo_strength", 1.0))]
+        for name, strength in rows:
+            if name not in seen:  # one LoRA in two stages (a turbo on the generation and on an upscale pass) is one resource
+                seen.add(name)
+                out.append(("lora", "loras", name, strength))
     return out
 
 
@@ -89,6 +111,10 @@ def a1111_parameters(metas, positive=None, negative=None, with_hashes=True):
 
     hashes, lora_hashes = {}, []
     for kind, folder, name, strength in resources(metas):
+        if kind == "merge":  # no single file: named after its sources, no model hash for Civitai to link
+            fields.append(("Model", f"merge: {name}"))
+            notes.append(f"the model is a merge made in the workflow ({name}): no model hash")
+            continue
         path = folder_paths.get_full_path(folder, name)
         short = file_sha256(path)[:10] if (with_hashes and path) else None
         if path is None:
@@ -123,8 +149,10 @@ def a1111_parameters(metas, positive=None, negative=None, with_hashes=True):
 
 def expand_tokens(prefix, metas):
     """%seed%, %model%, %steps%, %cfg%, %sampler%, %width%, %height% from the metadata; ComfyUI expands %date:...% itself."""
-    ks, loader = first(metas, "ksampler") or {}, first(metas, "loader") or {}
-    values = {"seed": ks.get("seed", ""), "model": stem(loader.get("model", "")) if loader else "", "steps": ks.get("steps", ""),
+    ks = first(metas, "ksampler") or {}
+    model = sampled_model(metas)
+    model_name = ("merge" if model[0] == "merge" else stem(model[2])) if model else ""
+    values = {"seed": ks.get("seed", ""), "model": model_name, "steps": ks.get("steps", ""),
               "cfg": f"{ks['cfg']:g}" if "cfg" in ks else "", "sampler": ks.get("sampler", ""), "width": ks.get("width", ""), "height": ks.get("height", "")}
     out = prefix
     for k, v in values.items():
@@ -184,7 +212,7 @@ class HaDeSMossImageSaver:
                                      f"Loader and Prompt Enhancer (found {count} {node} entries).")
         selected = primary if primary is not None else metas
         parameters, notes = a1111_parameters(selected, positive, negative, hashes)
-        if primary is not None and not first(primary, "loader"):
+        if primary is not None and sampled_model(primary) is None:
             notes.append("primary stage has no MOSS Loader info: model and model hash are missing")
         if not metadata and primary is None:
             notes.insert(0, "metadata not connected: saved without sampling settings (connect Suite Telemetry's json for them)")

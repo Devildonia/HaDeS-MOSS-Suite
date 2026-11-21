@@ -871,6 +871,76 @@ class TestImageSaver(unittest.TestCase):
             self.assertEqual(png.text, {})
 
 
+    def test_ksampler_traces_the_files_its_model_comes_from(self):
+        """The Model field: the KSampler walks its model input up to the loaders (core or Suite), through LoRA nodes and mergers,
+        and skips other outputs of the same nodes (a MOSS Loader's CLIP is not the model)."""
+        sampler = importlib.import_module(f"{PACK}.moss_sampler_nodes")
+        graph = {"1": {"class_type": "UNETLoader", "inputs": {"unet_name": "sft.safetensors", "weight_dtype": "default"}},
+                 "2": {"class_type": "UNETLoader", "inputs": {"unet_name": "base.safetensors", "weight_dtype": "default"}},
+                 "3": {"class_type": "HaDeSMossModelBlockMerger", "inputs": {"model1": ["1", 0], "model2": ["2", 0], "layers_24_29": 0.3}},
+                 "4": {"class_type": "HaDeSMossMultiLora", "inputs": {"model": ["3", 0], "enabled": True, "loras": "[]"}},
+                 "5": {"class_type": "HaDeSMossKSampler", "inputs": {"model": ["4", 0], "positive": ["7", 0]}},
+                 "6": {"class_type": "HaDeSMossLoader", "inputs": {"unet_name": "moss.safetensors", "clip_name": "te.safetensors"}},
+                 "7": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["6", 1], "text": "x"}},
+                 "8": {"class_type": "HaDeSMossKSampler", "inputs": {"model": ["6", 0]}},
+                 "9": {"class_type": "HaDeSMossKSampler", "inputs": {"model": ["1", 0]}},
+                 "10": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "ckpt.safetensors"}},
+                 "11": {"class_type": "HaDeSMossKSampler", "inputs": {"model": ["10", 0]}}}
+        self.assertEqual(sampler.model_files(graph, "5"), [{"file": "sft.safetensors", "folder": "diffusion_models"},
+                                                           {"file": "base.safetensors", "folder": "diffusion_models"}])
+        self.assertEqual(sampler.model_files(graph, "8"), [{"file": "moss.safetensors", "folder": "diffusion_models"}])
+        self.assertEqual(sampler.model_files(graph, "11"), [{"file": "ckpt.safetensors", "folder": "checkpoints"}])
+        graph["12"] = {"class_type": "HaDeSMossModelBlockMerger", "inputs": {"model1": ["1", 0], "model2": ["1", 0]}}
+        graph["13"] = {"class_type": "HaDeSMossKSampler", "inputs": {"model": ["12", 0]}}
+        self.assertEqual(sampler.model_files(graph, "13"), [{"file": "sft.safetensors", "folder": "diffusion_models"}])
+        self.assertEqual(sampler.model_files(None, "5"), [])
+        self.assertEqual(sampler.model_files(graph, "404"), [])
+        if "HaDeSMossLoader" in sampler.nodes.NODE_CLASS_MAPPINGS:  # registered in ComfyUI: its CLIP output is not the model
+            graph["14"] = {"class_type": "HaDeSMossKSampler", "inputs": {"model": ["6", 1]}}
+            self.assertEqual(sampler.model_files(graph, "14"), [])
+
+    def test_saver_names_the_sampled_model_and_lists_each_lora_once(self):
+        """The Model field comes from the KSampler's model, not the first MOSS Loader (a Loader used only for its text encoder);
+        a merge made in the workflow is named after its sources with no model hash; a LoRA in two stages is listed once."""
+        isaver = importlib.import_module(f"{PACK}.moss_image_saver_nodes")
+        f = common.format_info
+        files = {}
+        for name, value in (("loader_unet.safetensors", 1), ("sampled.safetensors", 2), ("turbo.safetensors", 3)):
+            files[name] = os.path.join(TMP, name)
+            safetensors.torch.save_file({"x": torch.full((3,), value)}, files[name])
+        loader = f("x", "loader", model="loader_unet", model_file="loader_unet.safetensors", vae="v.safetensors", text_encoder="te.safetensors")
+        ks = lambda **kw: f("x", "ksampler", **{**dict(width=64, height=64, steps=8, cfg=1.0, flow_shift=5.0, sampler="euler",
+                                                       scheduler="simple", seed=3, denoise=1.0, slg="off", turbo="turbo.safetensors",
+                                                       turbo_strength=1.0), **kw})
+        enh = f("x", "prompt_enhancer", prompt="A fisherman.", negative="")
+        audit = telemetry.HaDeSMossSuiteTelemetry().audit
+        paths = lambda folder, name: files.get(name)
+        one = audit("T", info_1=enh, info_2=loader, info_3=ks(model_files=[{"file": "sampled.safetensors", "folder": "diffusion_models"}]),
+                    info_4=ks(denoise=0.25))["result"][1]
+        merge = audit("T", info_1=enh, info_2=loader, info_3=ks(model_files=[{"file": "sft.safetensors", "folder": "diffusion_models"},
+                                                                             {"file": "base.safetensors", "folder": "diffusion_models"}]))["result"][1]
+        legacy = audit("T", info_1=enh, info_2=loader, info_3=ks())["result"][1]
+        with patch.object(isaver.folder_paths, "get_full_path", side_effect=paths):
+            p1 = isaver.HaDeSMossImageSaver().save(torch.rand(1, 8, 8, 3), "tests/%model%", True, False, metadata=one)
+            p2 = isaver.HaDeSMossImageSaver().save(torch.rand(1, 8, 8, 3), "tests/%model%", True, False, metadata=merge)
+            p3 = isaver.HaDeSMossImageSaver().save(torch.rand(1, 8, 8, 3), "tests/%model%", True, False, metadata=legacy)
+        params = p1["result"][0]
+        self.assertIn(f"Model hash: {isaver.file_sha256(files['sampled.safetensors'])[:10]}, Model: sampled,", params)
+        self.assertNotIn("loader_unet", params)
+        self.assertTrue(p1["ui"]["images"][0]["filename"].startswith("sampled_"))
+        turbo_hash = isaver.file_sha256(files["turbo.safetensors"])[:10]
+        self.assertIn(f'Lora hashes: "turbo: {turbo_hash}"', params)  # two KSamplers with the same turbo: once
+        params = p2["result"][0]
+        self.assertIn("Model: merge: sft + base,", params)
+        self.assertNotIn("Model hash", params)
+        self.assertNotIn('"model"', params)
+        self.assertIn("merge made in the workflow", p2["ui"]["text"][0])
+        self.assertTrue(p2["ui"]["images"][0]["filename"].startswith("merge_"))
+        self.assertIn("Model: loader_unet,", p3["result"][0])  # a KSampler info without model_files: the first Loader, as before
+        report = audit("T", info_1=ks(model_files=[{"file": "sft.safetensors", "folder": "diffusion_models"},
+                                                   {"file": "base.safetensors", "folder": "diffusion_models"}]))["result"][0]
+        self.assertIn("model=sft.safetensors + base.safetensors", report)
+
 class TestControl(unittest.TestCase):
     class FakeVAE:
         latent_channels = 128

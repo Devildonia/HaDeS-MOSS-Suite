@@ -22,6 +22,42 @@ SLG_MODES = {
 }
 
 
+# widgets that name the file a model loader reads, and the models folder it is read from
+MODEL_FILE_WIDGETS = {"unet_name": "diffusion_models", "ckpt_name": "checkpoints"}
+
+
+def model_files(prompt, node_id, input_name="model"):
+    """The model files feeding a node's MODEL input, found by walking up the workflow (`prompt`, the API graph) through the nodes
+    that output MODEL (LoRA nodes, mergers, patches) to the loaders that read a file: [{"file", "folder"}] in graph order, without
+    repeats. One entry for a model loaded from one file; several for a merge made in the workflow; [] when it cannot be told."""
+    node = (prompt or {}).get(str(node_id))
+    if node is None:
+        return []
+    out, seen = [], set()
+
+    def walk(link, depth):
+        if not (isinstance(link, list) and len(link) == 2) or depth > 64:
+            return
+        src = (prompt or {}).get(str(link[0]))
+        if src is None:
+            return
+        types = getattr(nodes.NODE_CLASS_MAPPINGS.get(src.get("class_type")), "RETURN_TYPES", None)
+        if isinstance(types, (tuple, list)) and (not isinstance(link[1], int) or link[1] >= len(types) or types[link[1]] != "MODEL"):
+            return  # only what produces the MODEL (a CLIP, a latent or an image from the same node is not the model)
+        inputs = src.get("inputs", {})
+        for widget, folder in MODEL_FILE_WIDGETS.items():
+            if isinstance(inputs.get(widget), str):
+                if inputs[widget] not in seen:
+                    seen.add(inputs[widget])
+                    out.append({"file": inputs[widget], "folder": folder})
+                return
+        for value in inputs.values():
+            walk(value, depth + 1)
+
+    walk(node.get("inputs", {}).get(input_name), 0)
+    return out
+
+
 def with_shift(model, shift):
     """The model with its own sampling object at another shift (multiplier and type kept); unchanged when shift is 0 or equal."""
     ms = model.get_model_object("model_sampling")
@@ -251,6 +287,10 @@ class HaDeSMossKSampler:
         if turbo is not None:
             text += f" | turbo {turbo['lora_name']} x {turbo['strength']:g}"
             extra.update(turbo=turbo["lora_name"], turbo_strength=turbo["strength"])
+        files = model_files(prompt, unique_id)
+        if files:  # the files this model comes from, for the Image Saver's Model field (a merge made here lists its sources)
+            extra["model_files"] = files
+            text += " | model " + " + ".join(f["file"] for f in files)
         return (out, image, format_info(text, "ksampler", width=w, height=h, steps=int(steps), cfg=float(cfg), flow_shift=shift,
                                         sampler=sampler_name, scheduler=scheduler, seed=int(seed), denoise=float(denoise), slg=slg, **extra))
 
