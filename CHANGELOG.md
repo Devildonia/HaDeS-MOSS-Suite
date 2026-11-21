@@ -7,6 +7,8 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-11-22
+
 ### Fixed
 - **Model Block Merger and Multi-Model Merger, a saved merge's recipe left out a model loaded with Load Diffusion Model** (or another core loader): only a model from the MOSS Loader was named, so SFT merged with Base from Load Diffusion Model was saved with a recipe naming SFT alone and the Metadata Reader showed only SFT. A merger now follows the cable of an input that carries no Suite recipe up the workflow to its file, as the MOSS KSampler does since 0.9.3, and records it like a MOSS Loader's model. Checked in a clean ComfyUI: the test recipe saved by the Model Saver and read back names `mossImage_sft_bf16` and `mossImage_base_bf16`.
 
