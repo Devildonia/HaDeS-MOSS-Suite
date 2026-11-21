@@ -7,12 +7,6 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Changed
-- **Layout from a Sentence example**, rebuilt for the eighth video tutorial: the fisherman poster on HaDeS MOSS v1.0 Turbo (was a night street on SFT), the title "NORTH SEA" and the signature "HaDeS" in quotes, enhancer seed 2, image seed 1013, 8 steps, CFG 1, with MOSS Text Check's report on a text preview and HaDeS MOSS v1.0 Turbo's download link. Run in a clean ComfyUI with the measured draft: pixel-identical to the video. Measured (`tools/RESULTS.md`, "Layout and Text Check on a poster"): over 6 enhancer seeds the title, the fisherman and the signature in their region 6 / 6, the sun its own box 3 / 6; over 8 image seeds title, sun and signature in their boxes 8 / 8 and both texts `exact` 8 / 8; the sun moved to the horizon followed its box 8 / 8; Text Check 0.7-1.0 s.
-
-### Added
-- **`tools/moss_video.py layout_text`:** the eighth tutorial (a poster laid out from a sentence, a box moved, the text read back).
-
 ## [0.9.4] - 2026-11-22
 
 ### Fixed
@@ -20,10 +14,12 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 - **MOSS Compare Sampler and Compare Sheet labelled a model from Load Diffusion Model as "unknown model"** (or by its slot letter): the Compare Sampler now follows a model's cable up the workflow to its file (through LoRA nodes and mergers) when the model carries no Suite recipe, and the Compare Sheet takes the model from the KSampler's traced model files when the branch has no MOSS Loader. Checked in a clean ComfyUI: SFT, Base, a merge and Bulle d'Encre read `mossImage_sft_bf16`, `mossImage_base_bf16`, `merge: ...` and `HaDeS_MOSS_preview_beta`; a Compare Sheet of two Base seeds `mossImage_base_bf16 · seed 1013` / `· seed 1014`.
 
 ### Changed
+- **Layout from a Sentence example**, rebuilt for the eighth video tutorial: the fisherman poster on HaDeS MOSS v1.0 Turbo (was a night street on SFT), the title "NORTH SEA" and the signature "HaDeS" in quotes, enhancer seed 2, image seed 1013, 8 steps, CFG 1, with MOSS Text Check's report on a text preview and HaDeS MOSS v1.0 Turbo's download link. Run in a clean ComfyUI with the measured draft: pixel-identical to the video. Measured (`tools/RESULTS.md`, "Layout and Text Check on a poster"): over 6 enhancer seeds the title, the fisherman and the signature in their region 6 / 6, the sun its own box 3 / 6; over 8 image seeds title, sun and signature in their boxes 8 / 8 and both texts `exact` 8 / 8; the sun moved to the horizon followed its box 8 / 8; Text Check 0.7-1.0 s.
 - **Compare Models example**, rebuilt for the seventh video tutorial: SFT, Base, the sixth video's test recipe and Bulle d'Encre on one Compare Sampler sheet (the fisherman, seed 1013), a muted group with Bulle d'Encre's extracted LoRA at four strengths through four Multi-LoRAs, and a muted Compare Sheet with two seeds. Run in a clean ComfyUI: the sheet matches the video's (max pixel difference 1). Measured (`tools/RESULTS.md`, "Compare models and LoRAs"): each column is the MOSS KSampler's image; the sheet takes the same time and memory as four KSamplers; the LoRA's distance to Bulle d'Encre off 0.86, x0.5 0.74, x0.8 0.59, x1.0 0.26.
 - **Merge, Save and Telemetry example**, rebuilt for the sixth video tutorial: a test recipe made for the video, not a recommendation (SFT with half of Base in layers 18-35), on the first video's fisherman (seed 1013), with the Model Saver taking its recipe from the merger's info, a Metadata Reader and a SLERP Multi-Model Merger (muted), and a note with the measurements. Run in a clean ComfyUI: the image is pixel-identical to the video's. Measured (`tools/RESULTS.md`, "Merge, save and telemetry: a test recipe"): the recipe lands between SFT and Base in the same render time; East Asian faces on two neutral prompts, SFT 10 / 16 and 16 / 16, the recipe ~3 / 16 and ~13-14 / 16, Base ~1-2 / 16 and ~6 / 16; the bf16 file (10.16 GB) renders the live merge's image, int8 ConvRot (5.41 GB) faster with small changes; SLERP 0.5 about the Block Merger at 0.5.
 
 ### Added
+- **`tools/moss_video.py layout_text`:** the eighth tutorial (a poster laid out from a sentence, a box moved, the text read back).
 - **`tools/moss_video.py compare`:** the seventh tutorial (four models on one sheet, a LoRA at four strengths, blind mode, the Compare Sheet).
 - **`tools/moss_video.py merge_save`:** the sixth tutorial (the Block Merger, the bias counts, Telemetry, the Model Saver in bf16 and int8, the files loaded back, the Metadata Reader, the Multi-Model Merger).
 
