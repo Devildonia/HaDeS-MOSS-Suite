@@ -135,9 +135,10 @@ window.__hv = {
         alignItems: 'flex-start', justifyContent: 'center', paddingTop: '50px', boxSizing: 'border-box', opacity: '0', transition: `opacity ${ms}ms ease`, fontFamily: 'Segoe UI, sans-serif'});
       document.body.appendChild(el);
     }
+    clearTimeout(el._hvRemove);  // a hide() just before would remove the layer this show() reuses
     el.innerHTML = html; requestAnimationFrame(() => { el.style.opacity = '1'; });
   },
-  hide(ms = 600) { const el = document.getElementById('__hv_show'); if (el) { el.style.transition = `opacity ${ms}ms ease`; el.style.opacity = '0'; setTimeout(() => el.remove(), ms + 50); } },
+  hide(ms = 600) { const el = document.getElementById('__hv_show'); if (el) { el.style.transition = `opacity ${ms}ms ease`; el.style.opacity = '0'; el._hvRemove = setTimeout(() => el.remove(), ms + 50); } },
   boxes(on) { document.querySelectorAll('.__hv_box').forEach((b) => { b.style.opacity = on ? '1' : '0'; }); },
   zone(id, kind) {
     const w = this.node(id).widgets.find((w) => Array.isArray(w._zones));
@@ -2749,6 +2750,386 @@ async def lora_toolkit(d: Director):
 lora_toolkit.prepare = lt_prepare
 
 
+# ---- metadata (the fifth tutorial) ----
+
+MD_LINES = [
+    ("Hi, I'm HaDeS, and welcome back.",
+     "Hola, soy HaDeS, y bienvenido de nuevo."),
+    ("In the second video I promised a video about metadata. Here it is: everything your PNG remembers, and how to control it.",
+     "En el segundo vídeo prometí un vídeo sobre metadatos. Aquí está: todo lo que recuerda tu PNG y cómo controlarlo.",
+     "In the second video I promised a video about metadata. Here it is: everything your P N G remembers, and how to control it."),
+    ("As always, everything is free, and all the links are in the description.",
+     "Como siempre, todo es gratis y tienes todos los enlaces en la descripción."),
+    # 3
+    ("Quick rebuild of the first video's workflow, ending in the MOSS Image Saver.",
+     "Montaje rápido del workflow del primer vídeo, terminando en el MOSS Image Saver."),
+    # 4: no metadata
+    ("First, the Saver on its own. It saves the image, but it tells you something's missing: it doesn't know your settings.",
+     "Primero, el Saver solo. Guarda la imagen, pero te avisa de que falta algo: no conoce tus ajustes."),
+    ("The PNG still carries the workflow, but no steps, no seed, no model.",
+     "El PNG sigue llevando el workflow, pero ni pasos, ni semilla, ni modelo.",
+     "The P N G still carries the workflow, but no steps, no seed, no model."),
+    # 6: telemetry
+    ("Every Suite node has an info output. Suite Telemetry gathers them, and its json output goes into the Saver's metadata input.",
+     "Cada nodo de la Suite tiene una salida info. Suite Telemetry las reúne, y su salida json va a la entrada metadata del Saver.",
+     "Every Suite node has an info output. Suite Telemetry gathers them, and its jason output goes into the Saver's metadata input."),
+    ("Run it again.",
+     "Lo lanzamos otra vez."),
+    # 8: inside the PNG
+    ("Here's what's written inside, in the format Civitai and most image browsers read. First, your prompt and the negative prompt.",
+     "Esto es lo que va escrito dentro, en el formato que leen Civitai y la mayoría de visores de imágenes. Primero, tu prompt y el negativo."),
+    ("Then the settings: steps, sampler, schedule, CFG, seed and size. Everything you need to make the same image again.",
+     "Después los ajustes: pasos, sampler, programación, CFG, semilla y tamaño. Todo lo que hace falta para repetir la imagen."),
+    ("The model, with its hash. The hash is a fingerprint of the file: ten characters of its SHA256.",
+     "El modelo, con su hash. El hash es una huella del archivo: diez caracteres de su SHA256.",
+     "The model, with its hash. The hash is a fingerprint of the file: ten characters of its S H A two fifty-six."),
+    ("The shift, the VAE, the text encoder, and every LoRA with its own hash. Here, my Turbo.",
+     "El shift, el VAE, el text encoder y cada LoRA con su propio hash. Aquí, mi Turbo.",
+     "The shift, the V A E, the text encoder, and every Lora with its own hash. Here, my Turbo."),
+    ("The first save reads the whole model once to compute its hash: about six seconds here, for ten gigabytes. The next save takes no time.",
+     "El primer guardado lee el modelo entero una vez para calcular su hash: unos seis segundos aquí, para diez gigas. El siguiente "
+     "guardado ya no tarda nada."),
+    # 13: the workflow inside
+    ("The PNG also keeps the whole workflow. Drop it into ComfyUI and everything comes back: nodes, wires and values.",
+     "El PNG también guarda el workflow entero. Suéltalo en ComfyUI y vuelve todo: nodos, cables y valores.",
+     "The P N G also keeps the whole workflow. Drop it into ComfyUI and everything comes back: nodes, wires and values."),
+    ("And the Suite keeps its own copy of every node's settings, in a block called hades moss.",
+     "Y la Suite guarda su propia copia de los ajustes de cada nodo, en un bloque llamado hades moss.",
+     "And the Suite keeps its own copy of every node's settings, in a block called HaDeS moss."),
+    # 15: file names
+    ("The file name can use your settings too: percent model, percent seed, steps, CFG and more.",
+     "El nombre del archivo también puede usar tus ajustes: porcentaje model, porcentaje seed, pasos, CFG y más."),
+    # 16: two stages
+    ("Now the case I promised. The second video's workflow has two samplers: the image, and the MOSS pass on the upscale.",
+     "Ahora el caso que prometí. El workflow del segundo vídeo tiene dos samplers: la imagen y el pase MOSS sobre el escalado."),
+    ("With both in Telemetry, the Saver writes the first sampler's settings, and tells you so.",
+     "Con los dos en Telemetry, el Saver escribe los ajustes del primer sampler, y te lo avisa."),
+    ("To choose, add a second Telemetry connected only to the stage this image comes from, and plug its json into primary stage metadata.",
+     "Para elegir, añade un segundo Telemetry conectado solo a la etapa de la que sale esta imagen, y conecta su json a primary stage metadata.",
+     "To choose, add a second Telemetry connected only to the stage this image comes from, and plug its jason into primary stage metadata."),
+    ("Now the refined PNG says what really made it: twenty forty-eight, denoising strength zero point two five. And the full pipeline is "
+     "still stored inside.",
+     "Ahora el PNG refinado dice lo que lo hizo de verdad: 2048, denoising strength cero coma veinticinco. Y la cadena completa sigue "
+     "guardada dentro.",
+     "Now the refined P N G says what really made it: twenty forty-eight, denoising strength zero point two five. And the full pipeline is "
+     "still stored inside."),
+    # 20: merges
+    ("One more case, fixed in version zero nine three. The Saver names the model your sampler really used, even when you merge models "
+     "inside the workflow.",
+     "Un caso más, arreglado en la versión 0.9.3. El Saver nombra el modelo que de verdad usó tu sampler, aunque mezcles modelos dentro "
+     "del workflow.",
+     "One more case, fixed in version zero point nine point three. The Saver names the model your sampler really used, even when you merge "
+     "models inside the workflow."),
+    ("A merge has no single file, so it's written as \"merge\", with the names of both models, and without a model hash.",
+     "Una mezcla no tiene un archivo único, así que se escribe como \"merge\", con los nombres de los dos modelos, y sin hash de modelo.",
+     "A merge has no single file, so it's written as merge, with the names of both models, and without a model hash."),
+    # 22: privacy
+    ("And when you'd rather not share: hashes off removes the fingerprints, and embed workflow off removes the workflow. The settings stay.",
+     "Y cuando prefieras no compartir: hashes apagado quita las huellas, y embed workflow apagado quita el workflow. Los ajustes se quedan."),
+    ("ComfyUI's disable metadata option removes everything from the PNG.",
+     "La opción disable metadata de ComfyUI quita todo del PNG.",
+     "ComfyUI's disable metadata option removes everything from the P N G."),
+    # 24: goodbye
+    ("That's metadata: your recipe, written inside every image.",
+     "Eso son los metadatos: tu receta, escrita dentro de cada imagen."),
+    ("This workflow is free to download from the description.",
+     "Este workflow se puede descargar gratis desde la descripción."),
+    ("If you've made it to the end and enjoyed the video, and you'd like to see more content like this, leave a like and subscribe. "
+     "It's free!",
+     "Si has llegado hasta el final del vídeo, te ha gustado y quieres ver más contenido de este tipo, dale un buen like y "
+     "suscríbete. ¡Es gratis!"),
+    ("Thanks for watching, and see you in the next one.",
+     "Gracias por verlo, y nos vemos en el próximo."),
+]
+
+MD_POS = dict(UP_POS, tel2=(2500, 1200))
+MD_BOX = [-260, -60, 3380, 1560]
+# a PNG of the LoRA Toolkit example with the Multi-LoRA on (0.9.3: the Model field of a merge made in the workflow)
+MD_MERGE_PNG = "/view?filename=HaDeS_MOSS_lora_1013_00003_.png&subfolder=MOSS&type=output"
+
+MD_PNG_TEXT_JS = r"""
+async (url) => {
+  const b = new Uint8Array(await (await fetch(url)).arrayBuffer()), dv = new DataView(b.buffer), out = {};
+  const dec = (a, enc) => new TextDecoder(enc).decode(a);
+  for (let i = 8; i + 8 <= b.length;) {
+    const len = dv.getUint32(i), type = dec(b.slice(i + 4, i + 8), 'latin1'), data = b.slice(i + 8, i + 8 + len);
+    if (type === 'tEXt') { const z = data.indexOf(0); out[dec(data.slice(0, z), 'latin1')] = dec(data.slice(z + 1), 'latin1'); }
+    if (type === 'iTXt') { const z = data.indexOf(0); let j = z + 3; j = data.indexOf(0, j) + 1; j = data.indexOf(0, j) + 1;
+                           out[dec(data.slice(0, z), 'latin1')] = dec(data.slice(j), 'utf-8'); }
+    if (type === 'IEND') break;
+    i += 12 + len;
+  }
+  return out;
+}
+"""
+
+MD_GROUPS = {"settings": ("Steps", "Sampler", "Schedule type", "CFG scale", "Seed", "Size"),
+             "model": ("Model hash", "Model"),
+             "rest": ("Denoising strength", "Shift", "VAE", "Text encoder", "Lora hashes", "Hashes", "Version")}
+
+
+def md_esc(t):
+    return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def md_params_html(chunks, title, highlight=None, mark=()):
+    """The PNG's text chunks as a card: the chunk names, then `parameters` with one group lit (prompt / settings / model / rest)
+    and any field named in `mark` lit too."""
+    params = chunks.get("parameters", "")
+    lines = params.split("\n")
+    settings = lines[-1] if lines and re.match(r"^[A-Z][A-Za-z ]+: ", lines[-1]) else ""
+    text_lines = lines[:-1] if settings else lines
+    on = "background:#ffcc33;color:#111;border-radius:4px;padding:0 4px"
+    body = "".join(f'<div style="{on if highlight == "prompt" else ""}">{md_esc(l)}</div>' for l in text_lines if l.strip())
+    fields = re.split(r", (?=[A-Z][A-Za-z ]+: )", settings) if settings else []
+    spans = []
+    for f in fields:
+        key = f.split(":")[0]
+        lit = (highlight and key in MD_GROUPS.get(highlight, ())) or key in mark
+        spans.append(f'<span style="{on if lit else ""}">{md_esc(f)}</span>')
+    body += f'<div style="margin-top:12px">{", ".join(spans)}</div>' if spans else ""
+    pills = "".join(f'<span style="background:#24242b;border:1px solid #ffcc33;color:#ffcc33;border-radius:8px;padding:4px 12px;'
+                    f'margin-right:10px;font:600 22px Segoe UI,sans-serif">{md_esc(k)}</span>' for k in sorted(chunks))
+    return (f'<div style="margin-top:120px;width:1640px;color:#e6e6ea">'
+            f'<div style="font:700 34px Segoe UI,sans-serif;color:#fff;margin-bottom:16px">{md_esc(title)}</div>'
+            f'<div style="margin-bottom:18px">{pills or "<i>no text in the PNG</i>"}</div>'
+            f'<div style="background:#141418;border:2px solid #333;border-radius:12px;padding:26px 30px;font:500 25px Consolas,monospace;'
+            f'line-height:1.45;white-space:normal;word-break:break-word">{body or "<i>(empty)</i>"}</div></div>')
+
+
+async def md_chunks(d, url):
+    return await d.js(MD_PNG_TEXT_JS, url)
+
+
+async def md_add(d, type_, query, key, values=None):
+    """basic_add at MD_POS[key], with the node's values set the moment it is created."""
+    if values:
+        await d.js("""([type, v]) => { const g = window.__hv.app().graph, prev = g.onNodeAdded;
+            g.onNodeAdded = function (n) { if (n.type === type) { for (const [k, x] of Object.entries(v)) { const w = n.widgets?.find(w => w.name === k);
+                if (w) w.value = x; } g.onNodeAdded = prev; } return prev?.apply(this, arguments); }; }""", [type_, values])
+    n = await basic_add(d, type_, query, MD_POS[key])
+    if values:
+        await up_set(d, n, values)
+    return n
+
+
+async def metadata_video(d: Director):
+    """The fifth tutorial: what the MOSS Image Saver writes into a PNG, Suite Telemetry, two stages, merges and privacy."""
+    P = MD_POS
+    await d.camera({"box": BASIC_BOX}, 10, pad=60, top=60)
+    await d.move(W * 0.62, H * 0.55)
+
+    # 1. introduction
+    d.title("HaDeS MOSS Suite", "Metadata: what your PNG remembers", 6.0)
+    for i in range(3):
+        await d.say(i)
+        await d.move(W * (0.55 + 0.05 * (i % 2)), H * (0.5 + 0.04 * i), 2500)
+
+    # 2. quick rebuild, the Saver with nothing on metadata
+    await d.say(3)
+    async with d.fast(6.0):
+        loader = await md_add(d, "HaDeSMossLoader", "MOSS Loader", "loader", dict(BASIC_LOADER))
+        enhancer = await md_add(d, "HaDeSMossPromptEnhancer", "MOSS Prompt Enhancer", "enhancer",
+                                {"mode": "as written", "idea": BASIC_PROMPT, "seed": 0})
+        await basic_link(d, loader, "CLIP", enhancer, "clip", 600)
+        latent = await md_add(d, "HaDeSMossLatent", "MOSS Latent", "latent",
+                              {"aspect_ratio": "1:1", "megapixels": 1.0, "seed": BASIC_SEED, "control_after_generate": "fixed"})
+        sampler = await md_add(d, "HaDeSMossKSampler", "MOSS KSampler", "sampler", {"sampler_name": "euler", "scheduler": "simple"})
+        for a, out, inp in ((loader, "MODEL", "model"), (enhancer, "positive", "positive"), (enhancer, "negative", "negative"),
+                            (latent, "latent", "latent_image"), (latent, "seed", "seed"), (loader, "VAE", "vae")):
+            await basic_link(d, a, out, sampler, inp, 600)
+        turbo = await md_add(d, "HaDeSMossTurbo", "MOSS Turbo LoRA", "turbo",
+                             {"lora_name": BASIC_LORA, "strength": 1.0, "steps": 8, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple"})
+        await basic_link(d, turbo, "turbo", sampler, "turbo", 600)
+    saver = await md_add(d, "HaDeSMossImageSaver", "MOSS Image Saver", "saver")
+    await basic_link(d, sampler, "image", saver, "images", 700)
+    await d._after_voice(0.1)
+
+    # 3. without metadata
+    await d.camera([sampler, saver], 1000, pad=80, top=60)
+    await d.say(4)
+    url0, _ = await lt_run(d, saver)
+    note0 = (next(iter((await d.js("() => fetch('/history?max_items=1').then(r => r.json())")).values()))["outputs"]
+             .get(str(saver), {}).get("text") or [""])[0]
+    chunks = await md_chunks(d, url0)
+    html = md_params_html(chunks, "Image Saver, metadata not connected")
+    if note0:
+        html = html.replace('<div style="margin-bottom:18px">', f'<div style="color:#ffcc33;font:600 26px Segoe UI,sans-serif;margin-bottom:14px">{md_esc(note0)}</div><div style="margin-bottom:18px">', 1)
+    await d.js("(h) => window.__hv.show(h)", html)
+    await d._after_voice(0.2)
+    await d.say(5)
+    await d._after_voice(0.4)
+    await pe_hide(d)
+
+    # 4. Suite Telemetry
+    await d.camera({"box": UP_BOX}, 1100, pad=60, top=60)
+    await d.say(6)
+    telemetry = await md_add(d, "HaDeSMossSuiteTelemetry", "MOSS Suite Telemetry", "telemetry")
+    async with d.fast(5.0):
+        await d.camera({"box": [-60, -60, 2300, 1100]}, 800, pad=40, top=60)
+        for k, (n, out) in enumerate(((loader, "info"), (enhancer, "info"), (latent, "info"), (sampler, "info"), (turbo, "info"))):
+            await basic_link(d, n, out, telemetry, f"info_{k + 1}", 700)
+    await basic_link(d, telemetry, "json", saver, "metadata", 900)
+    await d._after_voice(0.1)
+    await d.say(7)
+    url1, t1 = await lt_run(d, saver)
+    chunks = await md_chunks(d, url1)
+    print("PNG chunks after Telemetry:", sorted(chunks), flush=True)
+
+    # 5. what is inside
+    title = "Image Saver + Suite Telemetry: the PNG's parameters"
+    await d.js("(h) => window.__hv.show(h)", md_params_html(chunks, title))
+    await d.say(8)
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }", md_params_html(chunks, title, "prompt"))
+    await d._after_voice(0.1)
+    for i, group in ((9, "settings"), (10, "model"), (11, "rest")):
+        await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }", md_params_html(chunks, title, group))
+        await d.say(i)
+        await d._after_voice(0.1)
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }",
+               md_params_html(chunks, title, mark=("Model hash", "Lora hashes")))
+    await d.say(12)
+    await d._after_voice(0.3)
+    await pe_hide(d)
+
+    # 6. the workflow inside: the canvas cleared, the PNG dropped in
+    await d.say(13)
+    await d.js("() => { const a = window.__hv.app(); a.graph.clear(); a.graph.setDirtyCanvas(true, true); }")
+    await d.hold(1.2)
+    loaded = await d.js("""async (url) => { const blob = await (await fetch(url)).blob();
+        const file = new File([blob], url.split('filename=')[1].split('&')[0], {type: 'image/png'});
+        await window.__hv.app().handleFile(file); await new Promise(f => setTimeout(f, 1500));
+        return window.__hv.app().graph._nodes.length; }""", url1)
+    print("nodes after loading the PNG:", loaded, flush=True)
+    if not loaded:
+        raise SystemExit("the PNG did not load its workflow back")
+    await d.camera({"box": UP_BOX}, 1100, pad=60, top=60)
+    await d._after_voice(0.3)
+    await d.say(14)
+    hm = json.loads(chunks.get("hades_moss", "[]"))
+    await d.js("(h) => window.__hv.show(h)", '<div style="margin-top:160px;width:1500px;color:#e6e6ea">'
+               '<div style="font:700 34px Segoe UI,sans-serif;color:#fff;margin-bottom:16px">hades_moss: every node\'s settings</div>'
+               '<div style="background:#141418;border:2px solid #333;border-radius:12px;padding:26px 30px;font:500 24px Consolas,monospace;line-height:1.5">'
+               + "".join(f'<div><span style="color:#ffcc33">{md_esc(m.get("node"))}</span>: '
+                         + md_esc(", ".join(f"{k}={v}" for k, v in m.items() if k not in ("node", "prompt", "negative", "model_files", "sources"))[:150])
+                         + "…</div>" for m in hm) + "</div></div>")
+    await d._after_voice(0.4)
+    await pe_hide(d)
+
+    # 7. file names
+    await d.camera([saver], 1000, pad=140, top=60)
+    await d.say(15)
+    await basic_point(d, saver, "filename_prefix")
+    name1 = url1.split("filename=")[1].split("&")[0]
+    await d.js("(h) => window.__hv.show(h)", '<div style="margin-top:420px;text-align:center;color:#fff;font:600 34px Segoe UI,sans-serif">'
+               '<div style="color:#c9c9d1;font-size:28px">MOSS/%model%_%seed%</div>'
+               f'<div style="margin-top:14px;font:700 40px Consolas,monospace;color:#ffcc33">MOSS/{md_esc(name1)}</div></div>')
+    await d._after_voice(0.4)
+    await pe_hide(d)
+
+    # 8. two stages: the second video's upscale and MOSS pass, then a second Telemetry for the refined image
+    await d.camera({"box": MD_BOX}, 1200, pad=60, top=60)
+    await d.say(16)
+    async with d.fast(8.0):
+        upmodel = await md_add(d, "UpscaleModelLoader", "Load Upscale Model", "upmodel", {"model_name": UP_UPSCALER})
+        upscale = await md_add(d, "ImageUpscaleWithModel", "Upscale Image using Model", "upscale")
+        await basic_link(d, upmodel, "UPSCALE_MODEL", upscale, "upscale_model", 600)
+        await basic_link(d, sampler, "image", upscale, "image", 700)
+        encode = await md_add(d, "VAEEncode", "VAE Encode", "encode")
+        await basic_link(d, upscale, "IMAGE", encode, "pixels", 600)
+        await basic_link(d, loader, "VAE", encode, "vae", 700)
+        sampler2 = await md_add(d, "HaDeSMossKSampler", "MOSS KSampler", "sampler2",
+                                {"sampler_name": "euler", "scheduler": "simple", "denoise": 0.25})
+        for a, out, inp in ((loader, "MODEL", "model"), (enhancer, "positive", "positive"), (enhancer, "negative", "negative"),
+                            (encode, "LATENT", "latent_image"), (latent, "seed", "seed"), (loader, "VAE", "vae"), (turbo, "turbo", "turbo")):
+            await basic_link(d, a, out, sampler2, inp, 600)
+        saver3 = await md_add(d, "HaDeSMossImageSaver", "MOSS Image Saver", "saver3")
+        await basic_link(d, sampler2, "image", saver3, "images", 600)
+        await basic_link(d, telemetry, "json", saver3, "metadata", 700)
+        await basic_link(d, sampler2, "info", telemetry, "info_6", 700)
+    await d._after_voice(0.1)
+    url2, _ = await lt_run(d, saver3)
+    note2 = (next(iter((await d.js("() => fetch('/history?max_items=1').then(r => r.json())")).values()))["outputs"]
+             .get(str(saver3), {}).get("text") or [""])[0]
+    chunks2 = await md_chunks(d, url2)
+    await d.say(17)
+    html = md_params_html(chunks2, "The refined 2048 image, Telemetry on both stages", mark=("Size",))
+    if note2:
+        html = html.replace('<div style="margin-bottom:18px">', f'<div style="color:#ffcc33;font:600 24px Segoe UI,sans-serif;margin-bottom:14px">{md_esc(note2)}</div><div style="margin-bottom:18px">', 1)
+    await d.js("(h) => window.__hv.show(h)", html)
+    await d._after_voice(0.4)
+    await pe_hide(d)
+    await d.camera([sampler2, saver3], 1000, pad=80, top=60)
+    await d.say(18)
+    async with d.fast(4.0):
+        await d.camera({"box": MD_BOX}, 800, pad=50, top=60)
+        tel2 = await md_add(d, "HaDeSMossSuiteTelemetry", "MOSS Suite Telemetry", "tel2", {"report_title": "Refine stage"})
+        for k, (n, out) in enumerate(((loader, "info"), (enhancer, "info"), (sampler2, "info"), (turbo, "info"))):
+            await basic_link(d, n, out, tel2, f"info_{k + 1}", 700)
+        await basic_link(d, tel2, "json", saver3, "primary_stage_metadata", 700)
+    await d._after_voice(0.1)
+    url3, _ = await lt_run(d, saver3)
+    chunks3 = await md_chunks(d, url3)
+    await d.say(19)
+    await d.js("(h) => window.__hv.show(h)", md_params_html(chunks3, "The refined image, primary_stage_metadata connected",
+                                                            mark=("Size", "Denoising strength")))
+    await d._after_voice(0.4)
+    await pe_hide(d)
+
+    # 9. a merge made in the workflow (the LoRA Toolkit example's PNG)
+    await d.say(20)
+    chunks4 = await md_chunks(d, MD_MERGE_PNG)
+    await d.js("(h) => window.__hv.show(h)", md_params_html(chunks4, "LoRA Toolkit example: a model merged in the workflow", mark=("Model",)))
+    await d._after_voice(0.2)
+    await d.say(21)
+    await d._after_voice(0.4)
+    await pe_hide(d)
+
+    # 10. privacy
+    await d.camera([saver], 1000, pad=140, top=60)
+    await d.say(22)
+    await basic_point(d, saver, "hashes")
+    await d.hold(1.2)
+    await basic_point(d, saver, "embed_workflow")
+    await d._after_voice(0.1)
+    await d.say(23)
+    await d.js("(h) => window.__hv.show(h)", '<div style="margin-top:380px;text-align:center;color:#fff">'
+               '<div style="font:700 44px Consolas,monospace;color:#ffcc33">--disable-metadata</div>'
+               '<div style="font:600 30px Segoe UI,sans-serif;color:#c9c9d1;margin-top:18px">ComfyUI launch option: no text in the PNG at all</div></div>')
+    await d._after_voice(0.4)
+    await pe_hide(d)
+
+    # 11. goodbye
+    await d.camera({"box": MD_BOX}, 1300, pad=50, top=60)
+    await d.move(W - 6, H * 0.5)
+    await d.say(24)
+    await d._after_voice(0.1)
+    await d.say(25)
+    await d.js("(h) => window.__hv.show(h)", '<div style="color:#fff;text-align:center;margin-top:300px">'
+               '<div style="font:600 30px Segoe UI,sans-serif;color:#c9c9d1">Free download (link in the description)</div>'
+               '<div style="font:700 44px Segoe UI,sans-serif;margin-top:22px">HaDeS MOSS Suite - Metadata.json</div></div>')
+    await d._after_voice(0.3)
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }",
+               f'<div style="display:flex;align-items:center;gap:80px;margin-top:60px"><img src="{url1}" style="height:780px;border-radius:6px">'
+               '<div style="color:#fff;max-width:640px"><div style="font:900 72px Segoe UI Black,sans-serif;line-height:1.05">HaDeS MOSS Suite</div>'
+               '<div style="font:600 34px Segoe UI,sans-serif;color:#ffcc33;margin-top:22px">Metadata: what your PNG remembers</div>'
+               '<div style="font:400 26px Segoe UI,sans-serif;color:#c9c9d1;margin-top:44px">Workflow, Suite and models: links in the description</div></div></div>')
+    await d.say(26)
+    await d.say(27)
+    await d.end(1.5)
+
+
+async def md_prepare(page):
+    """Off camera: one 1024 run without the Saver loads the model, the text encoder, the VAE and the LoRA (no hash is computed, so
+    the first save on camera hashes the model as a viewer's first save would)."""
+    g = {k: v for k, v in up_api_graph(7, full=False).items() if k in ("1", "2", "3", "4", "5")}
+    g["6"] = {"class_type": "PreviewImage", "inputs": {"images": ["5", 1]}}
+    print("warm-up run:", await page.evaluate(UP_WARM_JS, g), flush=True)
+
+
+metadata_video.prepare = md_prepare
+
+
 SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "layout_test": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_test, LAYOUT_TEST_LINES),
           "layout_sentence": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_sentence, LAYOUT_SENTENCE_LINES),
@@ -2756,7 +3137,8 @@ SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
                                        TURBO_UPSCALE_LINES),
           "upscale_telemetry": (None, upscale_telemetry, UP_LINES),
           "prompt_enhancer": (None, prompt_enhancer, PE_LINES),
-          "lora_toolkit": (None, lora_toolkit, LT_LINES)}
+          "lora_toolkit": (None, lora_toolkit, LT_LINES),
+          "metadata": (None, metadata_video, MD_LINES)}
 
 # spoken forms where the written caption reads badly aloud
 SPOKEN = {"DRAFT LAYOUT": "Draft layout"}

@@ -976,6 +976,28 @@ Leave-out (the full LoRA without that group, reference: the full LoRA) agrees on
 - A fixed "style" / "identity" group preset would be wrong for some of these LoRAs, so LoRA Block Weight has none; measure a LoRA with
   `tools/moss_eval.py --mode lora --lora <name> --lora-model <model it was trained on>`.
 
+## What the MOSS Image Saver writes (0.9.3, 2026-11-21, for the fifth video tutorial)
+
+The Turbo 8 steps + Upscale x2 example (Base + Turbo 8-steps v1.0, the fisherman, seed 1013) on a freshly started clean ComfyUI on port
+8189, run through the API (so the PNGs carry `prompt` but no `workflow` chunk; a run from the frontend adds `workflow`):
+
+- **The 1024 PNG** (`metadata` from Suite Telemetry): chunks `parameters`, `hades_moss` (the infos of the Loader, Prompt Enhancer, Latent,
+  KSampler and Turbo), `prompt`. `parameters`: the prompt, `Negative prompt:` (the official template's), then `Steps: 8, Sampler: euler,
+  Schedule type: simple, CFG scale: 1, Seed: 1013, Size: 1024x1024, Model hash: cacd158728, Model: mossImage_base_bf16, Shift: 5, VAE:
+  flux2-vae, Text encoder: qwen3.5_9b_int8_convrot, Lora hashes: "HaDeS-MOSS-Turbo-8steps-v1.0: fccd4ef0de", Hashes: {...}, Version:
+  ComfyUI, HaDeS MOSS Suite`.
+- **Hashing:** the first save with `hashes` on took 5.7 s for the Saver alone (the 10.2 GB model and the 3.4 MB LoRA, right after the
+  model was loaded, so the file may have been in the OS cache; a cold disk will be slower); the next save 0.06 s.
+- **Two stages:** the refined 2048 PNG with Telemetry on the whole pipeline wrote the first KSampler's settings (`Size: 1024x1024`, no
+  denoise) and the note "2 KSamplers / 1 Loaders in metadata ..."; with a second Telemetry fed only by the Loader, Prompt Enhancer, the
+  pass's KSampler and the Turbo, on `primary_stage_metadata`: `Size: 2048x2048, Denoising strength: 0.25`, no note, and the PNG keeps
+  both `hades_moss` (all six infos) and `hades_moss_primary_stage` (four).
+- **A merge made in the workflow** (the LoRA Toolkit example with the Multi-LoRA on): `Model: merge: mossImage_sft_bf16 +
+  mossImage_base_bf16`, no `Model hash`, and the note "the model is a merge made in the workflow".
+- **Privacy:** `hashes` off leaves no `Model hash`, `Lora hashes` or `Hashes`; `embed_workflow` off leaves `parameters` and `hades_moss`
+  but no `prompt` / `workflow` chunk; ComfyUI's `--disable-metadata` leaves no text chunk at all (`tests/test_moss_suite.py`,
+  `test_disable_metadata_removes_all_png_text`).
+
 ## The LoRA toolkit on Bulle d'Encre (2026-11-21, for the fourth video tutorial)
 
 Bulle d'Encre (`HaDeS_MOSS_preview_beta`) is SFT with 30 % of Base in layers 24-29, plus Turbo 8-steps v1.0 at 0.5 and the mega style LoRA

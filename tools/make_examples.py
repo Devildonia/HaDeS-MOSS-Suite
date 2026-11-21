@@ -461,6 +461,39 @@ EXAMPLES = {
     },
 }
 
+# the fifth video tutorial (tools/moss_video.py metadata): the second video's workflow, the refined image's Saver told which stage
+# made it through a second Telemetry on primary_stage_metadata; measurements in tools/RESULTS.md, "What the MOSS Image Saver writes"
+_upscale = EXAMPLES["HaDeS MOSS Suite - Turbo 8 steps + Upscale x2"]
+EXAMPLES["HaDeS MOSS Suite - Metadata"] = {
+    **{k: v for k, v in _upscale.items() if k not in ("note", "_layout", "_groups")},
+    # the refine stage alone: its Loader, Prompt Enhancer, KSampler and Turbo
+    "tel2": ("HaDeSMossSuiteTelemetry", {"report_title": "Refine stage", "info_1": ("load", 3), "info_2": ("enh", 6), "info_3": ("ks2", 2),
+                                         "info_4": ("turbo", 1)}),
+    "save_ref": (_upscale["save_ref"][0], {**_upscale["save_ref"][1], "primary_stage_metadata": ("tel2", 1)}),
+    # the generation stage alone, for the 1024 image and its plain x2 upscale
+    "tel1": ("HaDeSMossSuiteTelemetry", {"report_title": "Generate stage", "info_1": ("load", 3), "info_2": ("enh", 6), "info_3": ("latent", 3),
+                                         "info_4": ("ks", 2), "info_5": ("turbo", 1)}),
+    "save": (_upscale["save"][0], {**_upscale["save"][1], "primary_stage_metadata": ("tel1", 1)}),
+    "save_up": (_upscale["save_up"][0], {**_upscale["save_up"][1], "primary_stage_metadata": ("tel1", 1)}),
+    "note": ("Note", {"text": "HaDeS MOSS Suite - Metadata (the fifth video tutorial)\n\n"
+                              "Every MOSS Image Saver gets Suite Telemetry's json on metadata: the PNG carries the prompt, the settings,\n"
+                              "the model and every LoRA with their hashes as A1111 parameters (what Civitai and image browsers read), the\n"
+                              "Suite's own copy of every node's settings (hades_moss) and ComfyUI's workflow (drop the PNG into ComfyUI).\n\n"
+                              "Two samplers: with Telemetry on both stages the A1111 parameters are the first sampler's (1024, no denoise)\n"
+                              "and the Saver says so. The refined image's Saver also gets a second Telemetry (Refine stage) on\n"
+                              "primary_stage_metadata, fed only by that stage: its PNG says 2048x2048, Denoising strength 0.25, and still\n"
+                              "keeps the whole pipeline. The 1024 and x2 Savers get a Generate stage Telemetry the same way.\n\n"
+                              "Model: the file the KSampler's model comes from, with its hash; a merge made in the workflow is written\n"
+                              "'merge: a + b' without a model hash (Suite 0.9.3).\n"
+                              "Privacy: hashes off removes the hashes, embed_workflow off removes the workflow; ComfyUI's\n"
+                              "--disable-metadata removes every text from the PNG.\n"
+                              "File names: %model%, %seed%, %steps%, %cfg%, %sampler%, %width%, %height%, %date:...%.\n\n"
+                              "The first save with hashes reads the model once (about 6 s for 10 GB here); later saves reuse it.\n"
+                              "Measurements: tools/RESULTS.md in the HaDeS MOSS Suite."}),
+    "_layout": {**_upscale["_layout"], "tel2": (2500, 1200), "tel1": (1820, 1200)},
+    "_groups": [g if not g[0].startswith("3.") else (g[0], g[1] + ["tel2"], g[2]) for g in _upscale["_groups"]],
+}
+
 DEV_EXAMPLE_TITLES = {"HaDeS MOSS Suite - Dev Tools", "HaDeS MOSS Suite - Stage Metadata (Dev)"}
 
 
