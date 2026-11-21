@@ -1923,6 +1923,19 @@ The VLM judge is not calibrated on real photographs. Maintainer's blind pairs (c
 - **Negative `hat`** (caption, the same 6 seeds): every text stated the absence instead of leaving it out (`wearing no hat`, `his head bare without a hat`, `No hat is present on his head`), and 0 / 6 images showed headwear, against 5 / 6 without the negative. At CFG 1 the sampler does not use the negative conditioning, so this is the written prompt's doing. One idea, one image seed.
 - **Time:** the answer alone took 1.6 s for caption and 2.2-2.5 s for detailed (3 seeds each, no image rendered); a full run with the 8-step image took 4.1-5.7 s.
 
+**Corrections** (2026-11-21, the same setup). The detailed oil-painting prompt of enhancer seed 2 (189 words) pasted back as the idea, detailed mode, enhancer seeds 0-5, with a note after a blank line; texts checked by word, images by eye:
+
+| Note after the pasted prompt | Text applies it | Image shows it | The rest of the scene |
+|---|---|---|---|
+| none (control) | — | — | 5 / 6 images nearly identical to the original; 1 text made the man "a young adult figure" |
+| `Corrections: the fisherman is a young man.` | 6 / 6 ("a young man"), but 5 / 6 kept "his white beard" | about 3 / 6 younger | kept |
+| `Correcciones: el pescador es un hombre joven.` (Spanish) | 6 / 6, 4 / 6 kept "his white beard" | about 4 / 6 younger | kept |
+| `Corrections: the fisherman is a young man with a short dark beard.` | 6 / 6 (white beard left in 2) | 6 / 6 a younger man with a dark beard | kept |
+| `Corrections: the fisherman wears a hat and there is a cat in the image.` | 6 / 6 hat and cat (212-248 words) | 6 / 6 hat and cat | kept |
+
+- The note was never copied into the prompt (no "Correction" in any of the 30 texts); the Spanish note came out in English.
+- A correction that contradicts other words of the pasted prompt can leave them in ("young man" with "his white beard"); naming the conflicting detail too fixed it here. One prompt, one image seed.
+
 ## HaDeS MOSS v1.0 Turbo int8 ConvRot (2026-11-14)
 
 `HaDeS_MOSS_v1.0_Turbo.safetensors` saved by MOSS Model Saver as int8 ConvRot (Comfy-Org layout): 5.41 GB, SHA256 `e0707a51…ca7344`, the same keys, dtypes and shapes as the v0.9.4 int8 file. Against the BF16 file, 10 prompts of `prompts_40_variados.txt` (0, 6, 10, 14, 20, 25, 27, 30, 34, 35), stock nodes, seed 1001, 1344 x 1792, 8 steps, CFG 1, euler / simple, official negative (`<archive>/moss_eval/v10_int8`):

@@ -1897,6 +1897,33 @@ PE_LINES = [
      "suscríbete. ¡Es gratis!"),
     ("Thanks for watching, and see you in the next one.",
      "Gracias por verlo, y nos vemos en el próximo."),
+    # 44: corrections (said after the detailed section; measured in tools/RESULTS.md, "Corrections")
+    ("One more trick, my favourite. Once you've seen the image, paste the detailed prompt back as the idea, and add your "
+     "corrections at the end.",
+     "Un truco más, mi favorito. Cuando ya has visto la imagen, pega el prompt detailed como idea y añade tus correcciones al final."),
+    ("Write the label \"Corrections\", then what to change. Pasted back with no corrections, the picture comes out almost the "
+     "same: five of six tries.",
+     "Escribe la etiqueta \"Corrections\" y luego lo que quieras cambiar. Si lo pegas sin correcciones, la imagen sale casi igual: "
+     "cinco de seis pruebas.",
+     "Write the label, Corrections, then what to change. Pasted back with no corrections, the picture comes out almost the "
+     "same: five of six tries."),
+    ("Here I ask for a hat and a cat. Hat and cat in six of six tries, and the rest of the painting stays.",
+     "Aquí pido un sombrero y un gato. Sombrero y gato en seis de seis pruebas, y el resto del cuadro se mantiene."),
+    ("A tip: correct everything that goes against your change. \"A young man\" alone kept the white beard in the text, and only "
+     "about half the men looked younger.",
+     "Un consejo: corrige todo lo que vaya en contra de tu cambio. Solo con \"a young man\", el texto conservaba la barba blanca y "
+     "solo la mitad de los hombres parecían más jóvenes.",
+     "A tip: correct everything that goes against your change. A young man, alone, kept the white beard in the text, and only "
+     "about half the men looked younger."),
+    ("\"A young man with a short dark beard\" worked six of six.",
+     "\"A young man with a short dark beard\" funcionó seis de seis.",
+     "A young man with a short dark beard, worked six of six."),
+    ("And you can write the corrections in your own language. In Spanish, \"Correcciones\", the enhancer applied them in six of "
+     "six texts, and wrote the prompt in English.",
+     "Y puedes escribir las correcciones en tu idioma. En español, \"Correcciones\", el enhancer las aplicó en seis de seis "
+     "textos, y escribió el prompt en inglés.",
+     "And you can write the corrections in your own language. In Spanish, correcciones, the enhancer applied them in six of "
+     "six texts, and wrote the prompt in English."),
 ]
 
 PE_POS = {"loader": (0, 0), "enhancer": (440, 0), "latent": (940, 0), "sampler": (1380, 0), "saver": (1820, 0), "turbo": (940, 450),
@@ -1908,8 +1935,10 @@ PE_WINTER = "the same man in winter, snow on the dock"
 PE_IMAGE = "fisherman_video1.png"  # the first video's image, uploaded by pe_prepare into the recording instance's own input folder
 # the measured texts (tools/RESULTS.md, "Every mode on one short idea"): a run whose text lacks its words is reported
 PE_EXPECT = {"caption": "faded blue cap", "detailed": "oil painting", "photo": "documentary photograph", "random0": "ukiyo-e",
-             "random4": "Nordic", "image": "white beard", "winter": "snow", "tags": "man", "negative": "hat"}
+             "random4": "Nordic", "image": "white beard", "winter": "snow", "tags": "man", "negative": "hat", "hatcat": "cat"}
 # the 6 + 6 measured images of the negative check (same clean instance, seeds 0-5)
+PE_YOUNG_SHEET = [(f"/view?filename=corr_young_s{s}_00001_.png&subfolder=pe_measure&type=output",
+                   f"/view?filename=corr_young_beard_s{s}_00001_.png&subfolder=pe_measure&type=output") for s in range(6)]
 PE_NEG_SHEET = [(f"/view?filename=caption_s{s}_00001_.png&subfolder=pe_measure&type=output",
                  f"/view?filename=negative_hat_s{s}_00001_.png&subfolder=pe_measure&type=output") for s in range(6)]
 
@@ -1935,7 +1964,7 @@ async def pe_prepare(page):
     print("warm-up run:", await page.evaluate(UP_WARM_JS, g), flush=True)
 
 
-async def pe_type(d, node, name, text):
+async def pe_type(d, node, name, text, paste=False, append=False):
     """Click the node's text box, select its text and type over it (an empty text just clears it). The box is the visible
     textarea with that placeholder nearest the node (the widget's own element can be a stale, unlaid-out copy)."""
     find = """([id, n, focus]) => { const nd = window.__hv.node(id), c = window.__hv.screen(id, nd.size[0] / 2, nd.size[1] / 2);
@@ -1954,11 +1983,18 @@ async def pe_type(d, node, name, text):
     if not await d.js(find.replace("if (focus) { e.focus(); return", "if (focus) { return"), [node, name, True]):
         if not await d.js(find, [node, name, True]):  # focus the box itself, never the canvas
             raise SystemExit(f"the {name} box is not focused; nothing typed")
-    await d.page.keyboard.press("Control+A")
-    await d.page.keyboard.press("Backspace")
-    if text:
+    before = await d.js("([id, n]) => window.__hv.widget(id, n).value", [node, name])
+    if append:
+        await d.page.keyboard.press("Control+End")
+    else:
+        await d.page.keyboard.press("Control+A")
+        await d.page.keyboard.press("Backspace")
+    if text and paste:
+        await d.page.keyboard.insert_text(text)  # at once, as a paste
+    elif text:
         await d.page.keyboard.type(text, delay=22)
-    await d.js("([id, n, t]) => window.__hv.set(id, {[n]: t})", [node, name, text])  # the widget value, as typed
+    value = (before or "") + text if append else text
+    await d.js("([id, n, t]) => window.__hv.set(id, {[n]: t})", [node, name, value])  # the widget value, as typed
 
 
 async def pe_run(d, saver, enhancer, expect=None):
@@ -2108,6 +2144,40 @@ async def prompt_enhancer(d: Director):
     await pe_hide(d)
     await d.camera([preview], 1100, pad=40, top=60)
     await d.say(23)
+    await d._after_voice(0.2)
+
+    # 6b. corrections: the oil-painting prompt pasted back with a note
+    await d.camera([enhancer, preview], 1100, pad=40, top=60)
+    await d.say(44)
+    await pe_type(d, enhancer, "idea", text_det.strip(), paste=True)
+    await up_set(d, enhancer, {"mode": "detailed", "seed": 2})
+    await d._after_voice(0.1)
+    await d.say(45)
+    await pe_type(d, enhancer, "idea", "\n\nCorrections: the fisherman wears a hat and there is a cat in the image.", append=True)
+    await d._after_voice(0.1)
+    url_hc, _, _ = await pe_run(d, saver, enhancer, "hatcat")
+    await d.say(46)
+    side = 640
+    await d.js("(h) => window.__hv.show(h)", '<div style="display:flex;gap:40px;margin-top:120px">' + "".join(
+        f'<div style="text-align:center"><img src="{u}" style="width:{side}px;height:{side}px;border-radius:6px">'
+        f'<div style="color:#ffcc33;font:600 26px Segoe UI,sans-serif;margin-top:12px">{t}</div></div>'
+        for u, t in ((url_det, "detailed"), (url_hc, "+ Corrections: a hat and a cat"))) + "</div>")
+    await d._after_voice(0.4)
+    await d.say(47)
+    side = 300
+    cells = "".join(f'<img src="{a}" style="width:{side}px;height:{side}px;border-radius:4px">' for a, _ in PE_YOUNG_SHEET) + \
+        "".join(f'<img src="{b}" style="width:{side}px;height:{side}px;border-radius:4px">' for _, b in PE_YOUNG_SHEET)
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }",
+               '<div style="margin-top:110px;text-align:center;color:#fff;font:600 26px Segoe UI,sans-serif">'
+               f'<div style="display:grid;grid-template-columns:repeat(6,{side}px);gap:10px">{cells}</div>'
+               '<div style="display:flex;justify-content:space-between;margin-top:14px;color:#ffcc33">'
+               '<span>top: "a young man"</span><span>bottom: "a young man with a short dark beard"</span></div></div>')
+    await d._after_voice(0.3)
+    await d.say(48)
+    await d._after_voice(0.4)
+    await pe_hide(d)
+    await d.camera([enhancer, preview], 1100, pad=40, top=60)
+    await d.say(49)
     await d._after_voice(0.2)
 
     # 7. seed and temperature
