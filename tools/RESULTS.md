@@ -2853,3 +2853,48 @@ Reproduction (the lab's `phase8_c2t/run_all.ps1`, condensed): `moss_native_mix_c
 (the `ffn30` template), `moss_codec_capture.py --hms-diagonal` then `--hms-rows` on the calibration prompts, `moss_hms_calibrate.py`
 (C1 scales and codebook), `moss_hms_gptq.py` (GPTQ shards), `moss_hms_assemble.py` (the final checkpoint with `hades/recipe`);
 evaluation with `moss_quant_grid.py`, `moss_hms_score.py` and `moss_text_eval_batch.py`.
+
+### HMS v1 on SFT and Bulle d'Encre (2026-11-22)
+
+Applied the exact `HMS v1` (`C2t` recipe: `ffn30` layout + `C1` + `GPTQ` with the 7 calibration prompts `1, 21, 3, 23, 16, 29, 37` from `prompts_40_variados.txt`, `--expected-scenes 7`) to `mossImage_sft_bf16.safetensors` (`moss_sft`, 25 steps, CFG 2.5, `er_sde/simple`, no SLG) and `HaDeS_MOSS_preview_beta.safetensors` (`bulle`, 15 steps, CFG 2.5, `euler/simple`, SLG), evaluating each against its own BF16 reference on the 10 `phase1` scenes (seed 1001) and 8 text prompts × 10 seeds (`2001–2010`, 110 expected texts):
+
+- `phase9_sft_bulle/models/moss_sft_hms_v1.safetensors`: **3,955,670,084 B** (SHA-256 `a33dc49aa831a9451085ec3ac0a9ab6fdde0aba9a1eb2860d37b73864b5a0c79`).
+- `phase9_sft_bulle/models/bulle_hms_v1.safetensors`: **3,955,670,404 B** (SHA-256 `c936f1c159c1cbec8396e6f377dc55e7c66179db23a6443106301c49ce4ee572`).
+
+| Model | Series | L1@64 % | L1@16 % | MAE /255 | Var. Lap. (HMS / BF16) | Δ luma mean / median | Text exact (HMS / BF16) | Warm s | Peak VRAM B | Ops |
+|---|---|---:|---:|---:|---|---:|---|---:|---:|---:|
+| `moss_sft` | 10-scene grid | 4.723 | 3.272 | 15.501 | 2003.35 / 2079.49 | +1.680 / +0.699 (8/10) | 2/2 | 7.296 | 11,613,117,440 | 84,000 |
+| `moss_sft` | text `2001–2010` | 5.934 | 4.163 | 18.371 | 819.44 / 872.23 | +1.029 / +0.536 (46/80) | **106/110** vs **105/110** | 7.217 | 11,613,117,440 | 672,000 |
+| `bulle` | 10-scene grid | 4.542 | 2.852 | 17.734 | 1595.01 / 1573.50 | +0.474 / -0.139 (5/10) | 2/2 | 4.521 | 11,613,117,440 | 50,080 |
+| `bulle` | text `2001–2010` | 5.107 | 3.504 | 17.313 | 823.58 / 808.15 | +1.541 / +0.517 (47/80) | **110/110** vs **108/110** | 4.513 | 11,613,117,440 | 400,640 |
+
+Both models pass all gates (`text >= BF16 - 2`, `|median luma| <= 2.5`; reference `L1@64` vs Base `4.130%` and Turbo `5.160%`), confirming that the `HMS v1` (`C2t`) recipe transfers cleanly to both `SFT` and `Bulle d'Encre` without tuning. Blind 1024x1024 pairs: `hms_sft_parejas_1024.zip` (SHA-256 `b64f43f44b4fb52c26ef588c334f814cd9cfd435d6e3f8185943f7004a8a8875`) and `hms_bulle_parejas_1024.zip` (SHA-256 `57ddebb262c7cf82bc0baa1f35c9ee0eaee6d077cc688e1e79961cb3e44d6eed`); keys kept unopened in `phase9_sft_bulle/{moss_sft,bulle}/blind_key_A.json`. Failure sheets (`BF16 | HMS`): `phase9_sft_bulle/{moss_sft,bulle}/text_fails/fails/`.
+
+Human review (HaDeS, blind, both ZIPs, keys unopened): "excellent, both". HMS v1 is approved on all four models (Base, SFT, HaDeS MOSS v1.0 Turbo, Bulle d'Encre). Note: Bulle d'Encre was evaluated with SLG (the graph came from Base's); BF16 and HMS used the same graph, so the comparison holds, but its usual settings have no SLG. SFT and Bulle d'Encre used C1 on all seven calibration prompts (`moss_hms_calibrate.py --expected-scenes 7`); Base and Turbo used C1 on the first four and GPTQ on seven.
+
+### Model Saver: HMS v1 precision (0.9.5, 2026-11-22)
+
+Validation of the Model Saver's HMS v1 export running inside a real ComfyUI instance (clean server on port 8189, `--use-sage-attention`) through the API (`phase10_saver/validate_real.py`). The exported file is bit-identical to the lab's SFT HMS v1 file (942/942 tensors).
+
+**Saver performance (server peak resources):**
+
+| Job | Save time | Peak RAM | Peak VRAM | Target file |
+|---|---:|---:|---:|---|
+| `base_hms` | 560 s | 19,461 MiB | 24,599 MiB | `base_hms_00001_.safetensors` |
+| `merge_hms` | 494 s | 23,367 MiB | 26,083 MiB | `merge_hms_00001_.safetensors` |
+| `merge_bf16` | 28 s | 30,051 MiB | 23,669 MiB | `merge_bf16_00001_.safetensors` |
+
+**Quality metrics (offline scoring against respective BF16 references):**
+
+| Model / Merge | Series | L1@64 % | L1@16 % | MAE /255 | Var. Lap. (HMS / BF16) | Δ luma mean / median | Text exact (HMS / BF16) | Warm s | Peak VRAM B | Ops |
+|---|---|---:|---:|---:|---|---:|---|---:|---:|---:|
+| `base_hms` | 10-scene grid | 4.122 | 3.060 | 13.134 | 876.23 / 514.16 | +2.329 / +1.772 (7/10) | 2/2 | 7.633 | 11,613,117,440 | 83,480 |
+| `base_hms` | text `2001–2010` | 6.723 | 5.288 | 19.594 | 199.41 / 187.09 | -3.358 / -1.307 (30/80) | **109/110** vs **107/110** | 7.634 | 11,613,117,440 | 667,840 |
+| `merge_hms` | 10-scene grid | 4.492 | 3.211 | 14.862 | 1096.50 / 1735.17 | -2.341 / -2.782 (2/10) | 2/2 | 7.917 | 11,613,117,440 | 84,000 |
+| `merge_hms` | text `2001–2010` | 5.939 | 4.216 | 17.965 | 701.90 / 742.77 | -1.152 / -2.151 (25/80) | **107/110** vs **108/110** | 7.669 | 11,613,117,440 | 672,000 |
+
+Notes:
+- `base_hms` is scored against the lab's `phase1/bf16_01` (10 scenes) and `phase7_text_seeds/base_bf16` (text seeds).
+- `merge_hms` is scored directly against `merge_bf16` saved in the same session.
+- On `merge_hms`, scene 27 (4-panel manga page) exhibits a composition shift (MAE 40.77, L1@64 10.51%) rather than blur, preserving sharp inked line art.
+- Not hidden: on the merge (SFT with half of Base in blocks 18-35, the sixth video's test recipe) the 10-scene median luma (-2.78) is just past the lab's +-2.5 gate and the grid's mean Laplacian drops 1735 -> 1097, mostly scene 27's composition shift (12586 -> 6733 in the first run; the other scenes lose 5-25 %). Text stays within the gate (107/110 vs 108/110). The four published HMS v1 models (Base, SFT, v1.0 Turbo, Bulle d'Encre) all pass every gate; an HMS file of a merge should be checked by eye against its BF16 save.
