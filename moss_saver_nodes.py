@@ -8,7 +8,10 @@ import folder_paths
 import comfy.model_management
 import comfy.model_patcher
 import comfy.quant_ops
+import comfy.samplers
 import comfy.utils
+
+from . import moss_hms
 
 from .moss_common import (count_layers, format_info, key_patches, key_patches_float, key_patches_live, key_patches_weight, model_weights,
                           stochastic_round_bf16, reserve_path, reserved, write_atomic)
@@ -19,7 +22,9 @@ _INT8_LAYER_LINEAR_RE = re.compile(r"^layers\.\d+\.proj\.(qkv|q|k|v|o|ffn_up_gat
 _INT8_QUANT_CONF = {"format": "int8_tensorwise", "convrot": True, "convrot_groupsize": 256}
 _INT8_ATTENTION_CONF = {"attention": "comfy_kitchen_int8"}
 
-PRECISIONS = ["bfloat16", "int8 ConvRot (Comfy-Org layout)", "float32"]
+HMS = "HMS v1 (W4A8 / W6A8, calibrated)"
+PRECISIONS = ["bfloat16", "int8 ConvRot (Comfy-Org layout)", "float32", HMS]
+_HMS_LINEAR_RE = re.compile(r"^layers\.(\d+)\.proj\.(qkv|o|ffn_up_gate|ffn_down)\.weight$")
 ROUNDINGS = ["stochastic", "nearest"]
 
 
@@ -36,7 +41,10 @@ class HaDeSMossModelSaver:
                 "filename_prefix": ("STRING", {"default": "diffusion_models/MOSS_HaDeS_Merged", "tooltip": "Subfolder and file name prefix inside ComfyUI/output."}),
                 "precision": (PRECISIONS, {"tooltip": "bfloat16: same as the original files. int8 ConvRot: the layout of Comfy-Org's *_int8_convrot files "
                                                       "(layer linears in int8 with Hadamard rotation and int8 attention, the rest in bfloat16), "
-                                                      "about half the size. float32: uncompressed."}),
+                                                      "about half the size. float32: uncompressed. "
+                                                      "HMS v1: the HaDeS MOSS Suite recipe, about 3.96 GB in ComfyUI's native W4A8 / W6A8 formats "
+                                                      "(stock Load Diffusion Model), calibrated on the model itself: needs clip and takes minutes "
+                                                      "(see the hms_* inputs)."}),
                 "include_metadata": ("BOOLEAN", {"default": True, "tooltip": "Write ModelSpec title / author and the HaDeS precision and layer count into the safetensors header."}),
             },
             "optional": {
@@ -54,6 +62,16 @@ class HaDeSMossModelSaver:
                     "Optional. How this model was made, written into the file as hades/recipe (with include_metadata). Link the info "
                     "output of the MOSS Loader, Multi-LoRA or a merger here (several joined with the core Concatenate node), or type notes. "
                     "The MOSS Metadata Reader shows it and follows the models and LoRAs it names."}),
+                "clip": ("CLIP", {"tooltip": "HMS v1 only: the MOSS-Image text encoder (the MOSS Loader's CLIP), used to calibrate on "
+                                             "seven fixed prompts. Not used by the other precisions."}),
+                "hms_steps": ("INT", {"default": 25, "min": 4, "max": 100, "tooltip": "HMS v1 only: sampling steps of the calibration runs. "
+                                      "Use the model's own settings: 25 for SFT / Base, 8 for turbo models, 15 for Bulle d'Encre."}),
+                "hms_cfg": ("FLOAT", {"default": 2.5, "min": 1.0, "max": 10.0, "step": 0.1, "tooltip": "HMS v1 only: CFG of the "
+                                      "calibration runs (2.5 for SFT / Base and Bulle d'Encre, 1 for turbo models)."}),
+                "hms_sampler": (comfy.samplers.KSampler.SAMPLERS, {"default": "er_sde", "tooltip": "HMS v1 only: sampler of the "
+                                "calibration runs (er_sde for SFT / Base, euler for turbo models and Bulle d'Encre)."}),
+                "hms_scheduler": (comfy.samplers.KSampler.SCHEDULERS, {"default": "simple", "tooltip": "HMS v1 only: scheduler of the "
+                                  "calibration runs."}),
             },
         }
 
@@ -64,7 +82,16 @@ class HaDeSMossModelSaver:
     CATEGORY = "HaDeS/MOSS Mergers"
     DESCRIPTION = "Saves a MOSS-Image MODEL with its merge / LoRA patches baked in, loadable by the stock Load Diffusion Model node."
 
-    def save(self, model, filename_prefix, precision, include_metadata, custom_author="HaDeS", custom_model_title="", rounding="stochastic", recipe=""):
+    def save(self, model, filename_prefix, precision, include_metadata, custom_author="HaDeS", custom_model_title="", rounding="stochastic", recipe="",
+             clip=None, hms_steps=25, hms_cfg=2.5, hms_sampler="er_sde", hms_scheduler="simple"):
+        hms = precision == HMS
+        if hms and clip is None:
+            raise ValueError("MOSS Model Saver: HMS v1 calibrates on the model itself and needs the MOSS-Image text encoder: connect clip.")
+        hms_out, hms_modules = {}, set()
+        if hms:
+            # before the lazy state dict below: sampling after it streamed the weights from disk on every call under dynamic VRAM
+            hms_out, hms_modules = self._hms(model, clip, comfy.model_management.get_torch_device(), hms_steps, hms_cfg, hms_sampler,
+                                             hms_scheduler)
         full_output_folder, filename, counter, _, _ = folder_paths.get_save_image_path(filename_prefix, folder_paths.get_output_directory())
         os.makedirs(full_output_folder, exist_ok=True)
 
@@ -86,8 +113,9 @@ class HaDeSMossModelSaver:
                     conf = json.loads(bytes(lazy_sd[conf_key].to("cpu").tolist()))
                     if all(conf.get(k) == v for k, v in _INT8_QUANT_CONF.items()):
                         preserved.add(module)
-        stochastic = rounding == "stochastic" and dtype == torch.bfloat16 and not int8
-        rounding_used = "stochastic" if stochastic else "none (float32)" if dtype == torch.float32 else "nearest"
+        stochastic = rounding == "stochastic" and dtype == torch.bfloat16 and not int8 and not hms
+        rounding_used = ("HMS v1 (C1 + GPTQ); other weights nearest" if hms else "stochastic" if stochastic
+                         else "none (float32)" if dtype == torch.float32 else "nearest")
         # float32 output: patched weights computed in float32 here; the core's lazy saving applies patches in the model's own
         # dtype (bfloat16), which would round them before they reach the float32 file
         exact = dtype == torch.float32
@@ -107,10 +135,12 @@ class HaDeSMossModelSaver:
             return {**{qk: qv.cpu() for qk, qv in qt.state_dict(k).items()},
                     f"{k[:-len('.weight')]}.comfy_quant": _json_tensor(_INT8_QUANT_CONF)}
 
-        sd = {}
+        sd = dict(hms_out)
         for k, v in lazy_sd.items():
             module = k.rsplit(".", 1)[0]
             pk = f"diffusion_model.{k}"
+            if module in hms_modules:
+                continue  # written by HMS: weight, scales, codebook and comfy_quant of the native layout
             if module in quantized - preserved:
                 if k == f"{module}.weight":
                     if int8 and _INT8_LAYER_LINEAR_RE.match(k):
@@ -154,6 +184,8 @@ class HaDeSMossModelSaver:
                 "hades/layers": str(n_layers),
                 "hades/timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             }
+            if hms:
+                metadata["hades/quantization"] = moss_hms.recipe_metadata(hms_steps, hms_cfg, hms_sampler, hms_scheduler)
             if recipe.strip():
                 metadata["hades/recipe"] = recipe.strip()
         # the free name is created with O_EXCL only now, when the weights are ready: another export to the same folder and prefix
@@ -169,6 +201,27 @@ class HaDeSMossModelSaver:
                            "model_saver", saved_path=out_path, precision=precision, n_layers=n_layers, rounding=rounding_used,
                            recipe=bool(metadata and "hades/recipe" in metadata))
         return {"ui": {"saved_path": [out_path], "info": [info]}, "result": (model, out_path, info)}
+
+    @staticmethod
+    def _hms(model, clip, device, steps, cfg, sampler_name, scheduler):
+        """HMS v1: calibration runs on the model itself, then every layer projection in its native W4A8 / W6A8 layout (C1 + GPTQ)."""
+        names = sorted({m.group(0)[:-len(".weight")] for k in model.model.diffusion_model.state_dict(keep_vars=True)
+                        for m in [_HMS_LINEAR_RE.match(k)] if m},
+                       key=lambda n: (int(n.split(".")[1]), moss_hms.FAMILIES.index(n.split(".")[3])))
+        n_layers = len(model.model.diffusion_model.layers)
+        if len(names) != 4 * n_layers:
+            raise ValueError("MOSS Model Saver: HMS v1 needs the fused layout of the MOSS-Image files (proj.qkv, proj.o, ffn_up_gate, "
+                             f"ffn_down in every layer); this model has {len(names)} of {4 * n_layers}.")
+        bar = comfy.utils.ProgressBar(2 * len(moss_hms.PROMPTS) + len(names))
+        diagonals, counts, rows = moss_hms.capture(model, clip, steps, cfg, sampler_name, scheduler, n_layers, bar)
+        out = {}
+        for name in names:
+            pk = f"diffusion_model.{name}.weight"
+            weight = key_patches_float(key_patches(model, pk), device, pk)
+            out.update(moss_hms.quantize_projection(name, weight, diagonals, counts, rows.pop(name), device))
+            moss_hms.log.info("HMS: %s quantized", name)
+            bar.update(1)
+        return out, set(names)
 
 
 NODE_CLASS_MAPPINGS = {"HaDeSMossModelSaver": HaDeSMossModelSaver}

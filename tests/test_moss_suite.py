@@ -530,6 +530,49 @@ class TestSaverAndSampler(unittest.TestCase):
         actual = comfy.utils.get_attr(reloaded.model.diffusion_model, key).dequantize().float()
         self.assertLess(rel_err(actual.cpu(), expected.cpu()), 0.03)
 
+    def test_hms_needs_clip_and_keeps_its_recipe(self):
+        """HMS v1 calibrates on the model itself: without the text encoder it stops with a clear error before any work; the recipe
+        (formats per layer, the seven calibration prompts) is fixed, so every HMS v1 file is made the same way."""
+        hms = importlib.import_module(f"{PACK}.moss_hms")
+        model = comfy.sd.load_diffusion_model_state_dict(tiny_state_dict(31))
+        with self.assertRaisesRegex(ValueError, "clip"):
+            saver.HaDeSMossModelSaver().save(model, "tests/hms", saver.HMS, True)
+        self.assertIn(saver.HMS, saver.PRECISIONS)
+        self.assertEqual([i for i, _ in hms.PROMPTS], [3, 16, 23, 29, 37, 1, 21])
+        self.assertEqual(sum('"' in p for _, p in hms.PROMPTS), 3)  # three of the seven carry quoted text
+        self.assertEqual(hms.target_format(0, "qkv"), "w6a8_int8")
+        self.assertEqual(hms.target_format(29, "ffn_down"), "asym_w4a8_int8")
+        self.assertEqual(hms.target_format(30, "ffn_up_gate"), "w6a8_int8")
+        meta = json.loads(hms.recipe_metadata(8, 1.0, "euler", "simple"))
+        self.assertEqual((meta["method"], meta["version"], meta["protected_ffn_blocks"]), ("HMS", 1, list(range(30, 42))))
+        hms._kitchen()  # the comfy-kitchen helpers HMS needs are present
+
+    @unittest.skipUnless(os.environ.get("HADES_MOSS_TEST_CUDA") == "1", "opt-in CUDA export checks")
+    def test_hms_projection_matches_the_native_layout_on_cuda(self):
+        """One projection through C1 + GPTQ: the stock layout's tensors, a dequant close to the weight, and rows that cut the
+        output error against the stock quantizer's nearest rounding."""
+        hms = importlib.import_module(f"{PACK}.moss_hms")
+        g = torch.Generator().manual_seed(3)
+        w = (torch.randn(256, 512, generator=g) * 0.02).to(torch.bfloat16)
+        rows = torch.randn(384, 512, generator=g).to(torch.bfloat16)
+        energy = rows.float().square().mean(0)
+        for name in ("layers.0.proj.o", "layers.5.proj.ffn_down"):
+            out = hms.quantize_projection(name, w, [{name: energy}], [{name: 384}], rows, torch.device("cuda"))
+            native = QuantizedTensor.from_float(w.cuda(), "AsymW4A8Int8Layout", **({"bits": 6, "codebook": False} if "proj.o" in name else {}))
+            ref = native.state_dict(name + ".weight")
+            self.assertEqual({k: (tuple(v.shape), v.dtype) for k, v in out.items() if not k.endswith("comfy_quant")},
+                             {k: (tuple(v.shape), v.dtype) for k, v in ref.items()})
+            core, rotate, _ = hms._kitchen()
+            lut = out.get(name + ".weight_codebook")
+            deq = core.dequantize_w4a8_int8_weight(out[name + ".weight"].cuda(), out[name + ".weight_s_rel"].cuda(),
+                                                   out[name + ".weight_s_channel"].cuda(), lut.cuda() if lut is not None else None)
+            # the stock dequant gives the weight back in its own basis (the ConvRot rotation is undone inside)
+            self.assertLess(rel_err(deq.float().cpu(), w.float()), 0.15)
+            x = rows.float()
+            mine_err = rel_err(x @ deq.float().cpu().T, x @ w.float().T)
+            stock_err = rel_err(x @ native.dequantize().float().cpu().T, x @ w.float().T)
+            self.assertLessEqual(mine_err, stock_err * 1.02)
+
     @unittest.skipUnless(os.environ.get("HADES_MOSS_TEST_CUDA") == "1", "opt-in CUDA export checks")
     def test_quantized_exports_on_cuda(self):
         self.assertTrue(torch.cuda.is_available(), "HADES_MOSS_TEST_CUDA=1 needs CUDA")

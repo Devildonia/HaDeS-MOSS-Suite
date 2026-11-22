@@ -80,11 +80,12 @@ def main():
     for key in ("source", "ffn30", "captures", "out"):
         p.add_argument("--"+key, type=Path, required=True)
     p.add_argument("--blocks", type=int, nargs="+", default=list(range(42)))
+    p.add_argument("--expected-scenes", type=int, default=4)
     args = p.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     files = sorted(args.captures.glob("cal_*.safetensors"))
-    if len(files) != 4:
-        raise ValueError("Expected four completed calibration scenes")
+    if len(files) != args.expected_scenes:
+        raise ValueError(f"Expected {args.expected_scenes} completed calibration scenes, got {len(files)}")
     samples = [(load_file(str(f)), json.loads(f.with_suffix(".json").read_text())) for f in files]
     with safe_open(args.source, framework="pt") as src, safe_open(args.ffn30, framework="pt") as ref:
         for block in args.blocks:
