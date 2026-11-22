@@ -527,6 +527,12 @@
       "name": "recipe"
      },
      "shape": 7
+    },
+    {
+     "name": "clip",
+     "type": "CLIP",
+     "link": null,
+     "shape": 7
     }
    ],
    "widgets_values": [
@@ -536,7 +542,11 @@
     "HaDeS",
     "",
     "stochastic",
-    ""
+    "",
+    25,
+    2.5,
+    "er_sde",
+    "simple"
    ],
    "properties": {
     "Node name for S&R": "HaDeSMossModelSaver"
