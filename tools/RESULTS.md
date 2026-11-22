@@ -2417,3 +2417,439 @@ Rainy alley is unanimous for baked v0.9.4; pocket-watch macro is unanimous for S
 ### v0.9.4 Turbo vs v1.0 (2026-11-13)
 
 The assistant voted on the 20 blind pairs and saved its verdicts before opening the key: v1.0 11, v0.9.4 5, tie 4. It agreed with the maintainer on 10 of 20 pairs. Not counted in the model card.
+
+## Experimental quantization — MOSS Base repeatability pilot (2026-11-21)
+
+RTX 5090, driver 621.01, PyTorch 2.9.1+cu130, SDPA, ComfyUI 0.43.0
+(426f5eea52a7ece1dd599fff4cb6cd1f352ddd24), Suite worktree exp/quant based on
+6c8d227ebf9c56854b77a29ade8a2269534969ad. Lab root: I:/HaDeS_MOSS/quant_lab.
+Eight local checkpoint paths, exact lengths and SHA-256 digests are recorded in
+phase0/model_inventory.json. The Base BF16 file is 10,164,655,808 bytes, the hybrid
+encoder 6,724,098,468 bytes and the Flux2 VAE 336,213,556 bytes.
+
+tools/moss_quant_repeat.py called stock nodes directly in a separate process after
+the isolated HTTP startup attempt on port 8190 timed out. Graph and evidence:
+phase0/base_offline_01/{graph.json,measurement.json,repeat_0.png,repeat_1.png}.
+Use the ComfyUI venv Python with -B and arguments --core H:/Comfy_UI_V61/ComfyUI
+--prompts I:/HaDeS_MOSS/prompts/prompts_40_variados.txt --out <new-run-directory>.
+Prompt file SHA-256: 242fd546d84709a92cdc8a5d9fa2f6b42f20d5ecf68f12c27f6a53d6e1d32f8e.
+Graph file SHA-256: 339fd6aa34e956fca6a16e0c768935c7c507a30f38d21f157ad955f4788544a4.
+
+First prompt (Sardinian shepherd), seed 1001, 1024 square, 25 steps, CFG 2.5,
+er_sde/simple, default model shift, SLG single block 22 over 0–50%, Suite evaluation
+negative. Both calls executed KSampler and VAEDecode, reusing the loaded objects,
+conditioning and initial empty latent. Setup with conditioning took 33.12 s.
+Sampling, decoding and conversion to uint8 RGB took 17.19 s then 14.09 s.
+Peak PyTorch allocated CUDA memory was 17,813,873,664 bytes in each run (allocator
+scope). RGB SHA-256 b2716b6599c430534107302f980d9239487bcfa955f8f5ee3935b170fc16fcdd
+in both images. Changed pixels: 0 of 1,048,576. This establishes within-process
+repeatability for one prompt and seed. Cold restarts and other prompts remain untested.
+
+Historical cross-check: the ten BF16/int8 PNG pairs in I:/HaDeS_MOSS/moss_eval/v10_int8
+yield mean full-size RGB MAE 12.545/255 (pair range 7.052–26.126), recomputed as the
+arithmetic mean of per-pair absolute RGB differences. Those files use v1.0 Turbo at
+1344 x 1792, 8 steps, CFG 1, euler/simple. The historical 2.87% at 64 px belongs
+to this Turbo test. The precise historical thumbnail resampling procedure remains
+unconfirmed. The four planned native Base candidates still require verified
+checkpoints and measurements before setting quality gates.
+
+## Native NVFP4 block projections on MOSS Base — 2026-11-21
+
+RTX 5090, driver 621.01, PyTorch 2.9.1+cu130, ComfyUI 0.43.0 and SDPA, same core and Suite revisions as the Base pilot. All paths below are relative to I:/HaDeS_MOSS/quant_lab. This is a native baseline for evaluating the experimental representation.
+
+Conversion: tools/moss_quant_nvfp4.py, source phase0/model_inventory.json entry mossImage_base_bf16.safetensors. Default Comfy NVFP4 quantizer, nearest rounding, per-matrix global and per-16 block scales, dynamic input scales. Exported qkv, o, ffn_up_gate and ffn_down in all 42 blocks (168 matrices). The 211 other tensors retained their dtype, shape and raw contents, verified against the source. Target: phase1/models/moss_base_nvfp4_blocks.safetensors, SHA256 d59ce5a741fc8642509ae3610b007b834d94b747e5538187ca8a45159c8c4fb9. The 3,327,469,496 bytes include 2,378,170,368 weight codes, 297,271,968 scale bytes, 651,935,808 literal bytes, 3,024 format-marker bytes and an 88,328-byte header. See phase1/size_audit.json.
+
+tools/moss_quant_grid.py rendered each checkpoint in its own fresh process with the stock UNETLoader and KSampler. Positive prompts 0,6,10,14,20,25,27,30,34,35 from the pilot prompt file, one seed (1001), 1024 square, 25 steps, CFG 2.5, er_sde/simple, Base SLG block 22 through 50%, hybrid Qwen and Flux2 VAE. Only the UNet filename differs within a pair. BF16 prompt 0 also matched the pilot's RGB hash across process restarts. Source graphs, PNGs, RGB hashes and run records: phase1/bf16_01 and phase1/nvfp4_01.
+
+| Measure | Base BF16 | NVFP4 |
+|---|---:|---:|
+| Complete checkpoint bytes | 10,164,655,808 | 3,327,469,496 |
+| First sampling + decode + finite check + RGB conversion, seconds | 16.069 | 9.842 |
+| Same, median of next nine, seconds | 14.657 | 7.665 |
+| Peak CUDA bytes allocated by PyTorch during measured runs | 17,813,873,664 | 11,039,570,944 |
+| Completed comfy_kitchen.scaled_mm_nvfp4 calls across ten samplings | 0 | 83,480 |
+| UNETLoader return in separate fresh process, seconds (one trial) | 2.738 | 0.092 |
+
+Sampling timings exclude prompt encoding, model setup and image writes. The loader-only times exclude subsequent materialization/device upload, use different storage volumes, and the OS file cache was uncontrolled. They do not establish a cold-storage loading speedup. Operator instrumentation counted successful returns on the stock path; low-level kernel identities were not profiled.
+
+tools/moss_quant_compare.py: RGB8 bicubic square thumbnails with Pillow, L1 expressed as percentage of 255. At 64 px mean 9.103%, median 8.188%, range 4.329–19.075%. At 16 px mean 7.298%, range 3.695–14.262%. Full-resolution RGB MAE mean 26.905 levels out of 255, range 12.064–62.020. The four-panel detective manga (27) is the largest deviation across all three scales; the diner (14) is the smallest. Mean luma Laplacian variance (Suite four-neighbour filter) rises from 514.16 to 1763.83. This is a signal of high-frequency change and requires visual interpretation. The thumbnail scores are specific to this Base protocol.
+
+MOSS Text Check (hybrid Qwen, greedy, seed 0) read both requested strings literally in both variants: OPEN (14) and VISIT THE FJORDS (34). This tests the requested strings only. Human preference and composition review are pending. phase1/nvfp4_comparison_01 contains summary.json, pairs.csv, text_check.json, the two loader timings, blind_pairs.jpg and the separate A-side key. The 1024 px PNGs in each render directory are available for full-size inspection.
+
+### Blind quality review by HaDeS — 2026-11-21
+
+On the ten-pair sheet, HaDeS marked 00B, 06A, 10B, 14B, 20A, 25B, 27A, 30B, 34B and 35B as very poor quality. He judged the better-looking alternatives barely adequate overall. Decoding the recorded key assigns nine of the ten marked images to the NVFP4 candidate. The exception is 34B (BF16, fjord poster). These are paired visual judgments on one seed and this sheet; the reviewer gave no numerical scores. Even 14B (NVFP4), the pair with the lowest thumbnail difference, was marked very poor despite its exact text reading. This NVFP4 recipe falls short of the project's quality objective in this review. Retain its size and timing as comparison data. Absolute reference quality merits checking at native resolution before setting the acceptance threshold.
+
+Review scale clarification from HaDeS: each 1024 x 1024 render was displayed as a 256 x 256 JPEG sheet tile, potentially smaller when the viewer fits the entire sheet. The 9/10 result describes choices at that viewing scale. The observation that even the preferred images looked marginal applies to those previews; absolute quality at native resolution remains unassessed. phase1/nvfp4_comparison_01/parejas_1024.zip contains the 20 original PNGs under the same A/B labels, with no resampling or re-encoding. The original key has already been disclosed.
+
+### Native-resolution visual verdict from HaDeS — 2026-11-21
+
+After reviewing the original 1024 x 1024 images, HaDeS marked all ten NVFP4 renders as unacceptable and judged the BF16 renders correct. He reported illegible text and artifacts that sometimes made the depicted content hard to recognize. The 10/10 count applies to the overall visual verdict; separate counts for individual defects were not supplied. This resolves the question left open by the thumbnail review, including pair 34.
+
+MOSS Text Check matched the two requested strings (OPEN and VISIT THE FJORDS) with its automated reader. Those matches measure string recognition on two images. Human legibility and scene recognizability are assessed separately. Exclude this specific 168-projection NVFP4 Base recipe from quality candidates and retain its measurements as a rejected baseline. Scope: these ten prompts, seed 1001 and the recorded Base workflow.
+
+## Native ConvRot W4A4 block projections on MOSS Base — 2026-11-21
+
+Paired against the same phase1/bf16_01 references as the NVFP4 experiment above. Same ten prompts, seed 1001, 1024 square, er_sde/simple, 25 steps, CFG 2.5, Base SLG, hybrid Qwen and Flux2 VAE on RTX 5090. For every pair the saved graphs matched after removing the model filename. tools/moss_quant_nvfp4.py --format convrot_w4a4 used the installed TensorCoreConvRotW4A4Layout defaults (rotation groups of 256, quantization groups of 64, int4 multiplication, stochastic rounding off). All 168 block projections converted. The other 211 tensors matched source bytes, shapes and dtypes.
+
+Checkpoint phase1/models/moss_base_convrot_w4a4_blocks.safetensors, SHA256 9866ee1cee8f77aae2de26e6c0d6500b2c628dd2404f4f59e8da489508f11014. Exact size 3,035,514,568 bytes. Audit: phase1/convrot_size_audit.json. Counted 83,480 completed convrot_w4a4_linear calls over ten samplings. First sampling + decode + finite check + RGB conversion 11.10 s, median of remaining nine 9.39 s; peak allocated CUDA bytes 10,739,221,504. Loader return 0.027 s with uncontrolled OS cache and deferred materialization; this excludes first generation.
+
+RGB thumbnail L1 means at 64/16 px: 17.553% / 15.844%. Full-resolution mean absolute RGB difference: 47.841 levels of 255. Largest at all three scales: prompt 00 (30.554%, 30.306%, 78.157/255). Mean Laplacian variance 92.51 versus 514.16 in BF16. Text Check exact 0/2: no reading for OPEN, VISIT THE FOREST for VISIT THE FJORDS. BF16 exact 2/2. This recipe saves 291,954,928 bytes versus NVFP4, with higher mean image deviation and longer warm sampling. HaDeS subsequently judged this ConvRot W4A4 recipe visually worse overall than the previously rejected NVFP4 recipe on this test. No individual pair votes were reported for ConvRot. Exclude this recipe from the quality shortlist and retain its measurements as a baseline.
+
+Evidence: phase1/convrot_01 (graphs, PNGs and timings), phase1/convrot_comparison_01 (metrics, text readback and private A-side key). Workspace root convrot_w4a4_parejas_1024.zip contains the 20 original full-resolution PNGs with per-pair randomized labels; every archived image was byte-verified against the corresponding original.
+
+## Native W4A8 on MOSS Base — 2026-11-21
+
+On RTX 5090, using the same Base protocol, ten prompts, seed 1001, 25 steps, CFG 2.5, er_sde/simple, SLG and 1024-square BF16 references as the preceding experiment. Converted the same 168 projections using stock AsymW4A8Int8Layout (four-bit symmetric weight quantization with codebook, group size 16, ConvRot group size 256, eight-bit activations). No prompt calibration. The 211 other tensors match BF16 byte for byte. The complete file phase1/models/moss_base_w4a8_blocks.safetensors occupies 3,332,833,584 bytes, SHA256 7b68d419a65b53f217b06fc5f2b1b7909dfbb253fac91093def38f57279d8e4e. Breakdown in phase1/w4a8_size_audit.json.
+
+Stock loader returned after 0.104 s in a fresh process with uncontrolled OS cache and deferred materialization. Sampling + decoding + finite check + RGB conversion: 9.387 s first image, 7.607 s median warm. PyTorch peak allocated CUDA memory 11,011,812,352 bytes. The stock W4A8 operator completed 83,480 calls during sampling. Full per-image graphs and timings in phase1/w4a8_01.
+
+Paired RGB L1 at 64 px: mean 10.420%, range 5.351–14.228%; at 16 px: mean 8.915%. Full-resolution MAE mean 30.104/255, worst 52.635/255 (manga, prompt 27). Mean luma Laplacian variance 236.72 vs BF16 514.16. Text Check returned literal matches for both OPEN and VISIT THE FJORDS. Mean RGB deviation is above NVFP4 and below ConvRot W4A4; native-resolution human assessment remains pending. Evidence in phase1/w4a8_comparison_01. All 20 anonymized PNGs in w4a8_parejas_1024.zip at the workspace root matched the corresponding source bytes.
+
+### Native-resolution W4A8 review by HaDeS — 2026-11-21
+
+HaDeS ranked W4A8 above NVFP4 visually, citing better scene coherence and readable lettering where NVFP4 was illegible. He found W4A8 too bright and below the project quality target. Keep it as the strongest visually reviewed four-bit baseline on these ten scenes. The reviewer gave an overall assessment without per-image votes.
+
+Follow-up on brightness: mean full-resolution RGB8 luma, computed from decoded PNG values as 0.2126 R + 0.7152 G + 0.0722 B with equal weight per image, was 99.39/255 for BF16, 91.16 for NVFP4 and 114.15 for W4A8. W4A8 exceeded BF16 in 9/10 scenes, by +14.76 levels on average (paired range −5.52 to +27.17). This measures the resulting images, including composition changes. Paired values: phase1/w4a8_comparison_01/mean_luma.csv.
+
+## Native W6A8 on MOSS Base — 2026-11-21
+
+Same RTX 5090, 168 projection matrices, ten prompts and seed 1001 as W4A8 above. The saved per-pair graphs differ only in the DiT filename. Stock AsymW4A8Int8Layout, bits=6, codebook=False, default symmetric weights, 16-weight scale groups, rotation groups of 256 and six-bit scale search. The checkpoint records w6a8_int8. Verified packed int8 row lengths of 3K/4 for all 168 matrices and all 211 literal tensors byte for byte against BF16. File phase1/models/moss_base_w6a8_blocks.safetensors is 4,521,890,208 bytes, SHA256 4c6533ef6532f420ba53d9ce195189243b3518d79ea0134fd1eef46a0c27d7ca. Size audit in phase1/w6a8_size_audit.json.
+
+The loader returned in 0.102 seconds (one fresh process, uncontrolled OS cache, before materialization). First sampling/decoding/finite check/RGB conversion took 9.713 s, median of nine warm runs 7.593 s. Peak PyTorch allocation 12,181,939,200 bytes. 83,480 successful calls to the shared W4/W6 linear operation (instrumentation field w4a8_mm_completed). Full run records: phase1/w6a8_01.
+
+Mean paired RGB L1 at 64/16 px was 4.053% / 3.094%; full-size MAE 12.451/255. All ten 64 px differences fell relative to W4A8. Largest deviation was the macro watch, prompt 06 (10.367% at 64 px, 28.323/255 full-size). Mean luma Laplacian variance 497.99 vs BF16 514.16. On the full-size PNGs, mean luma was 102.08 vs BF16 99.39 and W4A8 114.15. Paired W6A8 minus BF16 was +2.70 on average, brighter in 8/10, spanning -4.18 to +8.27. Text Check matched OPEN and VISIT THE FJORDS literally. In the full-resolution review, HaDeS judged the visual loss minimal and all ten W6A8 images very similar to BF16. For this MOSS Base workflow and seed, W6A8 is the accepted visual benchmark. The target for the experimental format is comparable fidelity to BF16 at fewer than 4,521,890,208 bytes for the complete DiT checkpoint. Results and per-scene luma: phase1/w6a8_comparison_01. Workspace root w6a8_parejas_1024.zip contains all 20 original PNGs, byte-verified against their blinded assignments.
+## Experimental codec pilot protocol (2026-11-21, before candidate scoring)
+
+Deployment targets established from the accepted W6A8 Base run: complete DiT under 4,521,890,208 bytes, comparable full-resolution fidelity in human review, literal text correct on both historical cases. Report candidate mean and worst L1 at 64 px alongside W6A8 (4.053%, 10.367%), plus full-size error, luma, memory and speed. These are comparison points. Only complete-checkpoint image tests can establish acceptance.
+
+First mechanism test: fixed 128 sampled output rows per matrix from the four projections of blocks 0/20/41, full input width. Fit dictionaries to separate rows. Calibration scenes 1 and 21; validation scenes 8 and 32; indices from prompts_40_variados.txt. Final acceptance prompts stay unused. Both candidates use exactly the same dictionaries, base codes, residual proposals and number of corrections, changing only the ranking. Primary readout: paired relative Frobenius error of the projection outputs to BF16 weights, FP32 accumulation, per matrix and validation scene. Advance to block-level testing if the equal-weight mean improves on both scenes. Report regressions per matrix. No claim about final image quality or superiority to W6A8 from this test.
+
+### Vector codec v0 paired pilot results (2026-11-21)
+
+Hardware and workflow: RTX 5090, BF16 Base, hybrid Qwen, pilot graph in phase0/base_offline_01/graph.json, seed 1001, 1024 square, 25 steps, CFG 2.5, er_sde/simple, SLG. tools/moss_codec_capture.py forced projection forwards for hooks in an isolated process. Final captures in phase2/capture_fullspan use projection invocation indices 0, 16, 32 and 48 of 50, with 48 evenly spaced image tokens per invocation (192 total). A preliminary first-half capture in phase2/capture_01 was excluded. Calibration: Havana street and Venice watercolor. Validation: snow leopard and pixel-art harbour. No decoded-image comparison in this pilot.
+
+tools/moss_codec_pilot.py (seed 1121) used a 128-row disjoint dictionary-fit sample and a 128-row measured sample per matrix; the full column width is retained. Two 256-entry FP16 codebooks per matrix, four weights per vector, FP16 row RMS scale, 8-bit main index, one bitmap bit per group and an 8-bit residual index on exactly one quarter of groups. Main/residual dictionaries fit by ten Lloyd iterations each on 16,384 training vectors per matrix. The weight criterion ranks reduction in squared weight error, the activation criterion ranks reduction in local quadratic error using empirical 4-by-4 uncentered second moments per input group. Both account for BF16 decode rounding. Selection neglects correlations between groups; evaluation uses the complete sampled-row matmul, including cross-group contributions. Metric: norm of output difference / norm of BF16 weight reference output, with identical FP32 operands/accumulation and TF32 disabled; unweighted mean across matrix/scene cells.
+
+| Held-out scene | Weight ranking | Activation ranking | Improved matrices |
+|---|---:|---:|---:|
+| Snow leopard | 19.2488% | 16.8910% | 12/12 |
+| Pixel-art harbour | 19.1958% | 17.1433% | 12/12 |
+| Equal-weight mean | 19.2223% | 17.0172% | 24/24 paired cells |
+
+Relative error reduction 11.472%. Mean reduction by projection family: qkv 7.706%, attention output 11.342%, FFN up/gate 16.275%, FFN down 8.840%. The 24 cells share model weights and scenes; they are not independent replications. Both archives in phase2/vector_pilot_01 occupy exactly 2,357,208 bytes for 6,684,672 sampled weights (2.8210 bits/weight including header, dictionaries, scales and bitmap). tools/moss_vector_codec.py round-tripped each saved matrix bit-exactly against the encoder reconstruction on CPU and GPU. CPU checks also covered non-divisible widths, empty/all/partial masks and truncated bitmaps. Row mappings, run SHA-256 values and raw paired results in results.json; paired_errors.csv is the compact output.
+
+Decision: activation-based selection clears the predeclared two-scene pilot gate. Proceed to complete-block tests against both the weight-only ranking and the accepted W6A8 reference before scaling up. The pilot does not quantify full-checkpoint size, accumulated denoiser error, image fidelity, or generation speed.
+
+### Complete-block comparison with native W6A8 (2026-11-21)
+
+RTX 5090, same core, BF16 Base pilot graph, hybrid encoder, 1024 square, seed 1001, 25 steps, CFG 2.5, er_sde/simple and SLG. Frozen pilot codebooks and calibration activations; full rows and columns in the four projections of blocks 0, 20 and 41. Global per-matrix ranking, fixed 25% corrections. Both archives cover 339,738,624 weights and measure 117,032,112 bytes. phase2/full_blocks_01/weights.safetensors SHA256 7df589ca8178e6e689e50195482439a9b71c1c430b3b7e617a48f42f4a403936; activations.safetensors SHA256 2b4d1c219cf8cf72ca102908a864be82183f4f7c453a6303887fc07dd3d06c84. Conversion: tools/moss_codec_full_blocks.py. Complete-model size remains extrapolated.
+
+tools/moss_codec_capture.py --blocks saved the complete input, modulation, positional embedding, optional mask and output for 24 BF16 calls (two validation scenes, four invocation indices 0/16/32/48 and three blocks) in phase2/block_inputs_01. No downstream propagation of candidate errors. tools/moss_codec_block_replay.py re-executed stock MOSS blocks. BF16 reproduced all recorded outputs bit-exactly. W6A8 used the accepted checkpoint's actual packed weights and completed four native linear operations per call. Dense HaDeS weights were read from each archive. The numerator for both errors is the Frobenius norm of (candidate output minus reference output); denominators are the BF16 output norm and the BF16 update norm (reference output minus original input), respectively. Equal weight per recorded call.
+
+| Block | Output error: weights / activations / W6A8 | Update error: weights / activations / W6A8 |
+|---|---|---|
+| 0 | 22.936 / 23.036 / 0.557% | 36.684 / 35.199 / 1.622% |
+| 20 | 3.620 / 3.139 / 0.299% | 31.138 / 27.005 / 2.578% |
+| 41 | 59.611 / 61.052 / 2.125% | 70.116 / 71.833 / 2.501% |
+| Mean | 32.661 / 33.087 / 0.952% | 45.543 / 44.846 / 1.840% |
+
+Native W6A8 was closer in all 24 calls. Activation ranking improved over weight ranking in 10/24 calls; its average residual-update improvement did not produce an average block-output improvement. Diagnostic run --isolate-final: only one activation-ranked projection quantized at a time, other three BF16. Block 41 mean output error: qkv 11.512%, o 14.771%, ffn_up_gate 42.265%, ffn_down 53.568%. These isolated errors do not add. Raw paired measurements: phase2/full_blocks_01/block_errors.csv and block41_isolation.csv. Stop full-checkpoint conversion of uniform v0. A revised codec should protect the FFN projections and compete with native W6A8 on these block tests, then verify generalization on fresh scenes. This experiment reports block errors, not visual quality.
+
+### Mixed HaDeS v0 attention + native W6A8 FFN replay (2026-11-21)
+
+Exploratory test on the same RTX 5090, core, frozen BF16 block captures (`phase2/block_inputs_01`, 24 calls across blocks 0, 20, 41, two development validation scenes `val_pixel` and `val_wildlife`, invocation indices 0/16/32/48), and checkpoints (`mossImage_base_bf16.safetensors`, `phase1/models/moss_base_w6a8_blocks.safetensors`, `phase2/full_blocks_01/activations.safetensors`). Adapted `tools/moss_codec_block_replay.py` (`--mixed --serialize-mixed-dir`) to keep BF16 norms from `source`, load dense BF16-decoded `proj.qkv` and `proj.o` from `activations.safetensors`, and load native W6A8 `proj.ffn_up_gate` and `proj.ffn_down` from `w6`.
+
+Verification: all 24 calls finite; `bf16` control reproduced `data["y"]` bit-exactly (`0.000%` error, `0` native `w4a8_int8_linear` calls/call); `w6` dispatched `4` native calls/call; `mixed_attn_hades_ffn_w6` dispatched exactly `2` native FFN calls/call.
+
+| Variant | Block 0 out / upd | Block 20 out / upd | Block 41 out / upd | Mean out / upd (24 calls) |
+|---|---:|---:|---:|---:|
+| BF16 | 0.000% / 0.000% | 0.000% / 0.000% | 0.000% / 0.000% | 0.000% / 0.000% |
+| Native W6A8 | 0.433% / 0.441% | 0.299% / 2.578% | 2.125% / 2.501% | 0.952% / 1.840% |
+| Mixed (HaDeS v0 attn + W6A8 FFN) | 11.111% / 11.309% | 1.624% / 14.047% | 19.147% / 22.612% | 10.628% / 15.989% |
+
+By scene (mean across 12 calls): `val_pixel` output 10.876% / update 16.154% (W6A8: 0.958% / 1.832%); `val_wildlife` output 10.379% / update 15.824% (W6A8: 0.946% / 1.849%).
+
+Serialized 12-projection archive `phase2/mixed_attn_hades_ffn_w6_01/mixed_blocks.safetensors`: 223,291,540 bytes total (39,026,688 B HaDeS v0 attention + 184,258,692 B W6A8 FFN + 6,160 B header/metadata), vs 276,418,824 tensor bytes for the 12 W6A8 projections (92,160,132 B attention + 184,258,692 B FFN) and 117,032,112 B for uniform HaDeS v0 (`activations.safetensors`). Extrapolating the 3-block tensor size (x14) plus 651,935,808 literal bytes yields ~3,777,931,128 bytes (excluding full-model header; extrapolated, not generated).
+
+Decision (pre-declared gate: mean output error <= 3.0% and block 41 <= 5.0%): failed. Protecting FFN with W6A8 reduced mean output error from 33.087% to 10.628%, but HaDeS v0 attention alone remains ~11x above W6A8 (0.952%). Do not scale this v0 attention representation to full-model or fresh-scene image tests; redesign the attention representation as well. Evidence: `phase2/mixed_attn_hades_ffn_w6_01/{mixed_block_errors.csv,size_breakdown.json,mixed_blocks.safetensors,replay.log}`.
+
+### Vector codec v1 screening: subgroup scales and 2D/4D capacity (2026-11-22)
+
+Exploratory screen via `tools/moss_codec_v1_screen.py` on the same RTX 5090, core, frozen BF16 inputs (`phase2/block_inputs_01`, 24 calls across blocks 0, 20, 41), calibration captures (`phase2/capture_fullspan`, seed 1121), and controls (`bf16`, `w6`). Four v1 variants tested across all 12 projections of blocks 0, 20, and 41 (256-entry FP16 codebooks, 10 Lloyd iterations on 16,384 vectors from 256 sampled rows per matrix, BF16 norms preserved):
+
+- `v1_g64_4d_r25`: subgroup RMS scale `g=64`, 4D base + 25% 4D residual selected by activations (`127,458,696` B; extrapolated 42 blocks: `2,436,251,712` B).
+- `v1_g64_4d_r100`: subgroup RMS scale `g=64`, 4D base + 100% 4D residual (`180,541,736` B; extrapolated: `3,179,429,952` B).
+- `v1_g64_2d_r100`: subgroup RMS scale `g=64`, 2D 1-stage (`180,502,456` B; extrapolated: `3,178,913,856` B; equal-byte control to `v1_g64_4d_r100`).
+- `v1_g16_2d_r100`: subgroup RMS scale `g=16`, 2D 1-stage (`212,353,008` B; extrapolated: `3,624,820,800` B).
+
+| Variant | Block 0 out / upd | Block 20 out / upd | Block 41 out / upd | Mean out / upd (24 calls) | 3-block file bytes |
+|---|---:|---:|---:|---:|---:|
+| `bf16` | 0.000% / 0.000% | 0.000% / 0.000% | 0.000% / 0.000% | 0.000% / 0.000% | — |
+| `w6` (native W6A8) | 0.433% / 0.441% | 0.299% / 2.578% | 2.125% / 2.501% | 0.952% / 1.840% | 276,418,824 (tensors) |
+| `v1_g64_4d_r25` | 14.489% / 14.749% | 3.399% / 29.269% | 41.448% / 48.762% | 19.779% / 30.926% | 127,458,696 |
+| `v1_g64_4d_r100` | 13.223% / 13.460% | 2.735% / 23.482% | 41.267% / 48.651% | 19.075% / 28.531% | 180,541,736 |
+| `v1_g64_2d_r100` | 24.236% / 24.670% | 3.009% / 25.789% | 57.906% / 68.229% | 28.384% / 39.562% | 180,502,456 |
+| `v1_g16_2d_r100` | 14.450% / 14.708% | 2.204% / 18.875% | 36.685% / 43.214% | 17.779% / 25.599% | 212,353,008 |
+
+Verification: all 24 calls finite per variant; `bf16` bit-exact (`0` native calls); `w6` `4` native calls/call; v1 variants `0` native calls/call and finite round-trip decode.
+
+Findings and decision: (1) Replacing row-wide RMS scale with `g=64` subgroup scale alone cut mean output error from `33.087%` (v0) to `19.779%`. (2) At equal bytes (`~180.5 MB`), 2-stage 4D RVQ (`19.075%`) beat 1-stage 2D VQ (`28.384%`). (3) All four v1 designs failed the pre-declared `<= 3.0%` mean / `<= 5.0%` block-41 gate because 256-entry 2D/4D codebooks only provide ~4-bit-equivalent resolution (~16 levels/weight) on unrotated weights, far below W6A8's 64 levels/weight. Next step: test higher-resolution representations (e.g., 5–6 bit scalar/rotated quantization or 3-stage / larger-codebook VQ with orthogonal rotation) against W6A8 on `phase2/block_inputs_01`. Evidence: `phase2/v1_screen_01/{v1_block_errors.csv,v1_size_summary.json,*.safetensors}` and `phase2/v1_screen_01.log`.
+
+### Hadamard-rotated (FWHT-64) v2 screening on blocks 0, 20, 41 (2026-11-22)
+
+Exploratory screen via `tools/moss_codec_v2_screen.py` on the same RTX 5090, core, frozen BF16 inputs (`phase2/block_inputs_01`, 24 calls), and controls (`bf16`, `w6`). Applied an orthogonal 64x64 Sylvester Hadamard rotation (`FWHT-64`, zero file overhead) per subgroup of 64 weights before encoding, comparing 4D 2-stage RVQ (`v2_fwht64_4d_s2`, seed 1121, `4.25 bpw`) against bit-packed symmetric scalar quantization at 4, 5, and 6 bits (`v2_fwht64_q4` at `4.25 bpw`, `v2_fwht64_q5` at `5.25 bpw`, `v2_fwht64_q6` at `6.25 bpw`), with exact round-trip pack/unpack and BF16 norms preserved.
+
+| Variant | Block 0 out / upd | Block 20 out / upd | Block 41 out / upd | Mean out / upd (24 calls) | 3-block file bytes (extrap. 42 bl.) |
+|---|---:|---:|---:|---:|---|
+| `bf16` | 0.000% / 0.000% | 0.000% / 0.000% | 0.000% / 0.000% | 0.000% / 0.000% | — |
+| `w6` (native W6A8) | 0.433% / 0.441% | 0.299% / 2.578% | 2.125% / 2.501% | 0.952% / 1.840% | 276,418,824 B tensors (4,521,890,208 B) |
+| `v2_fwht64_4d_s2` | 3.411% / 3.472% | 1.357% / 11.723% | 9.523% / 11.193% | 4.764% / 8.796% | 180,541,688 B (~3,179,429,952 B) |
+| `v2_fwht64_q4` | 0.885% / 0.900% | 1.178% / 10.202% | 8.720% / 10.249% | 3.594% / 7.117% | 180,489,024 B (~3,178,741,824 B) |
+| `v2_fwht64_q5` | 0.682% / 0.694% | 0.560% / 4.841% | 3.971% / 4.664% | **1.737% / 3.400%** | 222,956,352 B (~3,773,284,416 B) |
+| `v2_fwht64_q6` | 0.368% / 0.375% | 0.312% / 2.708% | 2.139% / 2.516% | **0.940% / 1.866%** | 265,423,680 B (~4,367,827,008 B) |
+
+Verification: all 24 calls finite per variant; `bf16` bit-exact (`0` native calls); `w6` `4` native calls/call; v2 variants `0` native calls/call and finite round-trip decode.
+
+Findings and decision: (1) Adding `FWHT-64` alone cut 4D 2-stage RVQ mean output error from `19.075%` (`v1_g64_4d_r100`) to `4.764%` at identical bytes. (2) At equal bytes (`4.25 bpw`, `~180.5 MB`), rotated 4-bit scalar (`3.594%`) beat rotated 4D RVQ (`4.764%`) without codebooks. (3) Both `v2_fwht64_q5` (`1.737%` mean, `3.971%` block 41, `~3.77 GB` extrapolated) and `v2_fwht64_q6` (`0.940%` mean, `2.139%` block 41, matching `w6`'s `0.952%` at `~4.37 GB` extrapolated) pass the pre-declared `<= 3.0%` mean / `<= 5.0%` block-41 gate. Next step: verify generalization on fresh unseen scenes and blocks before full-model conversion and image testing. Evidence: `phase2/v2_screen_01/{v2_block_errors.csv,v2_size_summary.json,*.safetensors}` and `phase2/v2_screen_01.log`.
+
+### Fresh-scene generalization of FWHT-64 5-bit and 6-bit (2026-11-22)
+
+Confirmatory out-of-sample test on 3 unseen prompts from `I:/HaDeS_MOSS/prompts/prompts_40_variados.txt` (`fresh_portrait=2`, `fresh_bw=12`, `fresh_ukiyoe=22`; unused in `phase1` and `phase2/capture_fullspan`). `tools/moss_codec_capture.py --blocks` recorded 36 BF16 block calls (3 scenes x 3 blocks x 4 invocations) in `phase2/block_inputs_fresh_01`. `tools/moss_codec_v2_screen.py --replay-from phase2/v2_screen_01` replayed the already-serialized `v2_fwht64_q5.safetensors` and `v2_fwht64_q6.safetensors` archives alongside `bf16` and `w6`.
+
+| Variant | Block 0 out / upd | Block 20 out / upd | Block 41 out / upd | Mean out / upd (36 calls) | Per-scene out (portrait / bw / ukiyoe) |
+|---|---:|---:|---:|---:|---|
+| `bf16` | 0.000% / 0.000% | 0.000% / 0.000% | 0.000% / 0.000% | 0.000% / 0.000% | 0.000% / 0.000% / 0.000% |
+| `w6` (native W6A8) | 0.444% / 0.452% | 0.305% / 2.725% | 2.159% / 2.567% | 0.969% / 1.915% | 1.030% / 0.910% / 0.967% |
+| `v2_fwht64_q5` | 0.640% / 0.652% | 0.576% / 5.131% | 3.958% / 4.696% | **1.725% / 3.493%** | 1.780% / 1.710% / 1.684% |
+| `v2_fwht64_q6` | 0.419% / 0.427% | 0.336% / 3.001% | 2.129% / 2.528% | **0.961% / 1.985%** | 0.977% / 0.958% / 0.948% |
+
+Verification: all 36 calls finite per variant; `bf16` bit-exact (`0` native calls); `w6` `4` native calls/call; `v2_fwht64_q5` and `v2_fwht64_q6` `0` native calls/call.
+
+Decision: both candidates generalize cleanly to unseen scenes, clearing the pre-declared confirmation gate (`q5` `1.725% <= 3.0%`, block 41 `3.958% <= 5.0%`; `q6` `0.961% <= 1.5%`, matching `w6`'s `0.969%`). Advance to Phase 3: convert complete MOSS Base BF16 checkpoints (including `v2_fwht64_q5`, `~3.77 GB` extrapolated) and evaluate full-model image fidelity on Base and Turbo. Evidence: `phase2/v2_fresh_01/v2_block_errors.csv`, `phase2/v2_fresh_01.log`, `phase2/block_inputs_fresh_01.log`.
+
+## Phase 3: Complete MOSS Base FWHT-64 5-bit checkpoint and 10-scene evaluation (2026-11-22)
+
+Same RTX 5090, core, hybrid Qwen, Flux2 VAE, ten Base prompts (`0,6,10,14,20,25,27,30,34,35`), seed 1001, 1024 square, 25 steps, CFG 2.5, er_sde/simple, Base SLG, paired against `phase1/bf16_01`. Conversion: `tools/moss_codec_v2_convert.py --bits 5` quantized all 168 block projections (`FWHT-64`, `g=64`, symmetric 5-bit packed `[-15, 15]`) and preserved all 211 other tensors byte-for-byte. Packed archive `phase3/models/moss_base_fwht64_q5_blocks.safetensors`: **3,773,344,112 bytes** (SHA-256 `608f91dd737c28af3a7b1632e2495c5e8b688f377832de89b126b7abe3185631`; 2,972,712,960 B packed + 148,635,648 B scales + 651,935,808 B literals + 59,696 B header/metadata), saving **748,546,096 bytes** vs W6A8 (`4,521,890,208` B). Round-trip decode verified bit-exact per matrix against the in-memory reconstruction; for Phase 3 format-quality isolation before implementing a deferred loader, `tools/moss_quant_grid.py` rendered the dense BF16 reconstruction (`moss_base_fwht64_q5_dense_bf16.safetensors`, 10,164,655,808 B).
+
+`tools/moss_quant_compare.py` vs `phase1/bf16_01`:
+- **L1 @ 64 px:** mean **6.856%** (median 6.768%, range 3.251%–11.158%, worst prompt 27) — vs W6A8 `4.053%`, NVFP4 `9.103%`, W4A8 `10.420%`.
+- **L1 @ 16 px:** mean **6.084%** (range 2.715%–9.498%).
+- **Full-size RGB MAE:** mean **19.653/255** (median 18.432/255, range 8.904–39.761/255) — vs W6A8 `12.451/255`, NVFP4 `26.905/255`, W4A8 `30.104/255`.
+- **Mean luma Laplacian variance:** **431.25** (vs BF16 `514.16`, W6A8 `497.99`).
+- **Mean full-size RGB8 luma:** **86.78/255** vs BF16 `99.39/255` (`-12.61` levels on average, darker in 10/10 scenes, range `-24.66` to `-3.44`).
+- **MOSS Text Check:** exact literal match **2/2** (`OPEN` on 14, `VISIT THE FJORDS` on 34).
+
+Evidence: `phase3/fwht64_q5_size_audit.json`, `phase3/fwht64_q5_01`, `phase3/fwht64_q5_comparison_01/{summary.json,pairs.csv,text_check.json,blind_pairs.jpg,blind_key_A.json}`, and workspace root `fwht64_q5_parejas_1024.zip` (SHA-256 `703c3f4ddbcb961f186352e5939862a8d73ebe44166f0583debdabbe086c9235`) for HaDeS blind native-resolution review.
+
+### Blind native-resolution review by HaDeS — 2026-11-22
+
+After inspecting the 10 full-resolution pairs in `fwht64_q5_parejas_1024.zip`, HaDeS judged the pairs very close ("son muy cercanos") and requested the key (`blind_key_A.json` disclosed afterwards: `A = BF16` on `0, 6, 20, 27, 30`; `A = FWHT-64 5-bit` on `10, 14, 25, 34, 35`). Next: test `FWHT-64 5-bit` on `HaDeS_MOSS_v1.0_Turbo` (8 steps, CFG 1) and validate the pure-PyTorch `MODEL` loader (Phase 4: load time, VRAM, and reconstruction cost).
+
+### Higher-resolution (`1152x1536`) Base evaluation of FWHT-64 5-bit (2026-11-22)
+
+Same ten Base prompts, seed 1001, 25 steps, CFG 2.5, er_sde/simple, Base SLG, hybrid Qwen, Flux2 VAE, and dense BF16-decoded `FWHT-64 5-bit` (`moss_base_fwht64_q5_dense_bf16.safetensors`), rendered at `1152x1536` (`phase3/graph_1152x1536.json`) against fresh BF16 renders (`phase3/bf16_1152x1536_01`).
+
+- **L1 @ 64 px:** mean **8.301%** (median 8.539%, range 4.782%–12.344%, max prompt 34).
+- **L1 @ 16 px:** mean **7.592%** (median 8.212%, range 3.838%–11.940%).
+- **Full-size RGB MAE:** mean **23.249/255** (median 22.792/255, range 12.498–39.919/255).
+- **Mean luma Laplacian variance:** **700.72** (vs BF16 `737.81`).
+- **Mean full-size RGB8 luma:** **82.68/255** vs BF16 `100.40/255` (`-17.72` levels on average, darker in 10/10 scenes, range `-29.92` to `-9.06`).
+- **MOSS Text Check:** exact literal match **2/2** (`OPEN` on 14, `VISIT THE FJORDS` on 34).
+
+Blinded full-resolution 1152x1536 pairs: `fwht64_q5_parejas_1152x1536.zip` (SHA-256 `85dd5a010e469b691ab4d7f19dcd4174400b7812e2b9dd3d7c49f4d7e91bc784`); private key kept unopened in `phase3/fwht64_q5_comparison_1152x1536_01/blind_key_A.json` pending HaDeS review.
+
+Human review (HaDeS, 2026-11-22): judged the `1152x1536` pairs quite close ("igual que antes, son bastante cercanas"); `blind_key_A.json` remains unopened. Next: test `FWHT-64 5-bit` on `HaDeS_MOSS_v1.0_Turbo` (8 steps, CFG 1) and implement/benchmark the pure-PyTorch `MODEL` loader (Phase 4).
+
+### HaDeS MOSS v1.0 Turbo FWHT-64 5-bit evaluation at 1024x1024 (2026-11-22)
+
+Converted `HaDeS_MOSS_v1.0_Turbo.safetensors` (`10,164,656,216` B, SHA-256 `cfd7e0db798616954112604d28bcc55bf1adf56851d07f112fc786876c541e9e`) with `tools/moss_codec_v2_convert.py --bits 5` to `phase3/models/moss_v1_turbo_fwht64_q5_blocks.safetensors`: **3,773,343,976 bytes** (SHA-256 `5ff7ed8bb416f8ac361e22160ff82281bde26b633271395d3ac6199ccd5ab48d`; 168 quantized matrices + 210 literal tensors). Rendered the ten `phase1` prompts (`1024x1024`, seed 1001, 8 steps, CFG 1.0, `euler`/`simple`, hybrid Qwen, Flux2 VAE) using the dense BF16 reconstruction (`phase3/turbo_fwht64_q5_01`) vs `HaDeS_MOSS_v1.0_Turbo.safetensors` (`phase3/turbo_bf16_01`).
+
+- **L1 @ 64 px:** mean **6.404%** (median 7.072%, range 2.984%–9.152%, max prompt 6).
+- **L1 @ 16 px:** mean **4.597%** (median 4.527%, range 2.391%–7.627%).
+- **Full-size RGB MAE:** mean **22.120/255** (median 22.451/255, range 12.022–35.056/255).
+- **Mean luma Laplacian variance:** **1502.19** (vs Turbo BF16 `1594.84`).
+- **Mean full-size RGB8 luma:** **131.48/255** vs Turbo BF16 `132.58/255` (`-1.10` levels on average, range `-6.70` to `+9.54`, brighter in 3/10).
+- **MOSS Text Check:** exact literal match **2/2** (`OPEN` on 14, `VISIT THE FJORDS` on 34).
+
+Blinded 1024x1024 pairs: `turbo_fwht64_q5_parejas_1024.zip` (SHA-256 `b5c8e50996eab9c5e10e38d315ac122dab3b7448b2476ca00afccd27d5cc297a`); private key kept unopened in `phase3/turbo_fwht64_q5_comparison_01/blind_key_A.json` pending HaDeS review.
+
+Human review (HaDeS, 2026-11-22): accepted `FWHT-64 5-bit` for its file size (`3.77 GB`) on `HaDeS_MOSS_v1.0_Turbo` ("Estoy conforme. Es una calidad aceptable para el peso."). `blind_key_A.json` remains unopened. Ready for Phase 4 (`MODEL` loader in pure PyTorch, VRAM/load/decode benchmarks, and LoRA regression checks).
+
+## Native mixed-precision priority (W4A8 + W6A8, no custom loader)
+
+### Native W4A8 vs W6A8 sensitivity and mixability screen (2026-11-22)
+
+Exploratory screen via `tools/moss_native_mix_screen.py` on the 36 unseen BF16 block calls (`phase2/block_inputs_fresh_01`, blocks 0, 20, 41), mixing `asym_w4a8_int8` (`phase1/models/moss_base_w4a8_blocks.safetensors`) and `w6a8_int8` (`phase1/models/moss_base_w6a8_blocks.safetensors`) inside a single `Block` with `comfy.ops.mixed_precision_ops(compute_dtype=torch.bfloat16)` and BF16 norms.
+
+| Variant | Block 0 out / upd | Block 20 out / upd | Block 41 out / upd | Mean out / upd |
+|---|---:|---:|---:|---:|
+| `bf16` | 0.000% / 0.000% | 0.000% / 0.000% | 0.000% / 0.000% | 0.000% / 0.000% |
+| `w6` (all W6A8) | 0.444% / 0.452% | 0.305% / 2.725% | 2.159% / 2.567% | 0.969% / 1.915% |
+| `w4` (all W4A8) | 1.293% / 1.318% | 0.817% / 7.263% | 5.970% / 7.085% | 2.693% / 5.222% |
+| `w4_attn_w6_ffn` | 1.133% / 1.154% | 0.529% / 4.719% | 5.332% / 6.340% | 2.331% / 4.071% |
+| `w6_attn_w4_ffn` | 1.079% / 1.099% | 0.683% / 6.072% | 3.418% / 4.044% | **1.727% / 3.739%** |
+
+Block 41 single-projection W4A8 isolation (other three W6A8, 12 calls): `qkv` **4.258%**, `o` **3.801%**, `ffn_up_gate` **2.795%**, `ffn_down` **2.673%**.
+
+Verification and findings: all mixed W4A8+W6A8 blocks loaded cleanly and dispatched exactly `4` native `w4a8_int8_linear` calls per block call. Contrary to `v0` (where FFN dominated), in native `AsymW4A8Int8Layout` **attention (`qkv`, `o`) is more sensitive than FFN**. Because attention is only 1/3 of each block's weights, `w6_attn_w4_ffn` extrapolates to **~3.73 GB** across 42 blocks (leaving ~70 MB under the `~3.80 GB` target to also protect late-block FFN if needed) while matching `FWHT-64 5-bit`'s block error (`1.727%` vs `1.725%`). Evidence: `phase4_native_mix/sensitivity_01/native_mix_errors.csv` and `phase4_native_mix/sensitivity_01.log`.
+
+### Native mixed-precision v1 (`w6_attn + w4_ffn + ffn_w6_38_41`) on MOSS Base 1024x1024 (2026-11-22)
+
+Built `phase4_native_mix/models/moss_base_native_mix_v1.safetensors` via `tools/moss_native_mix_convert.py` (**3,804,677,908 bytes**, SHA-256 `f60057040276935bad18d1450f7c08995168499ef99b6b759b7a5b775f03f2e1`; 92 `w6a8_int8` tensors = 1,535,920,104 B, 76 `asym_w4a8_int8` tensors = 1,616,722,692 B, 211 literal tensors = 651,935,808 B, 99,304 B header/metadata including `hades/recipe`). Loaded directly with stock `UNETLoader` and rendered the ten `phase1` Base prompts (`1024x1024`, seed 1001, 25 steps, CFG 2.5, `er_sde/simple`, Base SLG) against `phase1/bf16_01`:
+
+- **Native kernel dispatch:** **`83,480`** completed `w4a8_int8_linear` calls across the 10 samplings (100% native path).
+- **Speed & VRAM:** first sampling `8.944 s`, median warm **`7.034 s`** (vs BF16 `14.657 s`, **2.08x faster**); peak allocated CUDA memory **`11,462,130,688` B** (vs BF16 `17,813,873,664` B, **-6.35 GB**).
+- **L1 @ 64 px:** mean **6.731%**, median **5.693%** (vs W4A8 `10.420%`, FWHT-64 5-bit `6.856%` / median `6.768%`, W6A8 `4.053%`).
+- **L1 @ 16 px:** mean **5.424%**, median **4.787%** (vs FWHT-64 5-bit `6.084%`).
+- **Full-size RGB MAE:** mean **20.108/255**, median **17.189/255** (vs W4A8 `30.104/255`, FWHT-64 5-bit `19.653/255`).
+- **Mean luma Laplacian variance:** **361.87** (vs BF16 `514.16`, W4A8 `236.72`).
+- **Mean full-size RGB8 luma:** **107.18/255** vs BF16 `99.39/255` (`+7.79` levels, brighter in 10/10, range `+2.81` to `+22.92` — halving W4A8's `+14.76` shift and avoiding FWHT-64 5-bit's `-12.61` darkening).
+- **MOSS Text Check:** exact literal match **2/2** (`OPEN` on 14, `VISIT THE FJORDS` on 34).
+
+Blinded 1024x1024 pairs: `native_mix_base_parejas_1024.zip` (SHA-256 `6ca57b383d03b1cfc16e507ad0872c7017eb26e32c9fb1077b61423e14f50df1`); private key kept unopened in `phase4_native_mix/base_1024_comparison_01/blind_key_A.json` pending HaDeS review.
+
+Human review (HaDeS, 2026-11-22) and verification: in blind review of `native_mix_base_parejas_1024.zip`, both models appear equal in brightness/darkness by eye (`blind_key_A.json` remains unopened). `H:/Comfy_UI_V61/ComfyUI/models/diffusion_models/HMS_base_v1.safetensors` (3,804,677,908 B) is a byte-identical copy of `phase4_native_mix/models/moss_base_native_mix_v1.safetensors` (both SHA-256 `f60057040276935bad18d1450f7c08995168499ef99b6b759b7a5b775f03f2e1`). Per-scene RGB8 mean luma (`phase4_native_mix/base_1024_comparison_01/mean_luma.csv`, `0.2126 R + 0.7152 G + 0.0722 B`): `00` 59.7 vs 65.7 (`+6.04`), `06` 54.0 vs 63.0 (`+9.00`), `10` 40.2 vs 45.1 (`+4.94`), `14` 26.3 vs 31.1 (`+4.84`), `20` 79.6 vs 86.9 (`+7.28`), `25` 124.5 vs 147.4 (`+22.92`), `27` 184.5 vs 187.8 (`+3.31`), `30` 85.5 vs 97.5 (`+11.95`), `34` 146.2 vs 149.0 (`+2.81`), `35` 193.4 vs 198.2 (`+4.83`) — brighter in 10/10, mean `+7.79`, median `+5.49` (scene 25 inflates the mean; small steady bias, not noticeable to HaDeS by eye; monitored for calibration, non-blocking). Open item noted: Laplacian variance `361.87` vs BF16 `514.16` (-30%; W6A8 `497.99`, FWHT-5 `431.25`).
+
+### Native mixed-precision v1 on HaDeS MOSS v1.0 Turbo 1024x1024 (2026-11-22)
+
+Converted `HaDeS_MOSS_v1.0_Turbo.safetensors` via `tools/moss_native_mix_convert.py --protected-ffn-blocks 38-41` to `phase4_native_mix/models/moss_v1_turbo_native_mix_v1.safetensors`: **3,804,678,060 bytes** (SHA-256 `8ac061064f95968799c022f39943db6e0a4309d53f15fa9a83801fd56e99238a`). Loaded via stock `UNETLoader` and rendered the ten `phase1` prompts (`1024x1024`, seed 1001, 8 steps, CFG 1.0, `euler`/`simple`, hybrid Qwen, Flux2 VAE) against `phase3/turbo_bf16_01`:
+
+- **Native kernel dispatch:** **`13,440`** completed `w4a8_int8_linear` calls across 10 samplings (100% native path).
+- **Speed & VRAM:** first sampling `5.783 s`, median warm **`1.266 s`** (vs Turbo BF16 `2.543 s`, **2.01x faster**); peak allocated CUDA memory **`11,462,130,688` B** (vs BF16 `17,813,873,664` B, **-6.35 GB**).
+- **L1 @ 64 px:** mean **6.181%**, median **5.981%** (vs FWHT-64 5-bit `6.404%` / median `7.072%`).
+- **L1 @ 16 px:** mean **4.618%**, median **4.770%**.
+- **Full-size RGB MAE:** mean **21.219/255**, median **20.509/255** (vs FWHT-64 5-bit `22.120/255`).
+- **Mean luma Laplacian variance:** **1251.36** (vs Turbo BF16 `1594.84`).
+- **Mean full-size RGB8 luma** (`phase4_native_mix/turbo_1024_comparison_01/mean_luma.csv`): mean **`+2.83`**, median **`+1.42`**, brighter in `8/10` (`00` 132.6 vs 134.7 `+2.08`; `06` 99.5 vs 99.9 `+0.43`; `10` 51.7 vs 56.3 `+4.57`; `14` 64.7 vs 62.5 `-2.18`; `20` 134.4 vs 130.0 `-4.42`; `25` 136.4 vs 147.3 `+10.94`; `27` 182.5 vs 184.2 `+1.65`; `30` 133.7 vs 147.0 `+13.35`; `34` 182.9 vs 183.6 `+0.74`; `35` 207.4 vs 208.6 `+1.20`).
+- **MOSS Text Check:** exact literal match **2/2** (`OPEN` on 14, `VISIT THE FJORDS` on 34).
+
+Blinded 1024x1024 pairs: `native_mix_turbo_parejas_1024.zip` (SHA-256 `e0f7c1f3ccff5abe8d8dc2024734d5508e0d38738f390b6d1e36536770edb817`); private key kept unopened in `phase4_native_mix/turbo_1024_comparison_01/blind_key_A.json` pending HaDeS review.
+
+### Protected FFN sweep in Base: `ffn30` (`30-41`) and `ffn20` (`20-41`) (2026-11-22)
+
+Built `phase4_native_mix/models/moss_base_native_mix_ffn30.safetensors` (`--protected-ffn-blocks 30-41`, **3,955,670,084 bytes**, SHA-256 `90f83f76399c01666d5b7a49fcadc90b0e4bc830a07b8cb2fa48b01aa3171a44`) and `moss_base_native_mix_ffn20.safetensors` (`--protected-ffn-blocks 20-41`, **4,144,410,304 bytes**, SHA-256 `ced7665ead90185259bd3a2d0c259888888617ad29014598ae9e3fabcfde2e28`), and rendered the ten `phase1` Base prompts (`1024x1024`, seed 1001, 25 steps, CFG 2.5, `er_sde/simple`, Base SLG) via stock `UNETLoader` (`83,480` `w4a8_int8_linear` calls each) against `phase1/bf16_01`:
+
+| Mix | Protected FFN | Size (bytes) | L1 @ 64 px | MAE / 255 | Luma diff (mean / med) | Laplacian var | Warm s | Peak VRAM |
+|---|---|---:|---:|---:|---|---:|---:|---:|
+| `v1` | `38-41` | 3,804,677,908 | 6.731% | 20.108 | +7.79 / +5.49 (10/10) | 361.87 | 7.034 | 11.462 GB |
+| `ffn30` | `30-41` | 3,955,670,084 | 5.327% | 16.644 | +3.01 / +2.73 (9/10) | 408.39 | 7.067 | 11.613 GB |
+| `ffn20` | `20-41` | 4,144,410,304 | 4.725% | 14.657 | +2.13 / +2.08 (8/10) | 432.04 | 7.087 | 11.802 GB |
+| `W6A8` | `0-41` | 4,521,890,208 | 4.053% | 12.451 | +2.70 / — (8/10) | 497.99 | 7.593 | 12.182 GB |
+
+Per-scene `mean_luma.csv` and `summary.json` saved in `phase4_native_mix/base_ffn30_comparison_01` and `phase4_native_mix/base_ffn20_comparison_01` (no blind ZIPs generated yet).
+
+### Native Mix v1 vs ffn30: text (2026-11-22)
+
+Converted `HaDeS_MOSS_v1.0_Turbo.safetensors` with `--protected-ffn-blocks 30-41` to `phase4_native_mix/models/moss_v1_turbo_native_mix_ffn30.safetensors` (**3,955,670,236 bytes**, SHA-256 `ffdae75512091d90447855034c6ac19c3b9cc2fb820e56a4f8d70c5c7fac96c5`). Rendered 8 text prompts (`phase5_text/prompts_text.txt`, 11 expected strings per seed) across 3 seeds (`1001, 1002, 1003`, `1024x1024`, hybrid Qwen, Flux2 VAE) on Base (25 steps, CFG 2.5, `er_sde/simple`, SLG) and Turbo (8 steps, CFG 1.0, `euler/simple`) for `bf16`, `v1`, and `ffn30` (144 images total), scored with MOSS Text Check (`tools/moss_text_score_sheets.py`):
+
+| Family | Model | Exact | Close | Missing | Outside box | Failures |
+|---|---|---:|---:|---:|---:|---|
+| Base | `bf16` | 33 | 0 | 0 | 0 | — |
+| Base | `v1` (`38-41`) | 33 | 0 | 0 | 0 | — |
+| Base | `ffn30` (`30-41`) | 32 | 1 | 0 | 0 | `p04/s1003`: `THE LAST NIGHT` -> `THE NIGHT` (`close`) |
+| Turbo | `bf16` | 33 | 0 | 0 | 0 | — |
+| Turbo | `v1` (`38-41`) | 33 | 0 | 0 | 0 | — |
+| Turbo | `ffn30` (`30-41`) | 33 | 0 | 0 | 0 | — |
+
+`ffn30` does not improve text rendering over `v1` (`v1` achieves `66/66` exact across Base and Turbo vs `65/66` for `ffn30`). Comparison sheets (`BF16 | v1 | ffn30`, 3 seeds per prompt): `phase5_text/sheets/{base,turbo}_p00..07.jpg`. Evidence: `phase5_text/text_summary.json`, `phase5_text/text_details.csv`.
+
+## HMS v1 calibration — 2026-11-22
+
+HMS v1 is the uncalibrated native ffn30 recipe. Four calibration prompts (zero-based IDs 1, 21, 3, 23) per family with independent BF16 Base and Turbo traces. Each trace covers 42 blocks × four projections, 48 image positions at four invocation indices per batch element. Full per-projection counts and indices: phase6_calib/run01/{base,turbo}/cal_*.json. Base historical cross-check (24 scene/projection combinations): relative differences in ConvRot activation second moments below 9e-8. For the SLG-skipped block, indices were scaled to actual calls. Runtime and rotation checks: phase6_calib/run01/check.log.
+
+C1: hold ffn30 per-channel scales fixed, fit W4 LUT using activation-energy-weighted Lloyd (300,000 sampled weights, seed 0, 25 iterations); score original and adjacent FP8 group scales plus clips from 0.80 through 1.00 by 0.05 on the decoded INT8 grid. Core BF16 dequant versus explicit reconstruction checked elementwise. Validation on 36 BF16 block calls (three held-out scenes × three blocks × four invocations), arithmetic mean of relative L2 norms per case:
+
+| Variant | Block output | Residual update |
+|---|---:|---:|
+| BF16 | 0 | 0 |
+| W6A8 | 0.00969264 | 0.01914777 |
+| ffn30 | 0.01306800 | 0.03246051 |
+| C1 | 0.01353111 | 0.03219174 |
+
+C1 increases mean output error by 3.54%, failing the required 10% reduction. Four successful native linear calls per quantized block case. Raw: phase6_calib/run01/c1_replay.csv. No human verdict on C1.
+
+C2 (same frozen C1 channel/group scales and codebooks): GPTQ in rotated coordinates, full uncentered FP32 second moment from 768 calibration rows per projection, 1% mean-diagonal damping, sequential columns in blocks of 128. Twelve calibrated matrices verified against eager dequant. On the same 36 held-out block calls, C2 output error **0.01115878**, update error **0.02910035**, a **14.61% relative improvement in output** over ffn30. C2 passes the block gate; W6A8 remains better on average. Raw cases: phase6_calib/c2_pilot01/c2_replay.csv. C1 checkpoints retain exact ffn30 lengths (3,955,670,084 B Base, 3,955,670,236 B Turbo) and tensor headers.
+
+C2 vs the historical W6A8 anchor, same ten Base scenes / seed 1001: L1@64 4.02444% vs 4.05346%, full-resolution RGB MAE 12.79611 vs 12.45086 per 255. At 3,955,670,084 vs 4,521,890,208 bytes, C2 saves 566,220,124 bytes (12.52% of W6A8) and gives similar mean L1@64 on this set. W6A8 still has lower mean block output error and slightly lower full-resolution MAE. This comparison does not establish perceptual equivalence. Sources: phase1/w6a8_comparison_01/summary.json, phase1/w6a8_size_audit.json and phase6_calib/visual_c2_01/base_grid_c2_score/summary.json.
+
+Base C2 Text Check exceptions (all close, zero missing): p00/1003 FRESH BREAD DAILY -> FRESH BREADAILY; p04/1001 and p04/1003 THE LAST NIGHT -> THE NIGHT; p05/1003 MAIN STREET -> MAIN STRET. The p04/1003 miss also occurred in ffn30. These are automated readings. Turbo retains 33/33; all three lost exact matches relative to ffn30 are in Base. Per-image OCR output: phase6_calib/visual_c2_01/base_text_c2_score/text_check.json.
+
+### 2026-11-22T03:24:16+01:00 — Cierre de la calibración HMS v1
+
+| Familia | Serie | Variante | L1@64 % | L1@16 % | MAE /255 | Var. Lap. | Δ luma media / mediana | Más claras | Text Check | s caliente | VRAM pico B | Ops. |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| base | grid | ffn30 | 5.327 | 3.826 | 16.644 | 408.393 | 3.010 / 2.733 | 9/10 | 2/2 | 7.067 | 11613117440 | 83480 |
+| base | grid | c1 | 4.816 | 3.721 | 15.177 | 561.735 | 4.873 / 5.467 | 9/10 | 2/2 | 7.157 | 11613117440 | 83480 |
+| base | grid | c2 | 4.024 | 2.953 | 12.796 | 521.640 | 1.297 / 0.555 | 5/10 | 2/2 | 7.161 | 11613117440 | 83480 |
+| base | text | ffn30 | 8.091 | 6.388 | 22.701 | 94.057 | -0.422 / 1.292 | 15/24 | 32/33 | 7.369 | 11613117440 | 200352 |
+| base | text | c1 | 7.708 | 6.023 | 21.815 | 85.185 | 3.949 / 3.785 | 17/24 | 33/33 | 6.931 | 11613117440 | 200352 |
+| base | text | c2 | 7.588 | 6.044 | 21.398 | 95.634 | 1.189 / -1.736 | 7/24 | 29/33 | 6.747 | 11613117440 | 200352 |
+| turbo | grid | ffn30 | 6.441 | 4.642 | 22.397 | 1553.046 | 2.217 / 2.076 | 8/10 | 2/2 | 1.629 | 11613117440 | 13440 |
+| turbo | grid | c1 | 6.248 | 4.410 | 21.785 | 1589.016 | 1.386 / 1.063 | 7/10 | 2/2 | 1.640 | 11613117440 | 13440 |
+| turbo | grid | c2 | 5.519 | 3.872 | 19.352 | 1549.248 | 1.200 / 0.312 | 8/10 | 2/2 | 1.606 | 11613117440 | 13440 |
+| turbo | text | ffn30 | 5.871 | 3.946 | 19.450 | 658.028 | 5.009 / 5.394 | 22/24 | 33/33 | 1.271 | 11613117440 | 32256 |
+| turbo | text | c1 | 5.617 | 3.880 | 18.551 | 710.728 | 4.310 / 4.980 | 21/24 | 33/33 | 1.175 | 11613117440 | 32256 |
+| turbo | text | c2 | 4.666 | 3.089 | 15.936 | 709.281 | 1.021 / 1.633 | 16/24 | 33/33 | 1.171 | 11613117440 | 32256 |
+
+C2: mejora relativa en bloques 14.61 %. Luma mediana Turbo de texto +1.633 niveles RGB8 frente al límite de +2,5. Text Check combinado 62/66. Diferencias de L1@64 en puntos porcentuales (C2 menos ffn30): {'base_grid': -1.3023865145016336, 'base_text': -0.5030786186002176, 'turbo_grid': -0.9220728656045756, 'turbo_text': -1.204589311853213}. Igualdad del pico asignado en las cuatro comparaciones: True. Los tiempos son medianas tras descartar la primera imagen; sus variaciones se publican sin imponer un margen a posteriori.
+
+- base c1: 3,955,670,084 B, SHA-256 3cd21fd1d2ac80403625ecddacc3265c1ad9139a565627cceddda423987ad834
+- base c2: 3,955,670,084 B, SHA-256 ad00abc18f0d7e628fed7ede5d782a5775e91e03d555091fbf86dc7a2eaa414a
+- turbo c1: 3,955,670,236 B, SHA-256 78aecfc1318a55a49142a17023e8dc2bcb0d479752f3e1eaeb4b50d536252bee
+- turbo c2: 3,955,670,236 B, SHA-256 0bb80e39537c086402d9b28ff6e89bba597a51f65b7bacc7e5114e7c6f92893c
+
+Comandos: phase6_calib/run01/*.ps1, c2_pilot01/stage.ps1, c2_full01/stage.ps1 y visual_c1_01/stage.ps1, visual_c2_01/stage.ps1 (estos cuatro bajo phase6_calib). Cada score/cases.csv registra métricas por PNG, text_check.json las lecturas y runs.json los tiempos y recuentos. Modelo y referencias tienen el mismo encabezado tensorial por familia. Evidencias y hashes: phase6_calib/evidence_hashes.csv, phase6_calib/model_inventory.json y phase6_calib/decision.json. No se ha realizado revisión humana de C1 ni C2. Resultados limitados a los grafos y semillas registrados.
+
+Decisión: mantener ffn30 como referencia HMS v1. No se activa la revisión ciega con los criterios acordados. Conservar C1/C2 como experimentos.
+
+### HMS v1 C2 text, 10 seeds (2026-11-22)
+
+Follow-up Base text evaluation on 10 fresh seeds (`2001–2010`) across the 8 prompts of `phase5_text/prompts_text.txt` (11 expected strings per seed = 110 texts per model; 240 images total in `phase7_text_seeds/{base_bf16,base_ffn30,base_c2}`; 1024x1024, 25 steps, CFG 2.5, `er_sde/simple`, Base SLG, hybrid Qwen, Flux2 VAE), scored with MOSS Text Check (`tools/moss_text_score_fails.py`):
+
+| Model | Exact | Close | Missing | Outside box | Non-exact readings |
+|---|---:|---:|---:|---:|---|
+| `BF16` | 107 | 1 | 2 | 0 | `p00_s2006` (`FRESH BREAD DAIYY`), `p03_s2002` (`COFFEE LUGUT`), `p04_s2007` (`THE LAST`) |
+| `ffn30` | 107 | 1 | 2 | 0 | `p02_s2010` (`OPEN 24`), `p03_s2002` (`COFFEE LVER`), `p04_s2007` (`LAST`) |
+| `C2` | 102 | 7 | 1 | 0 | `p00_s2007` (`FRESH BREAD DALEY`), `p02_s2010` (`OPEN HOURS`), `p03_s2010` (`COFFEE TEA 2.50`, `TEA 2.50`), `p04_s2002` (`THE LAST LOTERN#FT# NIGHT`), `p04_s2004` (`A.ROSSI`), `p04_s2007` (`THE LAST THEN`), `p05_s2001` (`AIN STREET`) |
+
+`ffn30` matches `BF16` (`107/110` exact), while Base `C2` drops to `102/110` (`131/143` combined across `1001–1003` and `2001–2010` vs `139/143` for `ffn30` and `140/143` for `BF16`). Nine side-by-side comparison sheets (`BF16 | ffn30 | C2`) for all non-exact cases are saved in `phase7_text_seeds/fails/`. Evidence: `phase7_text_seeds/text_summary.json`, `phase7_text_seeds/text_details.csv`.
+
+### HMS v1 C2t (2026-11-22)
+
+Calibrated GPTQ (`C2t`) using the four C2 scenes (`1, 21, 3, 23`) plus three quoted-text prompts (`16, 29, 37` from `prompts_40_variados.txt`, excluded from all evaluation sets) across all 42 blocks for Base and Turbo (`phase8_c2t/models/moss_base_hms_v1_c2t.safetensors`: 3,955,670,084 B, SHA-256 `81632cf79adc26c4dc1f86a13f9cc94bd0cb2442ec29a3fe5616d0cf2f69da89`; `moss_v1_turbo_hms_v1_c2t.safetensors`: 3,955,670,236 B, SHA-256 `2a984578776d38f0f12a2dde3b9a19df2a1689c896307ba5a26a2f7c55dee5c8`), keeping the exact `ffn30` layout, C1 grids, and `hades/recipe` metadata.
+
+| Family | Series | Variant | L1@64 % | MAE /255 | Var. Lap. | Δ luma mean / median | Text Check | Warm s | Peak VRAM B | Ops |
+|---|---|---|---:|---:|---:|---|---:|---:|---:|---:|
+| Base | 10-scene grid | `C2t` | 4.130 | 13.003 | 547.92 | +1.444 / +0.490 (8/10) | 2/2 | 7.180 | 11,613,117,440 | 83,480 |
+| Turbo | 10-scene grid | `C2t` | 5.160 | 18.379 | 1544.95 | -0.168 / +0.074 (5/10) | 2/2 | 1.308 | 11,613,117,440 | 13,440 |
+| Base | text `1001–1003` | `C2t` | 8.035 | 22.353 | 96.76 | -6.422 / -2.343 (7/24) | **33/33** | 7.314 | 11,613,117,440 | 200,352 |
+| Base | text `2001–2010` | `C2t` | 6.496 | 19.023 | 185.18 | -2.844 / -0.552 (33/80) | **106/110** | 7.168 | 11,613,117,440 | 667,840 |
+| Turbo | text `2001–2010` | `C2` | 5.029 | 17.010 | 701.05 | +1.649 / +1.738 (56/80) | **108/110** | 1.251 | 11,613,117,440 | 107,520 |
+| Turbo | text `2001–2010` | `C2t` | 6.125 | 20.106 | 674.18 | +0.433 / +0.307 (48/80) | **108/110** | 1.250 | 11,613,117,440 | 107,520 |
+
+Gates (`TAREAS_C2T.md`):
+- Base text combined (`1001–1003` + `2001–2010`, 143 texts): **`C2t` 139/143 exact** (vs `C2` 131/143, `ffn30` 139/143, `BF16` 140/143) — **PASS** (`>= 138/143`).
+- Base 10-scene fidelity: `L1@64` `4.130%` vs `C2` `4.024%` (`+0.106` pp <= `+0.3` pp) and median luma `+0.490` within `±2.5` — **PASS**.
+- Turbo text (`2001–2010`, 110 texts): `BF16` 108/110, `C2` 108/110, `C2t` 108/110 — **PASS** (`>= BF16 - 2`).
+
+Sixteen 4-column failure sheets (`BF16 | ffn30 | C2 | C2t`) for Base non-exact cases are saved in `phase8_c2t/fails/` (plus 2 Turbo sheets in `phase8_c2t/fails_turbo_200x/fails/`). Evidence: `phase8_c2t/{base_grid_c2t_score,turbo_grid_c2t_score,base_text_100x_score,base_text_200x_score,turbo_text_c2_200x_score,turbo_text_c2t_200x_score}/summary.json` and `phase8_c2t/fails_*/text_summary.json`.
+
+### HMS v1: decision (2026-11-22)
+
+Human review (HaDeS, blind, `hms_c2t_base_parejas_1024.zip` and `hms_c2t_turbo_parejas_1024.zip`, ten scenes each against BF16, keys
+unopened): "practically equal"; C2t judged the clear winner over the earlier candidates. **HMS v1 is fixed as C2t:** the `ffn30` layout
+(attention W6A8, FFN of blocks 30-41 W6A8, FFN of blocks 0-29 W4A8, all ComfyUI / comfy-kitchen native formats, loaded by the stock
+`UNETLoader`) with GPTQ in the ConvRot basis on fixed C1 grids, calibrated on prompts 1, 21, 3, 23 (scenes) and 16, 29, 37 (quoted text)
+of `prompts_40_variados.txt`. Base `moss_base_hms_v1_c2t.safetensors` 3,955,670,084 B (SHA-256 `81632cf7...da89`), HaDeS MOSS v1.0 Turbo
+`moss_v1_turbo_hms_v1_c2t.safetensors` 3,955,670,236 B (SHA-256 `2a984578...e5c8`); `hades/recipe` metadata names the method and the
+calibration prompts. Summary against BF16 on this protocol (RTX 5090): Base L1@64 4.130 % (W6A8 4.053 %), luma median +0.49, Laplacian
+547.9 (BF16 514.2), text 139/143 (BF16 140/143); Turbo L1@64 5.160 %, luma median +0.07, text 108/110 (= BF16); about 2x faster than
+BF16 and 11.6 GB peak allocated VRAM instead of 17.8 GB. Lesson: calibration without text prompts lost text (C2 131/143 in Base);
+the calibration set must include quoted text. Not yet measured: transfer of the recipe to finetunes and merges, other GPUs, the light
+pack (HMS + hybrid text encoder) against the official files.
+
+Reproduction (the lab's `phase8_c2t/run_all.ps1`, condensed): `moss_native_mix_convert.py --source <BF16> --protected-ffn-blocks 30-41`
+(the `ffn30` template), `moss_codec_capture.py --hms-diagonal` then `--hms-rows` on the calibration prompts, `moss_hms_calibrate.py`
+(C1 scales and codebook), `moss_hms_gptq.py` (GPTQ shards), `moss_hms_assemble.py` (the final checkpoint with `hades/recipe`);
+evaluation with `moss_quant_grid.py`, `moss_hms_score.py` and `moss_text_eval_batch.py`.

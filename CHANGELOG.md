@@ -7,6 +7,9 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **HMS v1 quantization recipe (tools, not in the Registry package):** MOSS-Image Base and HaDeS MOSS v1.0 Turbo in about 3.96 GB with the stock `UNETLoader` and ComfyUI's native W4A8 / W6A8 kernels: attention and the FFN of blocks 30-41 in W6A8, the other FFN in W4A8, GPTQ-calibrated on scenes and quoted text. Measured against BF16 (`tools/RESULTS.md`, "HMS v1: decision"): Base L1@64 4.13 % (W6A8 4.05 %), text 139/143 (BF16 140/143); Turbo text 108/110 (= BF16); about 2x faster and 11.6 GB peak VRAM instead of 17.8 GB; judged practically equal to BF16 in a blind review. Tools: `moss_native_mix_convert.py`, `moss_codec_capture.py`, `moss_hms_calibrate.py`, `moss_hms_gptq.py`, `moss_hms_assemble.py`, with the evaluation helpers and the research tools of the experiment (native baselines, rejected codecs).
+
 ## [0.9.4] - 2026-11-22
 
 ### Fixed
