@@ -1908,6 +1908,24 @@ Archive: `<archive>/moss_eval/turbo_v10/cfg`.
 - **Text:** right on all 14 jobs in all three arms: the bakery sign and the poster on every seed, and `CAFE 24` and `OBSERVATORY 7`. At CFG 1 none of these 14 was wrong, so this test cannot show a text gain at CFG 1.5. The broken "E" of "EUROPA" in the maintainer's example at CFG 1 (fixed at 1.5) was one seed of a prompt outside this set.
 - **Cost:** above CFG 1 every step runs the model twice.
 
+### Turbo 8-steps SFT v1.0 (2026-11-23)
+
+**Training.** The Base v1.0 recipe rerun from zero with SFT BF16 as teacher and student using `tools/moss_dmd_train.py`. Same 1,024 prompts, encoder and seed (0); the saved prompt embeddings matched the Base run byte for byte. SFT generated its own 1,024 regression targets at 25 steps, CFG 3 and negative-pass layer-22 skip. Generator: 512 x 512, 4 steps, CFG 1, rank 2 in layers 24-41; regression weight 0.05 and five fake-score updates per generator update. The archived report for `<archive>/moss_turbo_runs/dmd512_sft_v10` records 3,000 updates, zero skipped. The EMA and `lora_u03000.safetensors` agree on all 216 tensors. Release export: 144 LoRA matrices rounded to BF16, 72 FP32 alpha scalars preserved, 3,564,296 bytes.
+
+**Comparison protocol.** ComfyUI output `HaDeS/compare/lora_compare_00164_.png` through `lora_compare_00208_.png`. Both branches use the same SFT BF16 model, Qwen3.5-9B int8 ConvRot encoder, FLUX.2 VAE, seed 1200, Euler / simple, shift 5, denoise 1 and SLG off. A loads the released Base v1.0 LoRA; B loads the SFT u3000 FP32 training export, SHA256 `d761fe7ca0fbeCD524af07f17a6db65a3c9e34e8db73db4f026532ba0054a073`. The BF16 export was checked tensor by tensor against the rounded source.
+
+**Main test.** 21 distinct scenes at 1344 x 1792, 8 steps, CFG 1, strength 1.0 (sheets 165-168, 175, 182, 188-202). Metrics use the image panels only. Luma is the Rec. 709-weighted sum of 8-bit RGB; HSV saturation is on the 0-255 scale. Extreme pixels have luma below 5 or above 250. Laplacian is the standard deviation of the four-neighbour luma Laplacian.
+
+| LoRA, both on SFT | Mean luma | Mean HSV saturation | Median extreme pixel share | Median Laplacian |
+|---|---:|---:|---:|---:|
+| Base v1.0 | 106.0 | 75.9 | 0.92% | 16.04 |
+| SFT v1.0 | 96.1 | 90.7 | 2.21% | 15.17 |
+
+- SFT was darker in 21/21 pairs, more saturated in 17/21, and had more extreme pixels in 20/21. Renders retained similar compositions in most pairs by eye. Both LoRAs spelled `OPEN`, `VINYL ONLY`, `THE JUNGLE EATS US ALL!` and the main *Oaken Valley* title correctly in the inspected examples (166, 193, 195, 196).
+- Step sweep: four scenes were coherent at 4 steps (169-171, 173). In the ceramicist sweep, both were softer at 2 steps; texture recovered through 8 and changed more gradually through 20 (172-181).
+- CFG sweep at strength 1.0: on the studio portrait, both darkened from CFG 1 to 2.5 and SFT was darker throughout (182-187). At strength 0.5 the two LoRAs gave visually close results at 8 steps, CFG 2.5 on the forest and two portraits (206-208). At 15 steps, strength 0.5 and CFG 1, sheets 203-205 repeat the same A / B forest pair.
+- Scope: one seed, no SFT-without-LoRA baseline, no appearance-bias test for this release, and no isolated negative-prompt test. The image metrics above are from the FP32 training export.
+
 ## MOSS KSampler denoise_mode: core against exact on img2img (2026-11-12)
 
 **Question.** At 4-8 steps, does `exact` give a denoise that moves smoothly where the core schedule jumps, and does it cost image quality?

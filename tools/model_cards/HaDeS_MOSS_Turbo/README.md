@@ -17,7 +17,8 @@ tags:
 # HaDeS MOSS Turbo
 
 Few-step LoRAs for MOSS-Image, all at CFG 1 instead of 25 steps at CFG 2.5:
-- **Turbo 8-steps v1.0**, the newest, for **MOSS-Image Base** at 8 steps;
+- **Turbo 8-steps v1.0** for **MOSS-Image Base** at 8 steps;
+- **Turbo 8-steps SFT v1.0** for **MOSS-Image SFT** at 8 steps;
 - three earlier LoRAs for **MOSS-Image SFT**, two at 4 steps and one at 8 steps.
 
 Each file is about **3.5 MB** (rank 2, layers 24–41 only), trained from zero on one RTX 5090 with no image dataset.
@@ -26,7 +27,8 @@ Each file is about **3.5 MB** (rank 2, layers 24–41 only), trained from zero o
 
 | File | What it is for |
 |---|---|
-| `HaDeS-MOSS-Turbo-8steps-v1.0.safetensors` | **New.** For MOSS-Image Base at 8 steps. Trained against the appearance bias of the earlier turbos: on a neutral prompt about 8 of 16 East Asian faces, against about 11-12 for our previous 8-step turbo on Base. Lighter and less saturated at CFG 1; CFG 1.5 gives more contrast and colour |
+| `HaDeS-MOSS-Turbo-8steps-v1.0.safetensors` | For MOSS-Image Base at 8 steps. Trained against the appearance bias of the earlier turbos: on a neutral prompt about 8 of 16 East Asian faces, against about 11-12 for our previous 8-step turbo on Base. Lighter and less saturated at CFG 1; CFG 1.5 gives more contrast and colour |
+| `HaDeS-MOSS-Turbo-8steps-sft-v1.0.safetensors` | **New.** For MOSS-Image SFT at 8 steps. Trained from scratch on SFT with the v1.0 recipe. In matched tests on SFT it gives deeper shadows and more saturated colour than the LoRA trained on Base |
 | `HaDeS-MOSS-Turbo-v0.6.safetensors` | The most robust on text: layout JSON 6 / 6, a 16:9 three-line poster 3 / 3 |
 | `HaDeS-MOSS-Turbo-Diverse-v0.6.safetensors` | Keeps more of SFT's own spread on open prompts (faces, poses, props) |
 | `HaDeS-MOSS-Turbo-8steps-v0.7.safetensors` | For 8 steps: in blind pairs it beat akhaliq's 4-step LoRA 18 to 5 and matched lodestones' Base / Kromoss 8-step LoRA (run on SFT) up to 1024 |
@@ -37,19 +39,23 @@ Each file is about **3.5 MB** (rank 2, layers 24–41 only), trained from zero o
   - **Model:** MOSS-Image Base (`moss_image_base_bf16` from Comfy-Org/MOSS-Image).
   - **Settings:** 8 steps, euler / simple, shift 5.0, LoRA strength 1.0.
   - **CFG:** 1 for a light, soft look, or 1.5 for more contrast and colour. At CFG 1.5 every step runs the model twice.
-- **Model (the other three):** MOSS-Image SFT (`moss_image_sft_bf16` from Comfy-Org/MOSS-Image), text encoder and VAE as usual.
+- **Turbo 8-steps SFT v1.0:**
+  - **Model:** MOSS-Image SFT (`moss_image_sft_bf16` from Comfy-Org/MOSS-Image).
+  - **Settings:** 8 steps, euler / simple, shift 5.0, LoRA strength 1.0.
+  - **CFG:** 1. Higher CFG darkened both LoRAs in the studio portrait test below.
+- **Model (v0.6 and v0.7):** MOSS-Image SFT (`moss_image_sft_bf16` from Comfy-Org/MOSS-Image), text encoder and VAE as usual.
 - **Settings:** CFG 1, euler / simple, the model's shift 5.0, LoRA strength 1.0, and **4 steps** for Turbo and Turbo Diverse,
-  **8 steps** for Turbo 8-steps. These are the settings measured.
+  **8 steps** for Turbo 8-steps v0.7. These are the settings measured.
 - **At 1024 x 1024 and above, Turbo and Turbo Diverse prefer more steps for colour:** at 4 steps they give 6–10% less colour than
   SFT at 25 steps (Lab chroma, 20 prompts at 1024; 6–14% on 5 prompts at 2048); at 8 steps Turbo is at 1.09 of SFT's colour (1.03 at 2048) and Turbo Diverse at 1.02
   (0.91 at 2048). Only colour was measured at 8 steps for these two; their text and layout results below are at 4.
 - **ComfyUI, stock nodes:** `LoraLoaderModelOnly` on the model, then `KSampler` with the settings above.
 - **ComfyUI, HaDeS MOSS Suite:** a `MOSS Turbo LoRA` node into the `turbo` input of `MOSS KSampler`; it applies the LoRA and these
-  settings for you (set its `steps` to 8 for Turbo 8-steps).
+  settings for you (set its `steps` to 8 for the eight-step LoRAs).
 
 ## Measured
 
-At 1024 x 1024 through the stock `LoraLoaderModelOnly`, euler / simple / 4 steps / CFG 1, against akhaliq's 4-step v2.0 LoRA
+For Turbo and Turbo Diverse v0.6, at 1024 x 1024 through the stock `LoraLoaderModelOnly`, euler / simple / 4 steps / CFG 1, against akhaliq's 4-step v2.0 LoRA
 (rank 128, all layers, 1.2 GB) at the same settings. Counts are by eye; ethnicity counts approximate. Full tables, scripts and every
 version tried: [`tools/RESULTS.md`](https://github.com/Devildonia/HaDeS-MOSS-Suite/blob/main/tools/RESULTS.md) in the HaDeS MOSS Suite.
 
@@ -116,6 +122,21 @@ Medians of the 14 images:
 
 **Not measured:** strengths other than 1.0, step counts other than 8, sizes above 1536, img2img, editing. One seed per scene.
 
+### Turbo 8-steps SFT v1.0, on MOSS-Image SFT
+
+Both LoRAs run on MOSS-Image SFT BF16 through the Suite's Multi-LoRA and KSampler. The comparison is the v1.0 LoRA trained on Base, applied to the same SFT checkpoint. Twenty-one distinct scenes at 1344 x 1792, seed 1200, 8 steps, CFG 1, euler / simple, shift 5.0 and strength 1.0.
+
+**Image and text.** The SFT LoRA was darker in all 21 pairs and more saturated in 17. The rainy diner and aerial salt ponds show the colour difference clearly. Both LoRAs rendered `OPEN`, `VINYL ONLY`, the hornbill's speech bubble and the *Oaken Valley* title correctly in the inspected sheets.
+
+| | Mean luma / 255 | Mean HSV saturation / 255 | Median pixels near black or white | Median luma Laplacian |
+|---|---:|---:|---:|---:|
+| v1.0 trained on Base, run on SFT | 106.0 | 75.9 | 0.92% | 16.04 |
+| **v1.0 SFT, run on SFT** | **96.1** | **90.7** | **2.21%** | **15.17** |
+
+- **Steps:** both produced coherent images at 4 steps on the four tested scenes. The ceramicist was softer at 2 steps, gained texture through 8, and changed more gradually through 20.
+- **CFG:** at strength 1.0, increasing CFG from 1 to 2.5 darkened both LoRAs on the studio portrait, with deeper shadows from SFT at every setting. At strength 0.5, both produced close results in three examples at 8 steps and CFG 2.5.
+- **Scope:** one seed per scene, using the FP32 training export of the SFT LoRA. Appearance-bias testing, a matched SFT-without-LoRA baseline and an empty-versus-filled negative prompt test are pending for this release.
+
 ### Turbo 8-steps v0.7, at 8 steps
 
 20 prompts in natural language (portraits, full-body poses, hands, animals, neon and chalkboard text, watercolor, anime, food,
@@ -152,9 +173,11 @@ DMD (distribution matching distillation) with a regression term, `tools/moss_dmd
   (3.4 s each); it is update 3,000.
 - Turbo 8-steps v1.0: as v0.7, with MOSS-Image Base as teacher and student, 1,024 regression images instead of 256, and new
   prompts (`tools/moss_turbo_v10_prompts.py`); it is update 3,000.
+- Turbo 8-steps SFT v1.0: same v1.0 prompts and training settings, with MOSS-Image SFT BF16 as teacher and student. All 1,024
+  regression targets were generated with SFT. The release file is the EMA at update 3,000, with LoRA matrices in BF16 and alpha values in FP32.
 
 ## Credits and license
 
-Apache License 2.0 (see `LICENSE` and `NOTICE`). Trained from MOSS-Image SFT and, for v1.0, MOSS-Image Base, both by the OpenMOSS Team (Apache 2.0). The training recipe
+Apache License 2.0 (see `LICENSE` and `NOTICE`). Trained from MOSS-Image SFT and MOSS-Image Base by the OpenMOSS Team (Apache 2.0), as listed for each LoRA above. The training recipe
 follows akhaliq's [MOSS-Image-SFT-4-steps](https://huggingface.co/akhaliq/MOSS-Image-SFT-4-steps) (Apache 2.0); none of its weights
 were used.
