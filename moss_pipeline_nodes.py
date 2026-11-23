@@ -121,11 +121,16 @@ def centered_box(box, width, height, where):
 
 
 def compile_layout(draft):
-    """Draft dict -> (model prompt, width, height, text items as (text, box width, box height)); a caption draft has no canvas."""
+    """Draft dict -> (model prompt, width, height, text items as (text, box width, box height)); a caption draft's canvas is its
+    optional width / height (the Prompt Enhancer writes them), None without them."""
     if "caption" in draft:
-        _fields(draft, {"caption"}, {"caption"}, "caption draft")
+        _fields(draft, {"caption", "width", "height"}, {"caption"}, "caption draft")
         _text(draft["caption"], "caption")
-        return draft["caption"], None, None, []
+        width, height = draft.get("width"), draft.get("height")
+        _check((width is None) == (height is None), "a caption draft gives both width and height, or neither")
+        for name, v in (("width", width), ("height", height)):
+            _check(v is None or (type(v) is int and v > 0 and v % 16 == 0), f"{name} must be a positive multiple of 16")
+        return draft["caption"], width, height, []
     # optional `dropped`: items the Prompt Enhancer left out for lack of a box, kept for the Layout Editor; never compiled
     _fields(draft, _DRAFT_FIELDS | {"dropped"}, _DRAFT_FIELDS, "layout draft")
     if "dropped" in draft:
@@ -200,9 +205,10 @@ class HaDeSMossLayoutCompiler:
         _check(isinstance(data, dict), "the draft must be a JSON object")
         prompt, width, height, texts = compile_layout(data)
         multi = [(t, w, h) for t, w, h in texts if "\n" in t]
-        if width is None:
-            width = height = 1024
-            text = "HaDeS MOSS Layout | caption draft, passed through as plain text | latent 1024x1024"
+        if "caption" in data:
+            # a caption draft without a size (written by hand, or by a Suite before 0.9.6) keeps the old 1024x1024
+            width, height = (width, height) if width is not None else (1024, 1024)
+            text = f"HaDeS MOSS Layout | caption draft, passed through as plain text | latent {width}x{height}"
         else:
             text = f"HaDeS MOSS Layout | {width}x{height} | {len(data['items'])} items, {len(texts)} with text | prompt {len(prompt)} chars"
             if data.get("dropped"):

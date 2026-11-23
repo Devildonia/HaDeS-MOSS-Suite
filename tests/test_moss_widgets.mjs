@@ -129,3 +129,20 @@ test("a value picked in a HaDeS widget reaches node.onWidgetChanged, so the fron
     assert.equal(w.value, "mossImage_base_bf16.safetensors");
     assert.deepEqual(calls, [["unet_name", "mossImage_base_bf16.safetensors", "moss_image_base_bf16.safetensors", w]]);
 });
+
+test("Nodes 2.0: a styled row carries its backing input's slot key, so a dropped link connects (YouTube report 2026-11-22)", () => {
+    const { context } = setup();
+    const made = [];
+    context.document = { createElement: () => { const el = { dataset: {}, style: {}, remove() { row.children.splice(row.children.indexOf(el), 1); } }; made.push(el); return el; } };
+    const row = { children: [], appendChild(el) { this.children.push(el); }, querySelector() { return this.children.find((c) => c.dataset.hadesDrop) ?? null; } };
+    const canvasEl = { closest: (sel) => (sel === ".lg-node-widget" ? row : null) };
+    const node = { id: 7, inputs: [{ name: "clip" }, { name: "idea", widget: { name: "idea" } }, { name: "width", widget: { name: "width" } }] };
+    context.markVueDropTarget(canvasEl, node, { name: "width" });
+    assert.equal(row.children.length, 1);
+    assert.equal(row.children[0].dataset.slotKey, "7-in-2");
+    assert.equal(row.children[0].style.display, "none");
+    context.markVueDropTarget(canvasEl, node, { name: "width" }); // redraws reuse the marker
+    assert.equal(made.length, 1);
+    context.markVueDropTarget(canvasEl, node, { name: "gone" }); // no input behind the row: no marker
+    assert.equal(row.children.length, 0);
+});

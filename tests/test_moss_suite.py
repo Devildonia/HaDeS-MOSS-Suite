@@ -124,6 +124,18 @@ class TestLayoutCompiler(unittest.TestCase):
     def test_caption_draft_passes_through(self):
         self.assertEqual(pipeline.compile_layout({"caption": "A plain caption."})[0], "A plain caption.")
 
+    def test_caption_draft_keeps_the_enhancer_size(self):
+        """YouTube report 2026-11-22: a width / height linked into the Prompt Enhancer in caption mode reached the draft's latent
+        as 1024x1024. A caption draft now carries the size; one without it (older Suites, hand-written) keeps 1024x1024."""
+        node = pipeline.HaDeSMossLayoutCompiler()
+        prompt, latent, w, h, _ = node.compile(json.dumps({"caption": "A lighthouse.", "width": 1360, "height": 768}), 1)
+        self.assertEqual((prompt, w, h, tuple(latent["samples"].shape[2:])), ("A lighthouse.", 1360, 768, (48, 85)))
+        _, latent, w, h, _ = node.compile('{"caption": "A lighthouse."}', 1)
+        self.assertEqual((w, h, tuple(latent["samples"].shape[2:])), (1024, 1024, (64, 64)))
+        for bad in ({"caption": "a", "width": 1360}, {"caption": "a", "width": 1000, "height": 768}):
+            with self.assertRaises(ValueError):
+                node.compile(json.dumps(bad), 1)
+
     def test_rejections(self):
         cases = {
             "outside": lambda d: d["items"][0].__setitem__("bbox", [0, 0, 2000, 100]),
@@ -1691,10 +1703,11 @@ class TestPromptEnhancer(unittest.TestCase):
     def test_caption_mode_and_image_tokens(self):
         clip = FakeClip('{"caption": "An old fisherman mending nets at dawn."}')
         image = torch.rand(2, 1500, 1000, 3)
-        pos, neg, prompt, draft, *_ = enhancer.HaDeSMossPromptEnhancer().enhance(clip, "", "caption", 1024, 1024, 0.7, 5, 256, image=image,
+        pos, neg, prompt, draft, *_ = enhancer.HaDeSMossPromptEnhancer().enhance(clip, "", "caption", 1360, 768, 0.7, 5, 256, image=image,
                                                                                  negative="blurry")["result"]
         self.assertEqual(prompt, "An old fisherman mending nets at dawn.")
-        self.assertEqual(json.loads(draft), {"caption": prompt})
+        # the canvas goes with the caption, so the Layout Compiler's latent matches a linked width / height (0.9.6)
+        self.assertEqual(json.loads(draft), {"caption": prompt, "width": 1360, "height": 768})
         text, images = clip.seen
         self.assertEqual(text.count(enhancer.VISION_BLOCK), 1)
         self.assertEqual(len(images), 1)

@@ -123,12 +123,35 @@ export function clampNum(val, min, max, decimals = 2) {
 
 // Vue nodes paint each legacy widget into its own <canvas> (WidgetLegacy), sized from getBoundingClientRect(),
 // which includes the graph zoom. Re-fit it to its CSS layout width so drawn bounds match pointer offsets at any zoom.
+// Nodes 2.0 finds where a dragged link lands from the DOM: the widget row under the pointer (.lg-node-widget) and the
+// [data-slot-key] inside it. A styled row has no input of its own (the input belongs to its hidden backing widget), so a link
+// dropped on it went nowhere (YouTube report 2026-11-22). The row gets a hidden marker carrying its backing input's key.
+export function markVueDropTarget(el, node, backing) {
+    const row = el?.closest?.(".lg-node-widget");
+    if (!row || !node) return;
+    const index = backing ? (node.inputs?.findIndex((i) => i.widget?.name === backing.name) ?? -1) : -1;
+    let tag = row.querySelector(":scope > [data-hades-drop]");
+    if (index < 0) {
+        tag?.remove();
+        return;
+    }
+    if (!tag) {
+        tag = document.createElement("span");
+        tag.dataset.hadesDrop = "1";
+        tag.style.display = "none";
+        row.appendChild(tag);
+    }
+    const key = `${node.id}-in-${index}`;
+    if (tag.dataset.slotKey !== key) tag.dataset.slotKey = key;
+}
+
 function wrapVueWidgetDraw(widget) {
     const draw = widget.draw;
     widget.draw = function (ctx, node, width, y, height) {
         const el = ctx.canvas;
         if (LiteGraph.vueNodesMode && el !== app.canvas?.canvas) {
             el._hadesWidget = this;
+            markVueDropTarget(el, node, this._hadesBackingWidget);
             if (el.clientWidth && Math.abs(el.clientWidth - width) > 1) {
                 const ratio = el.width / width;
                 width = el.clientWidth;

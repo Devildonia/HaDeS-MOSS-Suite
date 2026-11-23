@@ -33,7 +33,10 @@ function parseDraft(text) {
     try {
         const d = JSON.parse(text || "");
         if (d && typeof d === "object" && Array.isArray(d.items) && Number(d.width) > 0 && Number(d.height) > 0) return { draft: d };
-        if (d && typeof d === "object" && typeof d.caption === "string") return { caption: d.caption };
+        if (d && typeof d === "object" && typeof d.caption === "string") {
+            const size = (v) => (Number.isInteger(v) && v > 0 ? v : undefined);
+            return { caption: d.caption, width: size(d.width), height: size(d.height) };
+        }
         return { error: "not a layout draft (width, height, summary, items)" };
     } catch (e) {
         return { error: "the draft is not valid JSON" };
@@ -52,8 +55,8 @@ export function pickBox(boxes, px, py) {
     return best;
 }
 
-function newDraft(caption = "") {
-    return { width: 1024, height: 1024, bbox_coord_space: "abs", bbox_format: "xyxy", summary: { canvas: "single", caption }, items: [] };
+function newDraft(caption = "", width = 1024, height = 1024) {
+    return { width, height, bbox_coord_space: "abs", bbox_format: "xyxy", summary: { canvas: "single", caption }, items: [] };
 }
 
 function itemProblem(item) {
@@ -642,7 +645,7 @@ export function createLayoutEditorWidget(node, backing) {
             if (hit.kind === "draft_run") { draftLayout(); return true; }
             if (hit.kind === "generate") { generate(); return true; }
             if (hit.kind === "new") {
-                write(newDraft(p.caption ?? ""));
+                write(newDraft(p.caption ?? "", p.width ?? 1024, p.height ?? 1024));
                 return true;
             }
             if (!p.draft) return false;

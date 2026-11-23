@@ -2207,6 +2207,31 @@ The enhancer also adds elements the idea did not give: in a first run through th
 
 The two Layout Editor buttons were checked once in the classic canvas view (ComfyUI 0.43.0 / frontend 1.57.4): DRAFT LAYOUT ran only the Prompt Enhancer and the editor (history outputs `2`, `4`; partial target `4`) and imported its 5 boxes; after one box was moved, GENERATE ran the graph with the Prompt Enhancer served from the cache and the moved box unchanged, and the moon was drawn inside it. Nodes 2.0 / Vue view not checked.
 
+## Linked width / height into the Prompt Enhancer (YouTube report, 2026-11-23)
+
+Report: in the styled widgets a link could not be dropped on the Prompt Enhancer's `width` / `height`, and with standard widgets the size
+did not reach the layout. Clean 8189, frontend 1.57.4, MOSS Latent 16:9 at 1 MP (1360x768) linked into the Enhancer
+(`I:/HaDeS_MOSS/layout_test/linked_size_check.py`, real runs through the API, int8 text encoder, seed 1):
+
+| Mode | Before (0.9.5) | After (0.9.6) |
+|---|---|---|
+| `layout`: draft and Layout Compiler | 1360x768 | 1360x768 |
+| `caption`: draft | `{"caption"}` (no size) | `{"caption", "width": 1360, "height": 768}` |
+| `caption`: Layout Compiler latent | 1024x1024 | 1360x768 |
+
+Dropping the Latent's `width` output on the Enhancer's `width` row with the mouse:
+
+| View | Before | After |
+|---|---|---|
+| Classic canvas, HaDeS widgets | connects | connects |
+| Classic canvas, standard widgets | connects | connects |
+| Nodes 2.0 / Vue, standard widgets | connects | not re-checked (the change only adds a marker to styled rows) |
+| Nodes 2.0 / Vue, HaDeS widgets | **does not connect** | connects |
+
+Cause in Nodes 2.0: the frontend finds the drop target from the DOM (the `.lg-node-widget` row under the pointer and the
+`[data-slot-key]` inside it); a styled row has no input of its own. Each styled row now gets a hidden marker with its backing input's
+slot key. Not checked: subgraphs, save / reload with the link, zoom.
+
 ## Layout Editor DRAFT LAYOUT / GENERATE: acceptance in four views (2026-11-19, after audit 0.8.1)
 
 ComfyUI 0.43.0, frontend 1.57.4, RTX 5090. The `Layout from a Sentence` example with the stock SFT file; the buttons pressed with the mouse in the built-in browser pane, the queue state read from `/queue` and `/history`.

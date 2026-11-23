@@ -414,7 +414,7 @@ class HaDeSMossPromptEnhancer:
                                "prompt_enhancer", mode=mode, width=width, height=height, image=editing, decode_fallback=False, notes=[],
                                prompt=prompt, negative=neg_text, edit_format=edit_format)
             return {"ui": {"text": [prompt]}, "result": (*outputs(prompt), prompt,
-                                                         json.dumps({"caption": prompt}, ensure_ascii=False), width, height, info)}
+                                                         json.dumps({"caption": prompt, "width": width, "height": height}, ensure_ascii=False), width, height, info)}
         brief = surprise_brief(seed) if mode == "detailed" and not idea.strip() and image is None else None
         if not idea.strip() and image is None and brief is None:
             raise ValueError("MOSS Prompt Enhancer: write an idea, connect an image, or both (or use detailed mode with both empty for a random prompt)")
@@ -435,7 +435,7 @@ class HaDeSMossPromptEnhancer:
             if not prompt:
                 raise ValueError("MOSS Prompt Enhancer: the answer has no caption (raise max_tokens if it was cut, or try another seed). "
                                  "Answer starts: " + answer[:400])
-            draft = json.dumps({"caption": prompt}, ensure_ascii=False)
+            draft = json.dumps({"caption": prompt, "width": width, "height": height}, ensure_ascii=False)
         else:
             obj = first_json(answer)
             if obj is None:
