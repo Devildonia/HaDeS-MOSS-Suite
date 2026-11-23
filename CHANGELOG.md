@@ -7,6 +7,8 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-11-24
+
 ### Fixed
 - **Nodes 2.0: a link dropped on a styled (HaDeS) field connects.** In the Vue node view a link dragged onto a styled row (for example the Prompt Enhancer's `width`) went nowhere; only the standard widgets took it. Each styled row now carries its hidden backing input, as the classic canvas already did. Checked by dragging in the classic canvas (HaDeS and standard widgets) and in Nodes 2.0 (both).
 - **Caption mode keeps the canvas size.** With `caption` / `detailed` / `as written`, the Prompt Enhancer's `width` / `height` (typed or linked, e.g. from MOSS Latent) did not reach the Layout Compiler, whose latent stayed 1024x1024. The caption draft now carries `width` / `height`; the Compiler uses them, and the Layout Editor's NEW LAYOUT FROM THIS CAPTION starts on that canvas. A caption draft without a size (older Suites, written by hand) still gives 1024x1024. Measured: MOSS Latent 16:9 at 1 MP linked into the Enhancer gives a 1360x768 latent in caption mode (was 1024x1024) and in layout mode (unchanged).
