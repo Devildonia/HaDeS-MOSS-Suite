@@ -180,7 +180,8 @@ class HaDeSMossLayoutCompiler:
                 "draft": ("STRING", {"multiline": True, "default": EXAMPLE_DRAFT,
                                      "tooltip": "OpenMOSS layout draft: width / height (multiples of 16), bbox_coord_space \"abs\", bbox_format \"xyxy\" "
                                                 "(top-left pixels), summary {caption, meta, canvas, palette} and flat items {label, caption, bbox, "
-                                                "text, tags, palette}. Line breaks in text as \\n. A {\"caption\": ...} draft passes through as plain text."}),
+                                                "text, tags, palette}. Line breaks in text as \\n. A {\"caption\": ...} draft passes through as plain text, its latent "
+                                                "at the draft's width / height when it gives them (the Prompt Enhancer does), else 1024x1024."}),
                 "batch_size": ("INT", {"default": 1, "min": 1, "max": 64}),
             },
         }
