@@ -1,15 +1,15 @@
 {
- "id": "c2f52934-56be-57d3-9ac7-277d00d45bf2",
+ "id": "4ab6771a-627e-5b93-8d18-91cf97d20506",
  "revision": 0,
- "last_node_id": 15,
- "last_link_id": 26,
+ "last_node_id": 13,
+ "last_link_id": 24,
  "nodes": [
   {
    "id": 1,
    "type": "HaDeSMossLoader",
    "pos": [
     0,
-    560
+    0
    ],
    "size": [
     380,
@@ -58,22 +58,22 @@
      "name": "CLIP",
      "type": "CLIP",
      "links": [
-      4
+      2
      ]
     },
     {
      "name": "VAE",
      "type": "VAE",
      "links": [
-      7,
-      16
+      5,
+      14
      ]
     },
     {
      "name": "info",
      "type": "STRING",
      "links": [
-      20
+      18
      ]
     }
    ]
@@ -82,8 +82,8 @@
    "id": 2,
    "type": "HaDeSMossMultiLora",
    "pos": [
-    440,
-    560
+    0,
+    380
    ],
    "size": [
     380,
@@ -111,14 +111,14 @@
      "name": "MODEL",
      "type": "MODEL",
      "links": [
-      11
+      9
      ]
     },
     {
      "name": "info",
      "type": "STRING",
      "links": [
-      21
+      19
      ]
     }
    ]
@@ -127,8 +127,8 @@
    "id": 3,
    "type": "LoadImage",
    "pos": [
-    0,
-    0
+    950,
+    420
    ],
    "size": [
     380,
@@ -139,7 +139,7 @@
    "mode": 0,
    "inputs": [],
    "widgets_values": [
-    "fisherman_video1.png"
+    "depth_map.png"
    ],
    "properties": {
     "Node name for S&R": "LoadImage"
@@ -149,7 +149,7 @@
      "name": "IMAGE",
      "type": "IMAGE",
      "links": [
-      2
+      7
      ]
     },
     {
@@ -161,13 +161,13 @@
   },
   {
    "id": 4,
-   "type": "DepthAnythingV2Preprocessor",
+   "type": "HaDeSMossPromptEnhancer",
    "pos": [
-    440,
+    450,
     0
    ],
    "size": [
-    380,
+    440,
     100
    ],
    "flags": {},
@@ -175,81 +175,9 @@
    "mode": 0,
    "inputs": [
     {
-     "name": "image",
-     "type": "IMAGE",
-     "link": 2
-    }
-   ],
-   "widgets_values": [
-    "depth_anything_v2_vitl.pth",
-    1024
-   ],
-   "properties": {
-    "Node name for S&R": "DepthAnythingV2Preprocessor"
-   },
-   "outputs": [
-    {
-     "name": "IMAGE",
-     "type": "IMAGE",
-     "links": [
-      3,
-      9
-     ]
-    }
-   ]
-  },
-  {
-   "id": 5,
-   "type": "PreviewImage",
-   "pos": [
-    440,
-    200
-   ],
-   "size": [
-    380,
-    100
-   ],
-   "flags": {},
-   "order": 7,
-   "mode": 0,
-   "inputs": [
-    {
-     "name": "images",
-     "type": "IMAGE",
-     "link": 3
-    }
-   ],
-   "widgets_values": [],
-   "properties": {
-    "Node name for S&R": "PreviewImage"
-   },
-   "outputs": [
-    {
-     "name": "images",
-     "type": "IMAGE",
-     "links": []
-    }
-   ]
-  },
-  {
-   "id": 6,
-   "type": "HaDeSMossPromptEnhancer",
-   "pos": [
-    900,
-    0
-   ],
-   "size": [
-    440,
-    100
-   ],
-   "flags": {},
-   "order": 6,
-   "mode": 0,
-   "inputs": [
-    {
      "name": "clip",
      "type": "CLIP",
-     "link": 4
+     "link": 2
     },
     {
      "name": "image",
@@ -285,14 +213,14 @@
      "name": "positive",
      "type": "CONDITIONING",
      "links": [
-      5
+      3
      ]
     },
     {
      "name": "negative",
      "type": "CONDITIONING",
      "links": [
-      6
+      4
      ]
     },
     {
@@ -319,17 +247,17 @@
      "name": "info",
      "type": "STRING",
      "links": [
-      22
+      20
      ]
     }
    ]
   },
   {
-   "id": 7,
+   "id": 5,
    "type": "HaDeSMossLatent",
    "pos": [
-    900,
-    680
+    950,
+    0
    ],
    "size": [
     380,
@@ -363,8 +291,8 @@
      "name": "latent",
      "type": "LATENT",
      "links": [
-      8,
-      14
+      6,
+      12
      ]
     },
     {
@@ -381,20 +309,20 @@
      "name": "info",
      "type": "STRING",
      "links": [
-      23
+      21
      ]
     },
     {
      "name": "seed",
      "type": "INT",
      "links": [
-      15
+      13
      ]
     }
    ]
   },
   {
-   "id": 8,
+   "id": 6,
    "type": "HaDeSMossControl",
    "pos": [
     1400,
@@ -405,33 +333,33 @@
     100
    ],
    "flags": {},
-   "order": 8,
+   "order": 6,
    "mode": 0,
    "inputs": [
     {
      "name": "positive",
      "type": "CONDITIONING",
-     "link": 5
+     "link": 3
     },
     {
      "name": "negative",
      "type": "CONDITIONING",
-     "link": 6
+     "link": 4
     },
     {
      "name": "vae",
      "type": "VAE",
-     "link": 7
+     "link": 5
     },
     {
      "name": "latent",
      "type": "LATENT",
-     "link": 8
+     "link": 6
     },
     {
      "name": "depth_map",
      "type": "IMAGE",
-     "link": 9,
+     "link": 7,
      "shape": 7
     },
     {
@@ -457,51 +385,51 @@
      "name": "positive",
      "type": "CONDITIONING",
      "links": [
-      12
+      10
      ]
     },
     {
      "name": "negative",
      "type": "CONDITIONING",
      "links": [
-      13
+      11
      ]
     },
     {
      "name": "maps",
      "type": "IMAGE",
      "links": [
-      10
+      8
      ]
     },
     {
      "name": "info",
      "type": "STRING",
      "links": [
-      24
+      22
      ]
     }
    ]
   },
   {
-   "id": 9,
+   "id": 7,
    "type": "PreviewImage",
    "pos": [
     1400,
-    440
+    620
    ],
    "size": [
     380,
     100
    ],
    "flags": {},
-   "order": 9,
+   "order": 7,
    "mode": 0,
    "inputs": [
     {
      "name": "images",
      "type": "IMAGE",
-     "link": 10
+     "link": 8
     }
    ],
    "widgets_values": [],
@@ -517,7 +445,7 @@
    ]
   },
   {
-   "id": 10,
+   "id": 8,
    "type": "HaDeSMossTurbo",
    "pos": [
     1860,
@@ -555,7 +483,7 @@
      "name": "turbo",
      "type": "MOSS_TURBO",
      "links": [
-      17
+      15
      ]
     },
     {
@@ -566,7 +494,7 @@
    ]
   },
   {
-   "id": 11,
+   "id": 9,
    "type": "HaDeSMossKSampler",
    "pos": [
     1860,
@@ -577,33 +505,33 @@
     100
    ],
    "flags": {},
-   "order": 10,
+   "order": 8,
    "mode": 0,
    "inputs": [
     {
      "name": "model",
      "type": "MODEL",
-     "link": 11
+     "link": 9
     },
     {
      "name": "positive",
      "type": "CONDITIONING",
-     "link": 12
+     "link": 10
     },
     {
      "name": "negative",
      "type": "CONDITIONING",
-     "link": 13
+     "link": 11
     },
     {
      "name": "latent_image",
      "type": "LATENT",
-     "link": 14
+     "link": 12
     },
     {
      "name": "seed",
      "type": "INT",
-     "link": 15,
+     "link": 13,
      "widget": {
       "name": "seed"
      }
@@ -611,13 +539,13 @@
     {
      "name": "vae",
      "type": "VAE",
-     "link": 16,
+     "link": 14,
      "shape": 7
     },
     {
      "name": "turbo",
      "type": "MOSS_TURBO",
-     "link": 17,
+     "link": 15,
      "shape": 7
     }
    ],
@@ -646,20 +574,20 @@
      "name": "image",
      "type": "IMAGE",
      "links": [
-      18
+      16
      ]
     },
     {
      "name": "info",
      "type": "STRING",
      "links": [
-      25
+      23
      ]
     }
    ]
   },
   {
-   "id": 12,
+   "id": 10,
    "type": "HaDeSMossImageSaver",
    "pos": [
     2320,
@@ -670,18 +598,18 @@
     100
    ],
    "flags": {},
-   "order": 12,
+   "order": 10,
    "mode": 0,
    "inputs": [
     {
      "name": "images",
      "type": "IMAGE",
-     "link": 18
+     "link": 16
     },
     {
      "name": "metadata",
      "type": "STRING",
-     "link": 19,
+     "link": 17,
      "shape": 7
     },
     {
@@ -725,7 +653,7 @@
    ]
   },
   {
-   "id": 13,
+   "id": 11,
    "type": "HaDeSMossSuiteTelemetry",
    "pos": [
     2320,
@@ -736,43 +664,43 @@
     100
    ],
    "flags": {},
-   "order": 11,
+   "order": 9,
    "mode": 0,
    "inputs": [
     {
      "name": "info_1",
      "type": "STRING",
-     "link": 20,
+     "link": 18,
      "shape": 7
     },
     {
      "name": "info_2",
      "type": "STRING",
-     "link": 21,
+     "link": 19,
      "shape": 7
     },
     {
      "name": "info_3",
      "type": "STRING",
-     "link": 22,
+     "link": 20,
      "shape": 7
     },
     {
      "name": "info_4",
      "type": "STRING",
-     "link": 23,
+     "link": 21,
      "shape": 7
     },
     {
      "name": "info_5",
      "type": "STRING",
-     "link": 24,
+     "link": 22,
      "shape": 7
     },
     {
      "name": "info_6",
      "type": "STRING",
-     "link": 25,
+     "link": 23,
      "shape": 7
     },
     {
@@ -799,14 +727,14 @@
      "name": "report",
      "type": "STRING",
      "links": [
-      26
+      24
      ]
     },
     {
      "name": "json",
      "type": "STRING",
      "links": [
-      19
+      17
      ]
     },
     {
@@ -822,7 +750,7 @@
    ]
   },
   {
-   "id": 14,
+   "id": 12,
    "type": "PreviewAny",
    "pos": [
     2760,
@@ -833,13 +761,13 @@
     100
    ],
    "flags": {},
-   "order": 13,
+   "order": 11,
    "mode": 0,
    "inputs": [
     {
      "name": "source",
      "type": "*",
-     "link": 26
+     "link": 24
     }
    ],
    "widgets_values": [],
@@ -855,7 +783,7 @@
    ]
   },
   {
-   "id": 15,
+   "id": 13,
    "type": "Note",
    "pos": [
     0,
@@ -871,7 +799,7 @@
    "inputs": [],
    "outputs": [],
    "widgets_values": [
-    "HaDeS MOSS Suite - Control (color / depth)\n\n1. Load a control adapter in MOSS Multi-LoRA (e.g. moss-color-depth-control from\n   darask0/MOSS-Image-color-depth-control, trained on MOSS-Image Base). Keep it at 1.0:\n   ComfyUI replaces its widened video_embedder at full strength anyway.\n2. Depth Anything V2 (comfyui_controlnet_aux) extracts the depth map (near is white).\n   MOSS Control resizes the maps in pixels to the latent before the VAE.\n3. color_mode: off = depth only (clothes and colors from the prompt);\n   flat regions = connect a photo to color_map, blurred and reduced to a few flat colors;\n   as given = a real segmentation map (a photo there makes the adapter copy its texture).\n4. Measured on RTX 5090 (tools/RESULTS.md): Base or SFT at 25 steps takes ~14.1-14.2 s;\n   with Turbo 8-steps v1.0 (8 steps, CFG 1), ~3.3 s (4.3x faster), keeping pose fidelity.\n5. Lower strength (< 1.0) or end_percent (e.g. 0.75) to give the final steps more freedom."
+    "HaDeS MOSS Suite - Control (color / depth)\n\n1. Load a control adapter in MOSS Multi-LoRA (e.g. moss-color-depth-control from\n   darask0/MOSS-Image-color-depth-control, trained on MOSS-Image Base). Keep it at 1.0:\n   ComfyUI replaces its widened video_embedder at full strength anyway.\n2. Load a depth map (near is white), or replace Load Image with Depth Anything V2\n   (comfyui_controlnet_aux). MOSS Control resizes the maps in pixels to the latent.\n3. color_mode: off = depth only (clothes and colors from the prompt);\n   flat regions = connect a photo to color_map, blurred and reduced to a few flat colors;\n   as given = a real segmentation map (a photo there makes the adapter copy its texture).\n4. Measured on RTX 5090 (tools/RESULTS.md): Base or SFT at 25 steps takes ~14.1-14.2 s;\n   with Turbo 8-steps v1.0 (8 steps, CFG 1), ~3.3 s (4.3x faster), keeping pose fidelity.\n5. Lower strength (< 1.0) or end_percent (e.g. 0.75) to give the final steps more freedom."
    ],
    "properties": {}
   }
@@ -887,201 +815,185 @@
   ],
   [
    2,
-   3,
-   0,
-   4,
-   0,
-   "IMAGE"
-  ],
-  [
-   3,
-   4,
-   0,
-   5,
-   0,
-   "IMAGE"
-  ],
-  [
-   4,
    1,
    1,
-   6,
+   4,
    0,
    "CLIP"
   ],
   [
+   3,
+   4,
+   0,
+   6,
+   0,
+   "CONDITIONING"
+  ],
+  [
+   4,
+   4,
+   1,
+   6,
+   1,
+   "CONDITIONING"
+  ],
+  [
    5,
-   6,
-   0,
-   8,
-   0,
-   "CONDITIONING"
-  ],
-  [
-   6,
-   6,
-   1,
-   8,
-   1,
-   "CONDITIONING"
-  ],
-  [
-   7,
    1,
    2,
-   8,
+   6,
    2,
    "VAE"
   ],
   [
-   8,
-   7,
+   6,
+   5,
    0,
-   8,
+   6,
    3,
    "LATENT"
   ],
   [
-   9,
-   4,
+   7,
+   3,
    0,
-   8,
+   6,
    4,
    "IMAGE"
   ],
   [
-   10,
    8,
+   6,
    2,
-   9,
+   7,
    0,
    "IMAGE"
   ],
   [
-   11,
+   9,
    2,
    0,
-   11,
+   9,
    0,
    "MODEL"
   ],
   [
-   12,
-   8,
+   10,
+   6,
    0,
-   11,
+   9,
    1,
    "CONDITIONING"
   ],
   [
-   13,
-   8,
-   1,
    11,
+   6,
+   1,
+   9,
    2,
    "CONDITIONING"
   ],
   [
-   14,
-   7,
+   12,
+   5,
    0,
-   11,
+   9,
    3,
    "LATENT"
   ],
   [
-   15,
-   7,
+   13,
+   5,
    4,
-   11,
+   9,
    4,
    "INT"
   ],
   [
-   16,
+   14,
    1,
    2,
-   11,
+   9,
    5,
    "VAE"
   ],
   [
-   17,
-   10,
+   15,
+   8,
    0,
-   11,
+   9,
    6,
    "MOSS_TURBO"
   ],
   [
-   18,
-   11,
+   16,
+   9,
    1,
-   12,
+   10,
    0,
    "IMAGE"
   ],
   [
-   19,
-   13,
+   17,
+   11,
    1,
-   12,
+   10,
+   1,
+   "STRING"
+  ],
+  [
+   18,
+   1,
+   3,
+   11,
+   0,
+   "STRING"
+  ],
+  [
+   19,
+   2,
+   1,
+   11,
    1,
    "STRING"
   ],
   [
    20,
-   1,
-   3,
-   13,
-   0,
+   4,
+   6,
+   11,
+   2,
    "STRING"
   ],
   [
    21,
-   2,
-   1,
-   13,
-   1,
+   5,
+   3,
+   11,
+   3,
    "STRING"
   ],
   [
    22,
    6,
-   6,
-   13,
-   2,
-   "STRING"
-  ],
-  [
-   23,
-   7,
    3,
-   13,
-   3,
-   "STRING"
-  ],
-  [
-   24,
-   8,
-   3,
-   13,
+   11,
    4,
    "STRING"
   ],
   [
-   25,
-   11,
+   23,
+   9,
    2,
-   13,
+   11,
    5,
    "STRING"
   ],
   [
-   26,
-   13,
+   24,
+   11,
    0,
-   14,
+   12,
    0,
    "STRING"
   ]

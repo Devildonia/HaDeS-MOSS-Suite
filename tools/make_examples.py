@@ -439,9 +439,7 @@ EXAMPLES = {
         # so keep it at 1.0 and set the control's strength on the MOSS Control node
         "loras": ("HaDeSMossMultiLora", {"model": ("load", 0), "enabled": True,
                                          "loras": json.dumps([{"name": CONTROL_ADAPTER, "on": True, "strength": 1.0}])}),
-        "img": ("LoadImage", {"image": "fisherman_video1.png"}),
-        "depth": ("DepthAnythingV2Preprocessor", {"image": ("img", 0), "ckpt_name": "depth_anything_v2_vitl.pth", "resolution": 1024}),
-        "depth_prev": ("PreviewImage", {"images": ("depth", 0)}),
+        "depth": ("LoadImage", {"image": "depth_map.png"}),
         "enh": prompt("Oil painting of a medieval knight in weathered steel armor mending a chainmail cloak on a stone castle parapet at sunset, warm torches, sea in the background.",
                       negative="worst quality, low quality"),
         "latent": latent(1013),
@@ -460,17 +458,16 @@ EXAMPLES = {
                                   "1. Load a control adapter in MOSS Multi-LoRA (e.g. moss-color-depth-control from\n"
                                   "   darask0/MOSS-Image-color-depth-control, trained on MOSS-Image Base). Keep it at 1.0:\n"
                                   "   ComfyUI replaces its widened video_embedder at full strength anyway.\n"
-                                  "2. Depth Anything V2 (comfyui_controlnet_aux) extracts the depth map (near is white).\n"
-                                  "   MOSS Control resizes the maps in pixels to the latent before the VAE.\n"
+                                  "2. Load a depth map (near is white), or replace Load Image with Depth Anything V2\n"
+                                  "   (comfyui_controlnet_aux). MOSS Control resizes the maps in pixels to the latent.\n"
                                   "3. color_mode: off = depth only (clothes and colors from the prompt);\n"
                                   "   flat regions = connect a photo to color_map, blurred and reduced to a few flat colors;\n"
                                   "   as given = a real segmentation map (a photo there makes the adapter copy its texture).\n"
                                   "4. Measured on RTX 5090 (tools/RESULTS.md): Base or SFT at 25 steps takes ~14.1-14.2 s;\n"
                                   "   with Turbo 8-steps v1.0 (8 steps, CFG 1), ~3.3 s (4.3x faster), keeping pose fidelity.\n"
                                   "5. Lower strength (< 1.0) or end_percent (e.g. 0.75) to give the final steps more freedom."}),
-        "_layout": {"note": (0, -560), "img": (0, 0), "depth": (440, 0), "depth_prev": (440, 200), "enh": (900, 0),
-                    "ctrl": (1400, 0), "maps": (1400, 440), "ks": (1860, 0), "save": (2320, 0),
-                    "load": (0, 560), "loras": (440, 560), "latent": (900, 680), "turbo": (1860, 580),
+        "_layout": {"note": (0, -560), "load": (0, 0), "loras": (0, 380), "enh": (450, 0), "latent": (950, 0), "depth": (950, 420),
+                    "ctrl": (1400, 0), "maps": (1400, 620), "ks": (1860, 0), "save": (2320, 0), "turbo": (1860, 580),
                     "tel": (2320, 580), "report": (2760, 580)},
     },
     "HaDeS MOSS Suite - LoRA Toolkit": {
