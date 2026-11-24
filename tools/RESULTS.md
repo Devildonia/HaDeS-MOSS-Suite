@@ -2942,3 +2942,30 @@ Notes:
 - On `merge_hms`, scene 27 (4-panel manga page) exhibits a composition shift (MAE 40.77, L1@64 10.51%) rather than blur, preserving sharp inked line art.
 - Not hidden: on the merge (SFT with half of Base in blocks 18-35, the sixth video's test recipe) the 10-scene median luma (-2.78) is just past the lab's +-2.5 gate and the grid's mean Laplacian drops 1735 -> 1097, mostly scene 27's composition shift (12586 -> 6733 in the first run; the other scenes lose 5-25 %). Text stays within the gate (107/110 vs 108/110). The four published HMS v1 models (Base, SFT, v1.0 Turbo, Bulle d'Encre) all pass every gate; an HMS file of a merge should be checked by eye against its BF16 save.
 - UI (frontend 1.57.4, clean 8189): the Saver with `HMS v1` selected shows the `clip` input and `hms_steps`, `hms_cfg`, `hms_sampler`, `hms_scheduler` with their defaults in the classic canvas with HaDeS widgets, with the standard-widgets option and in Nodes 2.0 / Vue. Not checked: zoom, manual resize and save / reload of a workflow with the new inputs.
+
+## MOSS Control (color / depth) on Base, SFT and Turbo (2026-11-24, for the ControlNet video tutorial)
+
+Clean ComfyUI on port 8189 (`--use-sage-attention`, RTX 5090), `qwen3.5_9b_int8_convrot`, `flux2-vae`, 1024 x 1024. Adapter: `moss-color-depth-control.safetensors` (`darask0/MOSS-Image-color-depth-control`, trained on Base, loaded via `MOSS Multi-LoRA` at strength 1.0). Depth map extracted from `fisherman_video1.png` with `DepthAnythingV2Preprocessor` (`depth_anything_v2_vitl.pth`, resolution 1024). Prompt (knight scene, keeping the fisherman's pose): *"Oil painting of a medieval knight in weathered steel armor mending a chainmail cloak on a stone castle parapet at sunset, warm torches, sea in the background."* Scripts, timings and contact sheets in `I:/HaDeS_MOSS/videos/controlnet/measure`.
+
+- **Base vs SFT and Turbo 8-steps** (`color_mode = off (depth only)`, `strength 1.0`, `0.0–1.0`; timings are `execution_start` → `execution_success` median of 3 warm runs on seeds 1020–1022; visual inspection on seeds 1013–1015):
+
+| Config | Steps / CFG / Sampler | Warm times (s) | Median (s) | By eye (pose and prompt) |
+|---|---|---|---|---|
+| `mossImage_base_bf16` | 25 / 2.5 / `er_sde` / `simple` | 14.12, 14.14, 14.21 | 14.14 | Clean; follows hands, torso, head tilt and cloak pose |
+| `mossImage_sft_bf16` | 25 / 2.5 / `er_sde` / `simple` | 14.19, 14.21, 14.51 | 14.21 | Clean; same pose fidelity, slightly warmer contrast / cloak |
+| `Base` + `HaDeS-MOSS-Turbo-8steps-v1.0` | 8 / 1.0 / `euler` / `simple` | 3.30, 3.29, 3.28 | 3.29 | Clean (4.3× faster); keeps depth pose and armor detail |
+| `SFT` + `HaDeS-MOSS-Turbo-8steps-sft-v1.0` | 8 / 1.0 / `euler` / `simple` | 3.29, 3.24, 3.26 | 3.26 | Clean (4.4× faster); keeps pose and warm sunset palette |
+| `SFT` + `HaDeS-MOSS-Turbo-8steps-v0.7` | 8 / 1.2 / `euler` / `simple` | 5.28, 5.30, 5.31 | 5.30 | Clean; CFG > 1 runs two passes per step |
+
+- **`color_mode`, `end_percent` and `strength`** (`Base` + `Turbo v1.0`, 8 steps, CFG 1.0, `euler / simple`, seeds 1013–1014; `color_map` connected to `fisherman_video1.png`; MAE / 255 at 512 x 512 against the input photo):
+
+| Setting | MAE vs input (1013 / 1014) | By eye |
+|---|---|---|
+| `off (depth only)`, `strength 1.0`, `end 1.0` | 57.94 / 61.98 | Closed-visor knight helmet; colors and textures follow the prompt |
+| `flat regions` (`8` colors, `blur 4`), `end 1.0` | 53.58 / 59.04 | Guides light/dark regions and warm-left / sea-right layout without copying the face |
+| `as given` (photo on `color_map`), `end 1.0` | 48.45 / 58.08 | Copies photo texture (seed 1013 opens the visor and reproduces the fisherman's face/beard); meant for flat segmentation maps, not photos |
+| `off (depth only)`, `end 0.75` | 58.39 / 62.46 | Keeps pose while loosening fine contour adherence in the last steps |
+| `flat regions`, `end 0.75` | 53.73 / 59.24 | Same overall layout with slightly softer adherence to the input regions |
+| `off (depth only)`, `strength 0.7`, `end 1.0` | 59.69 / 60.59 | Shifts torso/head alignment slightly away from the depth map |
+
+- **Caption + Control + Telemetry flow** (`Base` + `Turbo v1.0`, `MOSS Prompt Enhancer` in `caption` mode with `fisherman_video1.png` connected, `flat regions`, seed 1013): 13.33 s on the first run (including Qwen vision encoding). `Suite Telemetry` (`Loader`, `Multi-LoRA`, `Prompt Enhancer`, `Latent`, `Control`, `KSampler`) reports `No findings: the connected nodes are consistent with what was measured.` Not measured here: `moss_image_sft_pose_control_lora`, non-square aspect ratios, and multi-resolution ControlNet passes.

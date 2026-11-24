@@ -4222,6 +4222,354 @@ async def l8_prepare(page):
 layout_text.prepare = l8_prepare
 
 
+# ---- controlnet (ControlNet: Depth & Color from scratch) ----
+
+CN_LINES = [
+    ("Hi, I'm HaDeS, and welcome back to the channel.",
+     "Hola, soy HaDeS, y bienvenido de nuevo al canal."),
+    ("Today we're building a MOSS-Image ControlNet workflow from an empty canvas, one node at a time.",
+     "Hoy vamos a montar un workflow de ControlNet para MOSS-Image desde un lienzo vacío, nodo a nodo."),
+    ("We'll take an existing image, extract its depth map, and turn our fisherman into a medieval knight while keeping the exact same pose.",
+     "Tomaremos una imagen existente, extraeremos su mapa de profundidad y convertiremos a nuestro pescador en un caballero medieval manteniendo exactamente la misma pose."),
+    ("I'll also show you how the color control modes work, and a mistake that's very easy to make if you plug a photo straight in.",
+     "También te enseñaré cómo funcionan los modos de control de color, y un error muy fácil de cometer si conectas una foto directamente."),
+    ("As always, everything is free, and all the links are in the description.",
+     "Como siempre, todo es gratis y tienes todos los enlaces en la descripción."),
+    ("Let's start from zero with MOSS Loader.",
+     "Empezamos desde cero con MOSS Loader."),
+    ("I select MOSS-Image Base, the int8 text encoder and the Flux 2 VAE. The color and depth adapter was trained on Base, though I've also tested it on SFT and it works cleanly on both.",
+     "Elijo MOSS-Image Base, el text encoder int8 y el VAE de Flux 2. El adaptador de color y profundidad se entrenó sobre Base, aunque también lo he medido en SFT y funciona limpio en ambos.",
+     "I select MOSS-Image Base, the int eight text encoder and the Flux two VAE. The color and depth adapter was trained on Base, though I've also tested it on SFT and it works cleanly on both."),
+    ("Next, I add MOSS Multi-LoRA and load the moss-color-depth-control adapter.",
+     "Después añado MOSS Multi-LoRA y cargo el adaptador moss-color-depth-control.",
+     "Next, I add MOSS Multi-LoRA and load the moss color depth control adapter."),
+    ("Important detail: keep its strength at one here. ComfyUI replaces the model's input layer at full strength anyway, so the real strength slider is on the MOSS Control node we'll add in a moment.",
+     "Detalle importante: deja su fuerza en uno aquí. ComfyUI sustituye la capa de entrada del modelo a fuerza completa de todas formas, así que el control real de fuerza está en el nodo MOSS Control que añadiremos ahora."),
+    ("Now we need a reference image. I'll use our fisherman from the first tutorial in Load Image.",
+     "Ahora necesitamos una imagen de referencia. Usaré nuestro pescador del primer tutorial en Load Image."),
+    ("To get the depth map, I add Depth Anything V2 from controlnet aux, and connect a Preview Image so we can see it.",
+     "Para obtener el mapa de profundidad, añado Depth Anything V2 de controlnet aux y conecto un Preview Image para poder verlo.",
+     "To get the depth map, I add Depth Anything V two from controlnet ox, and connect a Preview Image so we can see it."),
+    ("In MOSS Control, near is white and far is black. Depth Anything gives us that directly.",
+     "En MOSS Control, lo cercano es blanco y lo lejano es negro. Depth Anything nos lo da directamente así."),
+    ("Next, the MOSS Prompt Enhancer, connected to CLIP from the loader.",
+     "Lo siguiente, el MOSS Prompt Enhancer, conectado al CLIP del loader."),
+    ("I'll leave it on \"as written\" and describe a medieval knight in weathered steel armor mending a chainmail cloak on a castle parapet at sunset.",
+     "Lo dejo en \"as written\" y describo un caballero medieval con armadura de acero desgastada remendando una capa de cota de malla en la almena de un castillo al atardecer."),
+    ("Tip: if you want to recreate a photo without writing the prompt yourself, you can switch this node to \"caption\" mode and plug your image into its image input.",
+     "Consejo: si quieres recrear una foto sin escribir tú el prompt, puedes cambiar este nodo al modo \"caption\" y conectar tu imagen a su entrada image."),
+    ("Now I add MOSS Latent, set to 1024 by 1024, with a fixed seed so we can compare every setting cleanly.",
+     "Ahora añado MOSS Latent, fijado en 1024 por 1024, con una semilla fija para poder comparar cada ajuste con limpieza.",
+     "Now I add MOSS Latent, set to ten twenty-four by ten twenty-four, with a fixed seed so we can compare every setting cleanly."),
+    ("Here is the star of today's workflow: MOSS Control.",
+     "Aquí está el protagonista del workflow de hoy: MOSS Control."),
+    ("It takes the positive and negative conditioning from the Prompt Enhancer, the VAE from the loader, and the latent from MOSS Latent.",
+     "Recibe los condicionamientos positivo y negativo del Prompt Enhancer, el VAE del loader y el latente de MOSS Latent."),
+    ("It resizes your maps in pixels to match the latent before encoding them with the VAE.",
+     "Redimensiona tus mapas en píxeles para que encajen con el latente antes de codificarlos con el VAE."),
+    ("I plug our depth map into depth map, and I also connect its maps output to a Preview Image. That way we always see the exact maps going into the model.",
+     "Conecto nuestro mapa de profundidad a depth map, y también conecto su salida maps a un Preview Image. Así vemos siempre los mapas exactos que entran al modelo."),
+    ("Let's finish the pipeline. I add MOSS KSampler and plug in my Turbo 8-steps v1.0 node.",
+     "Vamos a terminar el flujo. Añado MOSS KSampler y le conecto mi nodo Turbo 8-steps v1.0.",
+     "Let's finish the pipeline. I add MOSS KSampler and plug in my Turbo eight steps version one node."),
+    ("On Base, twenty-five steps take about fourteen seconds. With Turbo v1.0, eight steps at CFG one take just over three seconds, over four times faster.",
+     "En Base, veinticinco pasos tardan unos catorce segundos. Con Turbo v1.0, ocho pasos con CFG uno tardan poco más de tres segundos, más de cuatro veces más rápido.",
+     "On Base, twenty-five steps take about fourteen seconds. With Turbo version one, eight steps at CFG one take just over three seconds, over four times faster."),
+    ("I also add Suite Telemetry, connect the info outputs from every node in the Suite, add a Preview Any to check the report, and wire its json into MOSS Image Saver.",
+     "Añado también Suite Telemetry, conecto las salidas info de todos los nodos de la Suite, pongo un Preview Any para ver el informe y llevo su json al MOSS Image Saver."),
+    ("First run, with color mode set to \"off\", depth only. Let's launch it.",
+     "Primera ejecución, con el modo de color en \"off\", solo profundidad. Vamos a lanzarlo."),
+    ("Three point three seconds, and look at that: the hands, the tilt of the head, the net turned into chainmail, and the sea in the background all match the fisherman's depth map.",
+     "Tres coma tres segundos, y mira esto: las manos, la inclinación de la cabeza, la red convertida en cota de malla y el mar al fondo siguen todos el mapa de profundidad del pescador."),
+    ("Because color mode is off, all the colors, lighting and textures come from our prompt.",
+     "Como el modo de color está desactivado, todos los colores, la iluminación y las texturas vienen de nuestro prompt."),
+    ("Now let's plug the original photo into color map and see what happens with the other two modes.",
+     "Ahora vamos a conectar la foto original a color map y ver qué pasa con los otros dos modos."),
+    ("If you leave color mode on \"as given\" with a photo, watch closely: the adapter copies the photo's actual texture.",
+     "Si dejas el modo de color en \"as given\" con una foto, fíjate bien: el adaptador copia la textura real de la foto."),
+    ("It literally opened the helmet visor and put the fisherman's face and beard inside! That's because \"as given\" expects a flat segmentation map, not a detailed photograph.",
+     "¡Literalmente ha abierto el visor del casco y ha metido la cara y la barba del pescador dentro! Eso pasa porque \"as given\" espera un mapa de segmentación plano, no una fotografía con detalle."),
+    ("That's why I added \"flat regions\" to MOSS Control. It blurs the photo and reduces it to a few solid color blocks before the VAE.",
+     "Por eso añadí \"flat regions\" a MOSS Control. Desenfoca la foto y la reduce a unos pocos bloques de color sólido antes del VAE."),
+    ("Now it guides the warm light on the left and the darker tones on the right, without copying the fisherman's face.",
+     "Ahora guía la luz cálida a la izquierda y los tonos más oscuros a la derecha, sin copiar la cara del pescador."),
+    ("Two quick controls when you want more freedom: lowering strength below one softens how strictly it follows the map, and lowering end percent, say to zero point seven five, lets the final steps refine details more freely.",
+     "Dos controles rápidos cuando quieres más libertad: bajar strength por debajo de uno suaviza el seguimiento del mapa, y bajar end percent, por ejemplo a cero coma setenta y cinco, deja que los últimos pasos afinen los detalles con más libertad."),
+    ("And if we check Suite Telemetry, it says \"No findings\". Everything in our workflow matches what's been measured.",
+     "Y si miramos Suite Telemetry, dice \"No findings\". Todo en nuestro workflow cuadra con lo que está medido."),
+    ("That's it: depth and color ControlNet in MOSS-Image, built from scratch in just over three seconds per image.",
+     "Y ya está: ControlNet de profundidad y color en MOSS-Image, montado desde cero en poco más de tres segundos por imagen."),
+    ("This exact workflow is free to download from the description.",
+     "Este mismo workflow se puede descargar gratis desde la descripción."),
+    ("If you've made it to the end and enjoyed the video, and you'd like to see more content like this, leave a like and subscribe. It's free!",
+     "Si has llegado hasta el final del vídeo, te ha gustado y quieres ver más contenido de este tipo, dale un buen like y suscríbete. ¡Es gratis!"),
+    ("Thanks for watching, and see you in the next one.",
+     "Gracias por verlo, y nos vemos en el próximo."),
+]
+
+CN_CTRL_LORA = "MOSS\\moss-color-depth-control.safetensors"
+CN_PROMPT = ("Oil painting of a medieval knight in weathered steel armor mending a chainmail cloak "
+             "on a stone castle parapet at sunset, warm torches, sea in the background.")
+CN_POS = {
+    "load_img": (0, 0),
+    "depth": (440, 0),
+    "prev_depth": (440, 200),
+    "enhancer": (900, 0),
+    "ctrl": (1400, 0),
+    "prev_maps": (1400, 440),
+    "sampler": (1860, 0),
+    "saver": (2320, 0),
+    "loader": (0, 560),
+    "loras": (440, 560),
+    "latent": (900, 680),
+    "turbo": (1860, 580),
+    "telemetry": (2320, 580),
+    "report": (2760, 580),
+}
+CN_BOX = [-60, -60, 3260, 1220]
+
+
+def cn_cols_html(items, side=560):
+    head = "".join(f'<div style="color:#fff;font:600 24px Segoe UI,sans-serif;text-align:center">{t}</div>' for _, t in items)
+    cells = "".join(f'<div style="width:{side}px;height:{side}px;overflow:hidden;border-radius:8px;border:3px solid #333">'
+                    f'<img src="{u}" style="width:{side}px;height:{side}px;object-fit:cover"></div>' for u, _ in items)
+    return f'<div style="display:grid;grid-template-columns:repeat({len(items)},{side}px);gap:14px 24px">{head}{cells}</div>'
+
+
+async def cn_prepare(page):
+    """Off camera: upload fisherman_video1.png into the recording input folder, refresh node definitions, and run one full warmup
+    (including DepthAnythingV2, Control LoRA, Turbo and Image Saver hashes) so the first on-camera run is fast and honest."""
+    import urllib.request
+    import uuid
+    url = page.url.split("/", 3)
+    base = f"{url[0]}//{url[2]}"
+    b = "----" + uuid.uuid4().hex
+    body = (f"--{b}\r\nContent-Disposition: form-data; name=\"overwrite\"\r\n\r\ntrue\r\n"
+            f"--{b}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"fisherman_video1.png\"\r\nContent-Type: image/png\r\n\r\n").encode() \
+        + UP_VIDEO1.read_bytes() + f"\r\n--{b}--\r\n".encode()
+    urllib.request.urlopen(urllib.request.Request(base + "/upload/image", body, {"Content-Type": f"multipart/form-data; boundary={b}"}))
+    await page.evaluate("() => window.__hv.app().extensionManager.command.execute('Comfy.RefreshNodeDefinitions')")
+    await asyncio.sleep(0.5)
+    g = {
+        "1": {"class_type": "HaDeSMossLoader", "inputs": dict(BASIC_LOADER, weight_dtype="default", clip_device="default")},
+        "2": {"class_type": "LoadImage", "inputs": {"image": "fisherman_video1.png"}},
+        "3": {"class_type": "HaDeSMossMultiLora", "inputs": {
+            "model": ["1", 0], "enabled": True, "loras": json.dumps([{"name": CN_CTRL_LORA, "on": True, "strength": 1.0}])}},
+        "4": {"class_type": "HaDeSMossPromptEnhancer", "inputs": {
+            "clip": ["1", 1], "idea": "a knight", "mode": "as written", "width": 1024, "height": 1024,
+            "temperature": 0.7, "seed": 1, "max_tokens": 1024, "negative": "worst quality, low quality"}},
+        "5": {"class_type": "HaDeSMossLatent", "inputs": {
+            "aspect_ratio": "1:1", "megapixels": 1.0, "custom_width": 1024, "custom_height": 1024, "batch_size": 1, "seed": 7}},
+        "6": {"class_type": "DepthAnythingV2Preprocessor", "inputs": {
+            "image": ["2", 0], "ckpt_name": "depth_anything_v2_vitl.pth", "resolution": 1024}},
+        "7": {"class_type": "HaDeSMossControl", "inputs": {
+            "positive": ["4", 0], "negative": ["4", 1], "vae": ["1", 2], "latent": ["5", 0], "depth_map": ["6", 0],
+            "color_mode": "off (depth only)", "colors": 8, "blur": 4.0, "strength": 1.0, "start_percent": 0.0, "end_percent": 1.0}},
+        "8": {"class_type": "HaDeSMossTurbo", "inputs": {
+            "lora_name": BASIC_LORA, "strength": 1.0, "steps": 8, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple"}},
+        "9": {"class_type": "HaDeSMossKSampler", "inputs": {
+            "model": ["3", 0], "positive": ["7", 0], "negative": ["7", 1], "latent_image": ["5", 0], "vae": ["1", 2],
+            "turbo": ["8", 0], "seed": 7, "steps": 8, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple",
+            "denoise": 1.0, "flow_shift": 0.0, "slg": "off"}},
+        "10": {"class_type": "HaDeSMossSuiteTelemetry", "inputs": {
+            "report_title": "Warmup", "info_1": ["1", 3], "info_2": ["3", 1], "info_3": ["4", 6], "info_4": ["5", 3],
+            "info_5": ["7", 3], "info_6": ["9", 2]}},
+        "11": {"class_type": "HaDeSMossImageSaver", "inputs": {
+            "images": ["9", 1], "metadata": ["10", 1], "filename_prefix": "MOSS/warmup_cn", "hashes": True, "embed_workflow": False}},
+    }
+    print("warm-up run:", await page.evaluate(UP_WARM_JS, g), flush=True)
+
+
+async def controlnet_video(d: Director):
+    """ControlNet: Depth & Color from scratch, built node by node from an empty canvas."""
+    P = CN_POS
+    await d.camera({"box": CN_BOX}, 10, pad=60, top=60)
+    await d.move(W * 0.62, H * 0.55)
+
+    # 1. introduction
+    d.title("HaDeS MOSS Suite", "ControlNet: Depth & Color from scratch", 7.0)
+    await d.say(0)
+    await d.say(1)
+    first_url = "data:image/png;base64," + base64.b64encode(UP_VIDEO1.read_bytes()).decode()
+    knight_preview = Path(r"I:\HaDeS_MOSS\videos\comfy_output\ctrl_measure\depth_only_end1.0_1013_00001_.png")
+    if knight_preview.exists():
+        k_url = "data:image/png;base64," + base64.b64encode(knight_preview.read_bytes()).decode()
+        await d.js("(h) => window.__hv.show(h)", cn_cols_html([(first_url, "Input image"), (k_url, "Depth ControlNet · 8 steps · 3.3 s")], side=560))
+    await d.say(2)
+    await d.js("() => window.__hv.hide()")
+    await d.say(3)
+    await d.say(4)
+
+    # 2. loader and Multi-LoRA with control adapter
+    await d.say(5)
+    loader = await basic_add(d, "HaDeSMossLoader", "MOSS Loader", P["loader"])
+    await up_set(d, loader, BASIC_LOADER)
+    await d.camera([loader], 900, pad=180, top=60)
+    await d.say(6)
+    await basic_point(d, loader, "unet_name")
+    await d.hold(0.4)
+    await basic_point(d, loader, "clip_name")
+    await d.hold(0.4)
+    await basic_point(d, loader, "vae_name")
+
+    await d.camera({"box": [-40, 420, 920, 960]}, 900, pad=80, top=60)
+    await d.say(7)
+    loras = await basic_add(d, "HaDeSMossMultiLora", "MOSS Multi-LoRA", P["loras"])
+    await up_set(d, loras, {"enabled": True, "loras": json.dumps([{"name": CN_CTRL_LORA, "on": True, "strength": 1.0}])})
+    await basic_link(d, loader, "MODEL", loras, "model", 800)
+    await d.camera([loras], 900, pad=220, top=60)
+    await d.say(8)
+
+    # 3. input image + Depth Anything V2 + PreviewImage
+    await d.camera({"box": [-60, -60, 1000, 900]}, 900, pad=60, top=60)
+    await d.say(9)
+    load_img = await basic_add(d, "LoadImage", "Load Image", P["load_img"])
+    await up_set(d, load_img, {"image": "fisherman_video1.png"})
+    await d.camera([load_img], 900, pad=160, top=60)
+    await d.hold(0.4)
+
+    await d.camera({"box": [-40, -40, 920, 560]}, 900, pad=80, top=60)
+    await d.say(10)
+    depth = await basic_add(d, "DepthAnythingV2Preprocessor", "Depth Anything V2", P["depth"])
+    await up_set(d, depth, {"ckpt_name": "depth_anything_v2_vitl.pth", "resolution": 1024})
+    await basic_link(d, load_img, "IMAGE", depth, "image", 800)
+    prev_depth = await basic_add(d, "PreviewImage", "Preview Image", P["prev_depth"])
+    await d.js("(id) => { const n = window.__hv.node(id); n.setSize([340, 260]); n.setDirtyCanvas(true, true); }", prev_depth)
+    await basic_link(d, depth, "IMAGE", prev_depth, "images", 700)
+    await d.camera([depth], 900, pad=200, top=60)
+    await d.say(11)
+
+    # 4. Prompt Enhancer + MOSS Latent
+    await d.camera({"box": [-40, -40, 1400, 900]}, 900, pad=80, top=60)
+    await d.say(12)
+    enhancer = await basic_add(d, "HaDeSMossPromptEnhancer", "MOSS Prompt Enhancer", P["enhancer"])
+    await basic_link(d, loader, "CLIP", enhancer, "clip", 800)
+    await basic_point(d, enhancer, "mode", {"mode": "as written"})
+    await d.camera([enhancer], 900, pad=160, top=60)
+    box = await d.js("""(id) => { const w = window.__hv.widget(id, 'idea'); w.value = ''; if (w.element) w.element.value = '';
+        const r = w.element.getBoundingClientRect(); return [r.left, r.top]; }""", enhancer)
+    await d.click(box[0] + 40, box[1] + 30)
+    if not await d.js("() => document.activeElement?.tagName === 'TEXTAREA'"):
+        raise SystemExit("the prompt box is not focused; nothing typed")
+    async with d.fast(2.0):
+        await d.page.keyboard.type(CN_PROMPT, delay=10)
+    await d.say(13)
+    await d.say(14)
+    await basic_point(d, enhancer, "mode")
+
+    await d.camera({"box": [840, -40, 1380, 1080]}, 900, pad=80, top=60)
+    await d.say(15)
+    latent = await basic_add(d, "HaDeSMossLatent", "MOSS Latent", P["latent"])
+    await up_set(d, latent, {"aspect_ratio": "1:1", "megapixels": 1.0, "seed": BASIC_SEED, "control_after_generate": "fixed"})
+    await basic_point(d, latent, "seed")
+
+    # 5. MOSS Control
+    await d.camera({"box": [-60, -60, 1860, 1060]}, 900, pad=60, top=60)
+    await d.say(16)
+    ctrl = await basic_add(d, "HaDeSMossControl", "MOSS Control", P["ctrl"])
+    await up_set(d, ctrl, {"color_mode": "off (depth only)", "colors": 8, "blur": 4.0, "strength": 1.0, "start_percent": 0.0, "end_percent": 1.0})
+    await d.say(17)
+    async with d.fast(4.0):
+        await basic_link(d, enhancer, "positive", ctrl, "positive", 700)
+        await basic_link(d, enhancer, "negative", ctrl, "negative", 700)
+        await basic_link(d, loader, "VAE", ctrl, "vae", 700)
+        await basic_link(d, latent, "latent", ctrl, "latent", 700)
+    await d.say(18)
+    await d.say(19)
+    await basic_link(d, depth, "IMAGE", ctrl, "depth_map", 800)
+    prev_maps = await basic_add(d, "PreviewImage", "Preview Image", P["prev_maps"])
+    await d.js("(id) => { const n = window.__hv.node(id); n.setSize([380, 320]); n.setDirtyCanvas(true, true); }", prev_maps)
+    await basic_link(d, ctrl, "maps", prev_maps, "images", 700)
+
+    # 6. KSampler, Turbo, Telemetry, Image Saver
+    await d.camera({"box": CN_BOX}, 900, pad=60, top=60)
+    await d.say(20)
+    sampler = await basic_add(d, "HaDeSMossKSampler", "MOSS KSampler", P["sampler"])
+    turbo = await basic_add(d, "HaDeSMossTurbo", "MOSS Turbo LoRA", P["turbo"])
+    await up_set(d, turbo, {"lora_name": BASIC_LORA, "strength": 1.0, "steps": 8, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple"})
+    async with d.fast(5.0):
+        for a, out, inp in ((loras, "MODEL", "model"), (ctrl, "positive", "positive"), (ctrl, "negative", "negative"),
+                            (latent, "latent", "latent_image"), (latent, "seed", "seed"), (loader, "VAE", "vae"), (turbo, "turbo", "turbo")):
+            await basic_link(d, a, out, sampler, inp, 650)
+    await d.say(21)
+    await d.say(22)
+    async with d.fast(5.0):
+        saver = await basic_add(d, "HaDeSMossImageSaver", "MOSS Image Saver", P["saver"])
+        await basic_link(d, sampler, "image", saver, "images", 700)
+        telemetry = await basic_add(d, "HaDeSMossSuiteTelemetry", "MOSS Suite Telemetry", P["telemetry"])
+        for k, (n, out) in enumerate(((loader, "info"), (loras, "info"), (enhancer, "info"), (latent, "info"), (ctrl, "info"), (sampler, "info"))):
+            await basic_link(d, n, out, telemetry, f"info_{k + 1}", 600)
+        report = await basic_add(d, "PreviewAny", "Preview as Text", P["report"])
+        await d.js("(id) => { const n = window.__hv.node(id); n.setSize([440, 520]); n.setDirtyCanvas(true, true); }", report)
+        await basic_link(d, telemetry, "report", report, "source", 700)
+        await basic_link(d, telemetry, "json", saver, "metadata", 700)
+
+    # 7. First run: off (depth only)
+    await d.camera({"box": CN_BOX}, 1000, pad=60, top=60)
+    await d.say(23)
+    url_off, t_off = await basic_run(d, saver)
+    await d.camera([saver, prev_depth], 900, pad=120, top=60)
+    depth_url = await d.js("""(id) => { const n = window.__hv.node(id); const im = n.imgs?.[0]; return im ? im.src : ''; }""", prev_depth)
+    await d.say(24)
+    if depth_url:
+        await d.js("(h) => window.__hv.show(h)", cn_cols_html([(first_url, "Input"), (depth_url, "Depth map"), (url_off, "off (depth only)")], side=480))
+    await d.say(25)
+    await d.js("() => window.__hv.hide()")
+
+    # 8. color_mode: as given vs flat regions
+    await d.camera([load_img, ctrl, prev_maps], 900, pad=80, top=60)
+    await d.say(26)
+    await basic_link(d, load_img, "IMAGE", ctrl, "color_map", 800)
+    await d.camera([ctrl], 900, pad=160, top=60)
+    await d.say(27)
+    await basic_point(d, ctrl, "color_mode", {"color_mode": "as given"})
+    url_as, t_as = await basic_run(d, saver)
+    await d.camera([saver], 900, pad=120, top=60)
+    await d.js("(h) => window.__hv.show(h)", cn_cols_html([(first_url, "Input photo"), (url_as, "as given (copies texture)")], side=560))
+    await d.say(28)
+    await d.js("() => window.__hv.hide()")
+
+    await d.camera([ctrl, prev_maps], 900, pad=120, top=60)
+    await d.say(29)
+    await basic_point(d, ctrl, "color_mode", {"color_mode": "flat regions"})
+    url_flat, t_flat = await basic_run(d, saver)
+    await d.camera([prev_maps, saver], 900, pad=100, top=60)
+    await d.say(30)
+    await d.js("(h) => window.__hv.show(h)", cn_cols_html([(url_off, "off (depth only)"), (url_flat, "flat regions"), (url_as, "as given")], side=480))
+    await d.hold(1.5)
+    await d.js("() => window.__hv.hide()")
+
+    # 9. strength, end_percent and Telemetry
+    await d.camera([ctrl], 900, pad=180, top=60)
+    await d.say(31)
+    await basic_point(d, ctrl, "strength")
+    await d.hold(0.5)
+    await basic_point(d, ctrl, "end_percent")
+    await d.camera([telemetry, report], 900, pad=80, top=60)
+    await d.say(32)
+    await d.hold(1.0)
+
+    # 10. closing
+    await d.camera({"box": CN_BOX}, 1200, pad=60, top=60)
+    await d.say(33)
+    await d.js("(h) => window.__hv.show(h)",
+               '<div style="color:#fff;text-align:center;max-width:1200px">'
+               '<div style="font:600 30px Segoe UI,sans-serif;color:#c9c9d1">Free download (link in the description)</div>'
+               '<div style="font:700 44px Segoe UI,sans-serif;margin-top:22px">HaDeS MOSS Suite - Control (color, depth).json</div></div>')
+    await d.say(34)
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }",
+               f'<div style="display:flex;align-items:center;gap:80px;margin-top:40px"><img src="{url_off}" style="height:780px;border-radius:6px">'
+               '<div style="color:#fff;max-width:640px"><div style="font:900 72px Segoe UI Black,sans-serif;line-height:1.05">HaDeS MOSS Suite</div>'
+               '<div style="font:600 34px Segoe UI,sans-serif;color:#ffcc33;margin-top:22px">ControlNet: Depth &amp; Color from scratch</div>'
+               '<div style="font:400 26px Segoe UI,sans-serif;color:#c9c9d1;margin-top:44px">Workflow, Suite and models: links in the description</div></div></div>')
+    await d.say(35)
+    await d.say(36)
+    await d.end(1.5)
+
+
+controlnet_video.prepare = cn_prepare
+
+
 SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "layout_test": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_test, LAYOUT_TEST_LINES),
           "layout_sentence": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_sentence, LAYOUT_SENTENCE_LINES),
@@ -4233,7 +4581,8 @@ SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "metadata": (None, metadata_video, MD_LINES),
           "merge_save": (None, merge_save, MS_LINES),
           "compare": (None, compare_video, CM_LINES),
-          "layout_text": (None, layout_text, L8_LINES)}
+          "layout_text": (None, layout_text, L8_LINES),
+          "controlnet": (None, controlnet_video, CN_LINES)}
 
 # spoken forms where the written caption reads badly aloud
 SPOKEN = {"DRAFT LAYOUT": "Draft layout"}
@@ -4417,7 +4766,7 @@ async def record(scene, url, folder, unet, voice_lens, lora=None, language="en")
     return rec.frames, d
 
 
-def serve(url, out, python, extra_args):
+def serve(url, out, python, extra_args, extra_whitelist=()):
     """A clean ComfyUI for recording: only this pack and ComfyUI-Manager, its own user folder (English UI, no minimap, no
     node badges), the registry list copied from the main install's Manager cache so the Manager finds the Suite."""
     port = int(url.rsplit(":", 1)[1].split("/")[0])
@@ -4443,7 +4792,7 @@ def serve(url, out, python, extra_args):
     manager_config.write_text(config_text, encoding="utf-8")
     log = open(Path(out) / f"comfy_{port}.log", "w", encoding="utf-8")
     proc = subprocess.Popen([python, "main.py", "--port", str(port), "--disable-auto-launch", "--disable-all-custom-nodes",
-                             "--whitelist-custom-nodes", ROOT.name, "ComfyUI-Manager", "--user-directory", str(user.resolve()),
+                             "--whitelist-custom-nodes", ROOT.name, "ComfyUI-Manager", *extra_whitelist, "--user-directory", str(user.resolve()),
                              "--output-directory", str((Path(out) / "comfy_output").resolve()),
                              "--temp-directory", str((Path(out) / "comfy_temp").resolve()),
                              "--input-directory", str((Path(out) / "comfy_input").resolve())]  # never the user's own input folder
@@ -4494,7 +4843,8 @@ def main():
     folder = Path(a.out) / a.scene
     folder.mkdir(parents=True, exist_ok=True)
     voices = synth(SCENES[a.scene][2], a.voice, a.ref, Path(a.out) / "voice_cache", a.tts_python) if a.voice else {}
-    server = serve(a.url, a.out, a.tts_python, a.comfy_args.split()) if a.serve else None
+    extra_wl = ("comfyui_controlnet_aux",) if a.scene == "controlnet" else ()
+    server = serve(a.url, a.out, a.tts_python, a.comfy_args.split(), extra_wl) if a.serve else None
     try:
         frames, d = asyncio.run(record(a.scene, a.url, folder, a.unet, {i: v[1] for i, v in voices.items()}, a.lora, language))
     finally:

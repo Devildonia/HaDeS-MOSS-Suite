@@ -7,6 +7,9 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **Control (color, depth) example**, rebuilt for the ControlNet video tutorial: MOSS-Image Base + `moss-color-depth-control` + Turbo 8-steps v1.0 (8 steps, CFG 1, `euler / simple`), Depth Anything V2 (`comfyui_controlnet_aux`) extracting depth from `fisherman_video1.png`, `MOSS Control` with `maps` preview, and full `Suite Telemetry` (including `MOSS Latent`). Measured on RTX 5090 (`tools/RESULTS.md`, "MOSS Control (color / depth) on Base, SFT and Turbo"): Base 14.14 s / SFT 14.21 s at 25 steps; Base + Turbo v1.0 3.29 s (4.3× faster) and SFT + Turbo sft-v1.0 3.26 s (4.4× faster); `off (depth only)` vs `flat regions` vs `as given` documented.
+
 ## [0.9.6] - 2026-11-24
 
 ### Fixed

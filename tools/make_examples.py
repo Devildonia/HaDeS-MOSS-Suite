@@ -432,35 +432,46 @@ EXAMPLES = {
                     "note": (0, 360), "tel": (1820, 450)},
     },
     "HaDeS MOSS Suite - Control (color, depth)": {
-        **loader(),
+        # the ControlNet video tutorial (tools/moss_video.py controlnet): Base + moss-color-depth-control + Turbo 8-steps v1.0,
+        # Depth Anything V2, and Suite Telemetry; measurements in tools/RESULTS.md
+        **loader(BASE),
         # the control adapter loads as a LoRA; ComfyUI replaces its widened video_embedder at full strength whatever this value,
         # so keep it at 1.0 and set the control's strength on the MOSS Control node
         "loras": ("HaDeSMossMultiLora", {"model": ("load", 0), "enabled": True,
                                          "loras": json.dumps([{"name": CONTROL_ADAPTER, "on": True, "strength": 1.0}])}),
-        "enh": prompt("Photograph of a woman in a red raincoat walking through a narrow cobbled street at dusk, warm shop lights, light rain."),
-        "latent": latent(),
-        "depth": ("LoadImage", {"image": "depth_map.png"}),
+        "img": ("LoadImage", {"image": "fisherman_video1.png"}),
+        "depth": ("DepthAnythingV2Preprocessor", {"image": ("img", 0), "ckpt_name": "depth_anything_v2_vitl.pth", "resolution": 1024}),
+        "depth_prev": ("PreviewImage", {"images": ("depth", 0)}),
+        "enh": prompt("Oil painting of a medieval knight in weathered steel armor mending a chainmail cloak on a stone castle parapet at sunset, warm torches, sea in the background.",
+                      negative="worst quality, low quality"),
+        "latent": latent(1013),
         "ctrl": ("HaDeSMossControl", {"positive": ("enh", 0), "negative": ("enh", 1), "vae": ("load", 2), "latent": ("latent", 0),
                                       "depth_map": ("depth", 0), "color_mode": "off (depth only)", "colors": 8, "blur": 4.0,
                                       "strength": 1.0, "start_percent": 0.0, "end_percent": 1.0}),
         "maps": ("PreviewImage", {"images": ("ctrl", 2)}),
-        "ks": ksampler(("loras", 0), ("latent", 0), seed=("latent", 4), enh="ctrl"),
+        "turbo": ("HaDeSMossTurbo", {"lora_name": TURBO_V10, "strength": 1.0, "steps": 8, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple"}),
+        "ks": ("HaDeSMossKSampler", {"model": ("loras", 0), "positive": ("ctrl", 0), "negative": ("ctrl", 1), "latent_image": ("latent", 0),
+                                     "vae": ("load", 2), "turbo": ("turbo", 0), "seed": ("latent", 4), "steps": 8, "cfg": 1.0,
+                                     "sampler_name": "euler", "scheduler": "simple", "denoise": 1.0, "flow_shift": 0.0, "slg": "off"}),
         "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_control_%seed%",
                                          "hashes": True, "embed_workflow": True}),
-        **telemetry(("load", 3), ("enh", 6), ("loras", 1), ("latent", 3), ("ctrl", 3), ("ks", 2)),
+        **telemetry(("load", 3), ("loras", 1), ("enh", 6), ("latent", 3), ("ctrl", 3), ("ks", 2)),
         "note": ("Note", {"text": "HaDeS MOSS Suite - Control (color / depth)\n\n"
-                                  "1. Load a control adapter in the Multi-LoRA (e.g. moss-color-depth-control from\n"
+                                  "1. Load a control adapter in MOSS Multi-LoRA (e.g. moss-color-depth-control from\n"
                                   "   darask0/MOSS-Image-color-depth-control, trained on MOSS-Image Base). Keep it at 1.0:\n"
                                   "   ComfyUI replaces its widened video_embedder at full strength anyway.\n"
-                                  "2. Load a depth map (near is white), e.g. from Depth Anything (comfyui_controlnet_aux).\n"
-                                  "   MOSS Control resizes it in pixels to the latent before the VAE.\n"
+                                  "2. Depth Anything V2 (comfyui_controlnet_aux) extracts the depth map (near is white).\n"
+                                  "   MOSS Control resizes the maps in pixels to the latent before the VAE.\n"
                                   "3. color_mode: off = depth only (clothes and colors from the prompt);\n"
-                                  "   flat regions = connect a photo to color_map, reduced to a few flat colors for the palette;\n"
+                                  "   flat regions = connect a photo to color_map, blurred and reduced to a few flat colors;\n"
                                   "   as given = a real segmentation map (a photo there makes the adapter copy its texture).\n"
-                                  "4. strength 1.0 is the trained value; end_percent below 1.0 loosens the shapes at the end.\n\n"
-                                  "Not measured yet: the adapter on SFT (this example) against Base, and with the turbo LoRAs."}),
-        "_layout": {"note": (0, -560), "load": (0, 0), "loras": (0, 380), "enh": (450, 0), "latent": (950, 0), "depth": (950, 420),
-                    "ctrl": (1400, 0), "maps": (1400, 620), "ks": (1850, 0), "save": (2300, 0), "tel": (2300, 480), "report": (2750, 480)},
+                                  "4. Measured on RTX 5090 (tools/RESULTS.md): Base or SFT at 25 steps takes ~14.1-14.2 s;\n"
+                                  "   with Turbo 8-steps v1.0 (8 steps, CFG 1), ~3.3 s (4.3x faster), keeping pose fidelity.\n"
+                                  "5. Lower strength (< 1.0) or end_percent (e.g. 0.75) to give the final steps more freedom."}),
+        "_layout": {"note": (0, -560), "img": (0, 0), "depth": (440, 0), "depth_prev": (440, 200), "enh": (900, 0),
+                    "ctrl": (1400, 0), "maps": (1400, 440), "ks": (1860, 0), "save": (2320, 0),
+                    "load": (0, 560), "loras": (440, 560), "latent": (900, 680), "turbo": (1860, 580),
+                    "tel": (2320, 580), "report": (2760, 580)},
     },
     "HaDeS MOSS Suite - LoRA Toolkit": {
         # the fourth video tutorial (tools/moss_video.py lora_toolkit): Bulle d'Encre's two LoRAs extracted, stacked, split by layers,
