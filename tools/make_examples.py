@@ -563,6 +563,33 @@ EXAMPLES["HaDeS MOSS Suite - Metadata"] = {
     "_groups": [g if not g[0].startswith("3.") else (g[0], g[1] + ["tel2"], g[2]) for g in _upscale["_groups"]],
 }
 
+EXAMPLES["HaDeS MOSS Suite - Img2Img"] = {
+    # the tenth video tutorial (tools/moss_video.py img2img): Base + Turbo 8-steps v1.0, VAEEncode, denoise_mode exact vs core
+    **loader(BASE),
+    "img": ("LoadImage", {"image": "fisherman_video1.png"}),
+    "enc": ("VAEEncode", {"pixels": ("img", 0), "vae": ("load", 2)}),
+    "enh": prompt("Impressionist oil painting of an old fisherman mending a net on a wooden dock at stormy night, glowing lantern light, thick impasto brushstrokes, dramatic dark clouds.",
+                  negative="worst quality, low quality"),
+    "turbo": ("HaDeSMossTurbo", {"lora_name": TURBO_V10, "strength": 1.0, "steps": 8, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple"}),
+    "ks": ("HaDeSMossKSampler", {"model": ("load", 0), "positive": ("enh", 0), "negative": ("enh", 1), "latent_image": ("enc", 0),
+                                 "vae": ("load", 2), "turbo": ("turbo", 0), "seed": 1013, "steps": 8, "cfg": 1.0,
+                                 "sampler_name": "euler", "scheduler": "simple", "denoise": 0.9, "flow_shift": 0.0, "slg": "off",
+                                 "denoise_mode": "exact"}),
+    "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_img2img_%seed%",
+                                     "hashes": True, "embed_workflow": True}),
+    **telemetry(("load", 3), ("enh", 6), ("ks", 2)),
+    "note": ("Note", {"text": "HaDeS MOSS Suite - Img2Img (the tenth video tutorial)\n\n"
+                              "1. Load your image and encode it with VAE Encode (no MOSS Latent needed: size comes from the image).\n"
+                              "2. In FLOW models at few steps (here 8 steps with Turbo v1.0), ComfyUI's stock denoise mode\n"
+                              "   (steps / denoise (core)) rounds int(8 / 0.9) = 8 -> start_sigma 1.000 (pure noise, ignores input).\n"
+                              "3. Set MOSS KSampler's denoise_mode to exact: denoise 0.9 starts at start_sigma 0.978, keeping the\n"
+                              "   input composition while reimagining the lighting and style (~3.2 s on RTX 5090).\n"
+                              "4. Up to denoise 0.5 both modes are identical (start_sigma 0.833). Suite Telemetry shows start_sigma.\n"
+                              "Measurements: tools/RESULTS.md."}),
+    "_layout": {"note": (0, -480), "img": (0, 0), "enc": (440, 0), "enh": (900, 0), "ks": (1400, 0), "save": (1860, 0),
+                "load": (0, 500), "turbo": (1400, 540), "tel": (1860, 520), "report": (2300, 520)},
+}
+
 DEV_EXAMPLE_TITLES = {"HaDeS MOSS Suite - Dev Tools", "HaDeS MOSS Suite - Stage Metadata (Dev)"}
 
 

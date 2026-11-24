@@ -4570,6 +4570,264 @@ async def controlnet_video(d: Director):
 controlnet_video.prepare = cn_prepare
 
 
+# ---- img2img (Real Img2Img: exact vs core denoise) ----
+
+I2I_LINES = [
+    ("Hi, I'm HaDeS, and welcome to tutorial number ten.",
+     "Hola, soy HaDeS, y bienvenido al tutorial número diez."),
+    ("Today we're building a brand-new Img2Img workflow from an empty canvas, and solving a problem that tricks almost everyone with FLOW models in ComfyUI.",
+     "Hoy vamos a montar un workflow nuevo de Img2Img desde un lienzo vacío, y a resolver un problema que engaña a casi todo el mundo con los modelos FLOW en ComfyUI."),
+    ("If you've ever run Img2Img at eight steps with denoise zero point nine and watched ComfyUI ignore your input image completely, this is why, and how MOSS KSampler fixes it.",
+     "Si alguna vez lanzaste Img2Img a ocho pasos con denoise cero coma nueve y viste que ComfyUI ignoraba por completo tu imagen de entrada, aquí tienes por qué ocurre y cómo lo arregla MOSS KSampler."),
+    ("As always, everything is free, and the new workflow is in the description.",
+     "Como siempre, todo es gratis y tienes el nuevo workflow en la descripción."),
+    ("Let's build the workflow from scratch. First, MOSS Loader with MOSS-Image Base, the int8 text encoder and the Flux 2 VAE.",
+     "Montemos el workflow desde cero. Primero, MOSS Loader con MOSS-Image Base, el text encoder int8 y el VAE de Flux 2.",
+     "Let's build the workflow from scratch. First, MOSS Loader with MOSS-Image Base, the int eight text encoder and the Flux two VAE."),
+    ("Next, Load Image with our fisherman from the first tutorial, and a VAE Encode node to turn that photo into a latent.",
+     "Después, Load Image con nuestro pescador del primer tutorial, y un nodo VAE Encode para convertir esa foto en un latente."),
+    ("Notice we don't need MOSS Latent here: the latent comes straight from our input image, at 1024 by 1024.",
+     "Fíjate en que aquí no necesitamos MOSS Latent: el latente sale directamente de nuestra imagen de entrada, a 1024 por 1024.",
+     "Notice we don't need MOSS Latent here: the latent comes straight from our input image, at ten twenty-four by ten twenty-four."),
+    ("Now the MOSS Prompt Enhancer on \"as written\", connected to CLIP. I'll ask for an impressionist oil painting of our fisherman at stormy night with a glowing lantern.",
+     "Ahora el MOSS Prompt Enhancer en \"as written\", conectado a CLIP. Le pediré un óleo impresionista de nuestro pescador en una noche de tormenta con un farol encendido."),
+    ("Next, MOSS KSampler with my Turbo 8-steps v1.0 node plugged in: eight steps, CFG one, euler and simple.",
+     "Lo siguiente, MOSS KSampler con mi nodo Turbo 8-steps v1.0 conectado: ocho pasos, CFG uno, euler y simple.",
+     "Next, MOSS KSampler with my Turbo eight steps version one node plugged in: eight steps, CFG one, euler and simple."),
+    ("And at the end, Suite Telemetry with a Preview Any for the report, feeding the MOSS Image Saver.",
+     "Y al final, Suite Telemetry con un Preview Any para el informe, alimentando al MOSS Image Saver."),
+    ("Now let's test denoise on the stock setting: \"steps / denoise (core)\".",
+     "Ahora probemos el denoise con el ajuste estándar: \"steps / denoise (core)\"."),
+    ("If you start at denoise zero point five, look at what happens in about three seconds.",
+     "Si empiezas con denoise cero coma cinco, mira lo que pasa en unos tres segundos."),
+    ("Almost nothing changed! In a FLOW model like MOSS, noise is concentrated near the top of the schedule. Denoise zero point five starts at sigma zero point eight three, which only tweaks fine textures.",
+     "¡Casi no ha cambiado nada! En un modelo FLOW como MOSS, el ruido se concentra arriba de la escala. Denoise cero coma cinco empieza en sigma cero coma ocho tres, que solo retoca texturas finas."),
+    ("So naturally you push denoise up to zero point eight. Let's run that.",
+     "Así que, lógicamente, subes el denoise a cero coma ocho. Vamos a lanzarlo."),
+    ("At zero point eight, start sigma reaches zero point nine five. Now we get the glowing lantern and storm clouds behind him while keeping our fisherman.",
+     "En cero coma ocho, el sigma inicial llega a cero coma nueve cinco. Ahora ya tenemos el farol encendido y las nubes de tormenta detrás manteniendo a nuestro pescador."),
+    ("Now watch what happens when you want just a bit more change and set denoise to zero point nine.",
+     "Ahora mira qué pasa cuando quieres un poco más de cambio y pones el denoise en cero coma nueve."),
+    ("Wait a second — it completely replaced the scene! The fisherman is tiny and sitting sideways on a different boat.",
+     "¡Un segundo — ha reemplazado la escena por completo! El pescador es diminuto y está sentado de lado en otra barca."),
+    ("Why? Look at Suite Telemetry: start sigma is one point zero zero zero!",
+     "¿Por qué? Mira Suite Telemetry: ¡el sigma inicial es uno coma cero cero cero!"),
+    ("ComfyUI's stock schedule divides steps by denoise and rounds to an integer: eight divided by zero point nine rounds to eight steps, which means pure noise. Your input image was thrown away.",
+     "El planificador estándar de ComfyUI divide los pasos entre el denoise y redondea a entero: ocho entre cero coma nueve redondea a ocho pasos, lo que significa ruido puro. Tu imagen de entrada se ha tirado a la basura."),
+    ("At four steps it's even worse: zero point seven and zero point eight produce the exact same image, and zero point nine is pure noise too.",
+     "A cuatro pasos es aún peor: cero coma siete y cero coma ocho dan exactamente la misma imagen, y cero coma nueve también es ruido puro."),
+    ("That's why I added \"denoise mode: exact\" to MOSS KSampler.",
+     "Por eso añadí \"denoise mode: exact\" al MOSS KSampler."),
+    ("Instead of rounding a step count, \"exact\" treats denoise as a real point on the model's noise-time axis and runs all eight steps from there.",
+     "En lugar de redondear un número de pasos, \"exact\" trata el denoise como un punto real en el eje de ruido del modelo y ejecuta los ocho pasos desde ahí."),
+    ("Let's run the exact same denoise zero point nine with \"exact\" selected.",
+     "Lancemos exactamente el mismo denoise cero coma nueve con \"exact\" seleccionado."),
+    ("Look at Telemetry now: start sigma is zero point nine seven eight, not one.",
+     "Mira Telemetry ahora: el sigma inicial es cero coma nueve siete ocho, no uno."),
+    ("And look at the image: in three point two seconds, it reimagined the scene with dramatic night lighting while keeping our fisherman centered on the dock.",
+     "Y mira la imagen: en tres coma dos segundos, ha reimaginado la escena con iluminación nocturna dramática manteniendo a nuestro pescador centrado en el muelle."),
+    ("Up to denoise zero point five, both modes are identical. Above zero point five, \"exact\" gives you smooth, predictable control without ever throwing away your input image.",
+     "Hasta denoise cero coma cinco, ambos modos son idénticos. Por encima de cero coma cinco, \"exact\" te da un control suave y predecible sin tirar nunca tu imagen de entrada."),
+    ("You can download this brand-new Img2Img workflow for free from the description.",
+     "Puedes descargar gratis este nuevo workflow de Img2Img desde la descripción."),
+    ("If you've made it to the end and enjoyed the video, and you'd like to see more content like this, leave a like and subscribe. It's free!",
+     "Si has llegado hasta el final del vídeo, te ha gustado y quieres ver más contenido de este tipo, dale un buen like y suscríbete. ¡Es gratis!"),
+    ("Thanks for watching, and see you in the next one.",
+     "Gracias por verlo, y nos vemos en el próximo."),
+]
+
+I2I_PROMPT = ("Impressionist oil painting of an old fisherman mending a net on a wooden dock at stormy night, "
+              "glowing lantern light, thick impasto brushstrokes, dramatic dark clouds.")
+I2I_POS = {
+    "load_img": (0, 0),
+    "vae_enc": (440, 0),
+    "enhancer": (900, 0),
+    "sampler": (1400, 0),
+    "saver": (1860, 0),
+    "loader": (0, 500),
+    "turbo": (1400, 540),
+    "telemetry": (1860, 520),
+    "report": (2300, 520),
+}
+I2I_BOX = [-60, -60, 2800, 1140]
+
+
+async def i2i_prepare(page):
+    """Off camera: upload fisherman_video1.png into the recording input folder, refresh node definitions, and run one full warmup
+    through VAEEncode, KSampler (Turbo v1.0) and Image Saver (hashes=True)."""
+    import urllib.request
+    import uuid
+    url = page.url.split("/", 3)
+    base = f"{url[0]}//{url[2]}"
+    b = "----" + uuid.uuid4().hex
+    body = (f"--{b}\r\nContent-Disposition: form-data; name=\"overwrite\"\r\n\r\ntrue\r\n"
+            f"--{b}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"fisherman_video1.png\"\r\nContent-Type: image/png\r\n\r\n").encode() \
+        + UP_VIDEO1.read_bytes() + f"\r\n--{b}--\r\n".encode()
+    urllib.request.urlopen(urllib.request.Request(base + "/upload/image", body, {"Content-Type": f"multipart/form-data; boundary={b}"}))
+    await page.evaluate("() => window.__hv.app().extensionManager.command.execute('Comfy.RefreshNodeDefinitions')")
+    await asyncio.sleep(0.5)
+    g = {
+        "1": {"class_type": "HaDeSMossLoader", "inputs": dict(BASIC_LOADER, weight_dtype="default", clip_device="default")},
+        "2": {"class_type": "LoadImage", "inputs": {"image": "fisherman_video1.png"}},
+        "3": {"class_type": "VAEEncode", "inputs": {"pixels": ["2", 0], "vae": ["1", 2]}},
+        "4": {"class_type": "HaDeSMossPromptEnhancer", "inputs": {
+            "clip": ["1", 1], "idea": "a fisherman", "mode": "as written", "width": 1024, "height": 1024,
+            "temperature": 0.7, "seed": 1, "max_tokens": 1024, "negative": "worst quality, low quality"}},
+        "5": {"class_type": "HaDeSMossTurbo", "inputs": {
+            "lora_name": BASIC_LORA, "strength": 1.0, "steps": 8, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple"}},
+        "6": {"class_type": "HaDeSMossKSampler", "inputs": {
+            "model": ["1", 0], "positive": ["4", 0], "negative": ["4", 1], "latent_image": ["3", 0], "vae": ["1", 2],
+            "turbo": ["5", 0], "seed": 7, "steps": 8, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple",
+            "denoise": 0.5, "flow_shift": 0.0, "slg": "off", "denoise_mode": "steps / denoise (core)"}},
+        "7": {"class_type": "HaDeSMossSuiteTelemetry", "inputs": {
+            "report_title": "Warmup", "info_1": ["1", 3], "info_2": ["4", 6], "info_3": ["6", 2]}},
+        "8": {"class_type": "HaDeSMossImageSaver", "inputs": {
+            "images": ["6", 1], "metadata": ["7", 1], "filename_prefix": "MOSS/warmup_i2i", "hashes": True, "embed_workflow": False}},
+    }
+    print("warm-up run:", await page.evaluate(UP_WARM_JS, g), flush=True)
+
+
+async def img2img_video(d: Director):
+    """Tutorial #10: Real Img2Img in MOSS-Image, built from scratch; core vs exact denoise at 8 steps."""
+    P = I2I_POS
+    await d.camera({"box": I2I_BOX}, 10, pad=60, top=60)
+    await d.move(W * 0.62, H * 0.55)
+
+    # 1. introduction
+    d.title("HaDeS MOSS Suite", "Real Img2Img: exact vs core denoise", 7.0)
+    await d.say(0)
+    await d.say(1)
+    in_url = "data:image/png;base64," + base64.b64encode(UP_VIDEO1.read_bytes()).decode()
+    c_prev = Path(r"I:\HaDeS_MOSS\videos\comfy_output\img2img_measure\core_d0.9_s1013_00001_.png")
+    e_prev = Path(r"I:\HaDeS_MOSS\videos\comfy_output\img2img_measure\exact_d0.9_s1013_00001_.png")
+    if c_prev.exists() and e_prev.exists():
+        c_u = "data:image/png;base64," + base64.b64encode(c_prev.read_bytes()).decode()
+        e_u = "data:image/png;base64," + base64.b64encode(e_prev.read_bytes()).decode()
+        await d.js("(h) => window.__hv.show(h)", cn_cols_html(
+            [(in_url, "Input"), (c_u, "core 0.9 (sigma 1.000)"), (e_u, "exact 0.9 (sigma 0.978)")], side=480))
+    await d.say(2)
+    await d.js("() => window.__hv.hide()")
+    await d.say(3)
+
+    # 2. build from scratch
+    await d.camera({"box": [-60, -60, 1000, 960]}, 900, pad=60, top=60)
+    await d.say(4)
+    loader = await basic_add(d, "HaDeSMossLoader", "MOSS Loader", P["loader"])
+    await up_set(d, loader, BASIC_LOADER)
+    await d.camera([loader], 900, pad=180, top=60)
+    await basic_point(d, loader, "unet_name")
+
+    await d.camera({"box": [-60, -60, 960, 960]}, 900, pad=60, top=60)
+    await d.say(5)
+    load_img = await basic_add(d, "LoadImage", "Load Image", P["load_img"])
+    await up_set(d, load_img, {"image": "fisherman_video1.png"})
+    vae_enc = await basic_add(d, "VAEEncode", "VAE Encode", P["vae_enc"])
+    await basic_link(d, load_img, "IMAGE", vae_enc, "pixels", 700)
+    await basic_link(d, loader, "VAE", vae_enc, "vae", 700)
+    await d.say(6)
+
+    await d.camera({"box": [-60, -60, 1400, 960]}, 900, pad=60, top=60)
+    await d.say(7)
+    enhancer = await basic_add(d, "HaDeSMossPromptEnhancer", "MOSS Prompt Enhancer", P["enhancer"])
+    await basic_link(d, loader, "CLIP", enhancer, "clip", 700)
+    await basic_point(d, enhancer, "mode", {"mode": "as written"})
+    await d.camera([enhancer], 900, pad=160, top=60)
+    box = await d.js("""(id) => { const w = window.__hv.widget(id, 'idea'); w.value = ''; if (w.element) w.element.value = '';
+        const r = w.element.getBoundingClientRect(); return [r.left, r.top]; }""", enhancer)
+    await d.click(box[0] + 40, box[1] + 30)
+    if not await d.js("() => document.activeElement?.tagName === 'TEXTAREA'"):
+        raise SystemExit("the prompt box is not focused; nothing typed")
+    async with d.fast(2.0):
+        await d.page.keyboard.type(I2I_PROMPT, delay=10)
+
+    await d.camera({"box": I2I_BOX}, 900, pad=60, top=60)
+    await d.say(8)
+    sampler = await basic_add(d, "HaDeSMossKSampler", "MOSS KSampler", P["sampler"])
+    await up_set(d, sampler, {"seed": BASIC_SEED, "control_after_generate": "fixed", "denoise": 0.5, "denoise_mode": "steps / denoise (core)"})
+    turbo = await basic_add(d, "HaDeSMossTurbo", "MOSS Turbo LoRA", P["turbo"])
+    await up_set(d, turbo, {"lora_name": BASIC_LORA, "strength": 1.0, "steps": 8, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple"})
+    async with d.fast(5.0):
+        for a, out, inp in ((loader, "MODEL", "model"), (enhancer, "positive", "positive"), (enhancer, "negative", "negative"),
+                            (vae_enc, "LATENT", "latent_image"), (loader, "VAE", "vae"), (turbo, "turbo", "turbo")):
+            await basic_link(d, a, out, sampler, inp, 650)
+
+    await d.say(9)
+    async with d.fast(5.0):
+        saver = await basic_add(d, "HaDeSMossImageSaver", "MOSS Image Saver", P["saver"])
+        await basic_link(d, sampler, "image", saver, "images", 700)
+        telemetry = await basic_add(d, "HaDeSMossSuiteTelemetry", "MOSS Suite Telemetry", P["telemetry"])
+        for k, (n, out) in enumerate(((loader, "info"), (enhancer, "info"), (sampler, "info"))):
+            await basic_link(d, n, out, telemetry, f"info_{k + 1}", 650)
+        report = await basic_add(d, "PreviewAny", "Preview as Text", P["report"])
+        await d.js("(id) => { const n = window.__hv.node(id); n.setSize([440, 520]); n.setDirtyCanvas(true, true); }", report)
+        await basic_link(d, telemetry, "report", report, "source", 700)
+        await basic_link(d, telemetry, "json", saver, "metadata", 700)
+
+    # 3. denoise 0.5 and 0.8 on core
+    await d.camera([sampler], 900, pad=160, top=60)
+    await d.say(10)
+    await basic_point(d, sampler, "denoise_mode")
+    await d.say(11)
+    url_5, _ = await basic_run(d, saver)
+    await d.camera([telemetry, report], 900, pad=80, top=60)
+    await d.say(12)
+
+    await d.camera([sampler], 900, pad=160, top=60)
+    await d.say(13)
+    await basic_point(d, sampler, "denoise", {"denoise": 0.8})
+    url_8, _ = await basic_run(d, saver)
+    await d.camera([saver], 900, pad=140, top=60)
+    await d.say(14)
+
+    # 4. core fails at 0.9
+    await d.camera([sampler], 900, pad=160, top=60)
+    await d.say(15)
+    await basic_point(d, sampler, "denoise", {"denoise": 0.9})
+    url_c9, _ = await basic_run(d, saver)
+    await d.camera([saver], 900, pad=140, top=60)
+    await d.say(16)
+    await d.camera([telemetry, report], 900, pad=80, top=60)
+    await d.say(17)
+    await d.say(18)
+    await d.say(19)
+
+    # 5. exact at 0.9
+    await d.camera([sampler], 900, pad=160, top=60)
+    await d.say(20)
+    await basic_point(d, sampler, "denoise_mode", {"denoise_mode": "exact"})
+    await d.say(21)
+    await d.say(22)
+    url_e9, _ = await basic_run(d, saver)
+    await d.camera([telemetry, report], 900, pad=80, top=60)
+    await d.say(23)
+    await d.camera([saver], 900, pad=140, top=60)
+    await d.say(24)
+    await d.js("(h) => window.__hv.show(h)", cn_cols_html(
+        [(in_url, "Input"), (url_c9, "core 0.9 (sigma 1.000)"), (url_e9, "exact 0.9 (sigma 0.978)")], side=480))
+    await d.hold(1.5)
+    await d.js("() => window.__hv.hide()")
+
+    # 6. closing
+    await d.camera({"box": I2I_BOX}, 1200, pad=60, top=60)
+    await d.say(25)
+    await d.js("(h) => window.__hv.show(h)",
+               '<div style="color:#fff;text-align:center;max-width:1200px">'
+               '<div style="font:600 30px Segoe UI,sans-serif;color:#c9c9d1">Free download (link in the description)</div>'
+               '<div style="font:700 44px Segoe UI,sans-serif;margin-top:22px">HaDeS MOSS Suite - Img2Img.json</div></div>')
+    await d.say(26)
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }",
+               f'<div style="display:flex;align-items:center;gap:80px;margin-top:40px"><img src="{url_e9}" style="height:780px;border-radius:6px">'
+               '<div style="color:#fff;max-width:640px"><div style="font:900 72px Segoe UI Black,sans-serif;line-height:1.05">HaDeS MOSS Suite</div>'
+               '<div style="font:600 34px Segoe UI,sans-serif;color:#ffcc33;margin-top:22px">Real Img2Img: exact vs core denoise</div>'
+               '<div style="font:400 26px Segoe UI,sans-serif;color:#c9c9d1;margin-top:44px">Workflow, Suite and models: links in the description</div></div></div>')
+    await d.say(27)
+    await d.say(28)
+    await d.end(1.5)
+
+
+img2img_video.prepare = i2i_prepare
+
+
 SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "layout_test": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_test, LAYOUT_TEST_LINES),
           "layout_sentence": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_sentence, LAYOUT_SENTENCE_LINES),
@@ -4582,7 +4840,8 @@ SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "merge_save": (None, merge_save, MS_LINES),
           "compare": (None, compare_video, CM_LINES),
           "layout_text": (None, layout_text, L8_LINES),
-          "controlnet": (None, controlnet_video, CN_LINES)}
+          "controlnet": (None, controlnet_video, CN_LINES),
+          "img2img": (None, img2img_video, I2I_LINES)}
 
 # spoken forms where the written caption reads badly aloud
 SPOKEN = {"DRAFT LAYOUT": "Draft layout"}

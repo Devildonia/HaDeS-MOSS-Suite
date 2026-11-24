@@ -2969,3 +2969,17 @@ Clean ComfyUI on port 8189 (`--use-sage-attention`, RTX 5090), `qwen3.5_9b_int8_
 | `off (depth only)`, `strength 0.7`, `end 1.0` | 59.69 / 60.59 | Shifts torso/head alignment slightly away from the depth map |
 
 - **Caption + Control + Telemetry flow** (`Base` + `Turbo v1.0`, `MOSS Prompt Enhancer` in `caption` mode with `fisherman_video1.png` connected, `flat regions`, seed 1013): 13.33 s on the first run (including Qwen vision encoding). `Suite Telemetry` (`Loader`, `Multi-LoRA`, `Prompt Enhancer`, `Latent`, `Control`, `KSampler`) reports `No findings: the connected nodes are consistent with what was measured.` Not measured here: `moss_image_sft_pose_control_lora`, non-square aspect ratios, and multi-resolution ControlNet passes.
+
+## Img2Img: `denoise_mode` `core` vs `exact` on the tutorial fisherman (2026-11-24, for the tenth video tutorial)
+
+Clean ComfyUI on port 8189 (`--use-sage-attention`, RTX 5090), `mossImage_base_bf16`, `qwen3.5_9b_int8_convrot`, `flux2-vae`, `HaDeS-MOSS-Turbo-8steps-v1.0` (8 steps, CFG 1.0, `euler / simple`, 1024 x 1024), input `fisherman_video1.png` through `VAEEncode`. Prompt: *"Impressionist oil painting of an old fisherman mending a net on a wooden dock at stormy night, glowing lantern light, thick impasto brushstrokes, dramatic dark clouds."* Scripts, timings and contact sheet in `I:/HaDeS_MOSS/videos/img2img/measure`.
+
+| Denoise | `core` `start_sigma` | `core` median (s) | `core` MAE / 255 (1013 / 1014 / 1015) | `exact` `start_sigma` | `exact` median (s) | `exact` MAE / 255 (1013 / 1014 / 1015) |
+|---:|---:|---:|---|---:|---:|---|
+| 0.5 | 0.8333 | 3.06 | 14.24 / 16.26 / 17.20 | 0.8333 | 3.15 | 14.30 / 16.43 / 17.10 |
+| 0.6 | 0.8891 | 3.06 | 16.33 / 20.17 / 21.32 | 0.8824 | 3.14 | 15.82 / 19.93 / 20.96 |
+| 0.7 | 0.9305 | 3.47 | 17.09 / 27.77 / 31.91 | 0.9211 | 3.15 | 16.87 / 25.55 / 28.77 |
+| 0.8 | 0.9524 | 3.27 | 26.92 / 32.99 / 37.07 | 0.9524 | 3.24 | 27.26 / 32.75 / 36.54 |
+| 0.9 | **1.0000** | 3.13 | 78.32 / 85.75 / 87.03 (ignores input) | **0.9783** | 3.18 | 59.33 / 72.05 / 62.48 (keeps centered subject) |
+
+- Consistent with `MOSS KSampler denoise_mode: core against exact on img2img` (2026-11-12): up to `0.8`, both modes preserve the fisherman in the foreground (adding the glowing lantern and storm clouds at `0.8`). At `0.9`, `core` starts at `1.0000` (pure noise, MAE 78.3–87.0) and replaces the composition with a distant figure, whereas `exact` starts at `0.9783` and keeps the centered fisherman on the dock with the lantern and night sky.

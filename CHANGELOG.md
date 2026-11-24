@@ -7,6 +7,9 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Img2Img example**, for the tenth video tutorial: `Load Image` → `VAE Encode` → `MOSS KSampler` (Base + Turbo 8-steps v1.0, 8 steps, CFG 1) with `denoise_mode: exact` at `denoise 0.9` (`start_sigma 0.978`), `Suite Telemetry` and `MOSS Image Saver`. Measured on the tutorial fisherman (`tools/RESULTS.md`, "Img2Img: `denoise_mode` `core` vs `exact` on the tutorial fisherman"): `core` at `0.9` starts at `1.0000` (pure noise, MAE 78.3–87.0) and replaces the composition, whereas `exact` starts at `0.9783` (MAE 59.3–72.1, 3.18 s) and keeps the centered subject.
+
 ### Changed
 - **Control (color, depth) example**, rebuilt for the ControlNet video tutorial: MOSS-Image Base + `moss-color-depth-control` + Turbo 8-steps v1.0 (8 steps, CFG 1, `euler / simple`), `MOSS Control` with `maps` preview, and full `Suite Telemetry` (including `MOSS Latent`), keeping only core + Suite nodes so it loads without third-party packs (the note explains swapping Load Image for Depth Anything V2). Measured on RTX 5090 (`tools/RESULTS.md`, "MOSS Control (color / depth) on Base, SFT and Turbo"): Base 14.14 s / SFT 14.21 s at 25 steps; Base + Turbo v1.0 3.29 s (4.3× faster) and SFT + Turbo sft-v1.0 3.26 s (4.4× faster); `off (depth only)` vs `flat regions` vs `as given` documented.
 
