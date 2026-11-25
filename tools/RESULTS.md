@@ -3049,8 +3049,8 @@ Clean ComfyUI on port 8189 (`--use-sage-attention`, RTX 5090), `qwen3.5_9b_int8_
   - Combined across the 2 face-visible prompts (48 seeds per LoRA): **`v1.0` 19–22 / 48 (40–46%)** vs **`v2.0` 10–12 / 48 (21–25%)**.
   - `street_man` (24 seeds) and `library_person` (24 seeds): framed from behind / silhouette or hands-only in both LoRAs (0 readable East Asian faces in `street_man`; only `s16` shows a face in `library_person`, Caucasian in both), so those two prompts were non-discriminative for facial ethnicity.
 
-**Blind review on 133 sheets (2026-11-26).** Compare Sheet pairs `v1.0` | `v2.0` on MOSS-Image Base (seed 1200, 8 steps, CFG 1.5,
-euler / simple, 1344 x 1792 and other sizes; portraits, products, food, text and posters, infographics, illustration, anime, comics,
+**Blind review on 133 sheets (2026-11-26).** Compare Sheet pairs `v1.0` | `v2.0` on MOSS-Image Base BF16 (8 steps, euler / simple,
+1344 x 1792, CFG 1 on 80 sheets, 1.2 on 51 and 1.5 on 2, a different seed per prompt; portraits, products, food, text and posters, infographics, illustration, anime, comics,
 pixel art; `H:/Comfy_UI_V61/ComfyUI/output/HaDeS/compare/Turbo v1.0 vs 2.0`, `lora_compare_00245_` to `00377_`). Three reviewers:
 
 | Reviewer | Preferred `v2.0` |

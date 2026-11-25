@@ -94,6 +94,13 @@ ethnicity named) and 2,048 regression pairs; 4,000 updates, released at update 2
 1024 x 1024, 8 steps, CFG 1, euler / simple, strength 1.0, RTX 5090.
 
 - **Blind review** (12 prompts against v1.0, sides random, key opened after the vote): v2.0 judged clearly better, with fewer errors.
+- **Wider review** (133 pairs against v1.0 on Base: portraits, products, food, posters and text, infographics, illustration, anime,
+  comics, pixel art; 1344 x 1792, 8 steps, CFG 1 to 1.5): the author preferred v2.0 in 65 % of the pairs, a second reviewer in 70 %
+  (62.5 % counting ties), and Claude, voting blind, in 57 %. The clearest gain is lettering: on posters and text Claude chose v2.0 in
+  13 of 15 pairs; on portraits and illustration the two are close.
+
+  ![Turbo 8-steps v1.0 against v2.0, same seed: "NOIR & CO." and "Keep out of the image"](images/v10_vs_v20_text.jpg)
+
 - **Appearance bias** (counted by eye, seeds 0–23 on each prompt):
 
 | Prompt | v1.0 | **v2.0** |
