@@ -3036,3 +3036,10 @@ Clean ComfyUI on port 8189 (`--use-sage-attention`, RTX 5090), `qwen3.5_9b_int8_
 - **Text:** 4 / 4 exact is one seed (1001) per prompt.
 - **`fp16` vs `fp32`:** a pixel MAE of 8.64 / 255 (max 16.73) between the two exports is large for a precision change. Before quoting it, check what two `fp32` runs of the same seed give (sage attention is not bit-deterministic), so the precision difference can be told apart from run-to-run noise.
 - **Precision:** earlier releases ship LoRA matrices in `bf16`; this one is `fp16`.
+
+**Follow-up checks (2026-11-25, clean 8189, RTX 5090):**
+- **Blind pairs (`v1.0` vs `v2.0_u2800` `fp16`, 12 prompts, seed 1001, random left/right):** `blind_pairs_v10_vs_v20_u2800.jpg`; key `blind_key_u2800.json`. Maintainer's blind verdict (HaDeS): `v2.0` clearly better, with fewer errors than `v1.0`; the appearance bias is the same as `v1.0`. `u3000` is better only on the bias.
+- **`fp32` repeatability (`u2800`, 10 scenes, seed 1001, 1024 × 1024, 8 steps, CFG 1, `euler / simple`):** two consecutive runs in the same `8189` session are bit-identical (`MAE 0.0 / 255`, max `0.0`). Across two separate `8189` sessions, the exact same `fp32` checkpoint gives `MAE 8.43 / 255` (max `17.93`), matching the `fp16` vs `fp32` cross-session difference (`MAE 8.64`, max `16.73`). So the `8.64` difference is within the run-to-run variance across sessions; it does not show an `fp16` loss.
+- **Extra text seeds (`fp16`, seeds 1002–1005 × 4 prompts = 16 images; `text_check_u2800_extra_seeds.jpg`):** **15 / 16 exact, 16 / 16 readable** (`CAFE 24`, `OBSERVATORY 7` with a faint extra leading `O` on `s1002`, `FRESH BREAD DAILY` / `open 7am - 3pm`, `NORTHERN LIGHTS` / `14 MARCH 2027 · OSLO`); **19 / 20 exact** combined with seed 1001.
+- **Status of the review notes:** blind review of the released `u2800` done (better than `v1.0`, same bias); `fp16` vs `fp32` explained by
+  session variance; text checked on five seeds. Still true for a card: `v2.0` does not reduce the café bias against `v1.0`.
