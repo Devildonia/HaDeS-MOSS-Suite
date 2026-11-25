@@ -24,7 +24,7 @@ Few-step LoRAs for MOSS-Image, all at CFG 1 instead of 25 steps at CFG 2.5:
 
 Each file is about **3.5 MB** (rank 2, layers 24–41 only), trained from zero on one RTX 5090 with no image dataset.
 
-![Turbo and Turbo Diverse, seed 1000](images/showcase.jpg)
+![Turbo and Turbo Diverse, seed 1000](https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo/resolve/main/images/showcase.jpg)
 
 | File | What it is for |
 |---|---|
@@ -77,7 +77,7 @@ version tried: [`tools/RESULTS.md`](https://github.com/Devildonia/HaDeS-MOSS-Sui
 | 2048 x 2048 sign: small line "open 7am - 3pm" right | 2 / 3 | 1 / 3 | 2 / 3 |
 | Seconds per image at 2048 x 2048 (RTX 5090, SageAttention, median of 9) | 7.2 | 6.9 | 7.2 |
 
-![Seed variety on an open prompt](images/variety_cafe.jpg)
+![Seed variety on an open prompt](https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo/resolve/main/images/variety_cafe.jpg)
 
 - On an open prompt MOSS-Image SFT at 25 steps gives about 10 East Asian women in 16 seeds; Turbo Diverse keeps that mix, Turbo and
   akhaliq's LoRA give almost only East Asian women. Name the ethnicity in the prompt for anything specific: all three follow it.

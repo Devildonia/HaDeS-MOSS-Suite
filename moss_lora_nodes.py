@@ -12,7 +12,7 @@ import comfy.model_management
 import comfy.utils
 import comfy.weight_adapter
 
-from .moss_common import (reserve_path, reserved, write_atomic, check_compatible, format_info, format_model_info, is_quantized, key_patches, key_patches_weight, key_slot, model_weights,
+from .moss_common import (file_sig, reserve_path, reserved, write_atomic, check_compatible, format_info, format_model_info, is_quantized, key_patches, key_patches_weight, key_slot, model_weights,
                           rescale_for, residual_scale)
 from .moss_merger_nodes import GROUPS, layer_group
 
@@ -163,12 +163,14 @@ class HaDeSMossLoraBlockWeight:
                 f"{' / '.join(f'{w:.2f}' for w in weights)} | other {other_layers:.2f}\n"
                 f"LoRA weights per group: {', '.join(f'{g} {c}' for g, c in counts.items())}")
         return (m, format_model_info(text, "lora_block_weight", m, lora=lora_name, strength_model=strength_model, weights=weights,
-                                     other_layers=other_layers, counts=counts, sources={"model": model.get_attachment("hades_moss_recipe")}))
+                                     other_layers=other_layers, counts=counts, applied_weights=sum(counts.values()), lora_sig=file_sig("loras", lora_name),
+                                     sources={"model": model.get_attachment("hades_moss_recipe")}))
 
 
 def add_lora_by_group(m, model, lora_name, strength, groups, other_layers=1.0):
     """Adds `lora_name` to the clone `m` at `strength` times the weight of each group of 6 layers (missing groups 1.0) and
-    other_layers outside them. Returns the number of LoRA weights per group."""
+    other_layers outside them. Returns the number of LoRA weights applied per group: a weight whose group is at 0 adds no patch
+    and is not counted (audit 0.9.6 F12: a LoRA with every group at 0 was still listed as used)."""
     n_layers = len(model.model.diffusion_model.layers)
     by_strength = {}
     counts = dict.fromkeys(GROUPS + ["other_layers"], 0)
@@ -176,9 +178,9 @@ def add_lora_by_group(m, model, lora_name, strength, groups, other_layers=1.0):
         target = k[0] if isinstance(k, tuple) else k
         slot = key_slot(target.removeprefix("diffusion_model."))
         group = GROUPS[layer_group(slot, n_layers)] if isinstance(slot, int) else "other_layers"
-        counts[group] += 1
         s = round(strength * (other_layers if group == "other_layers" else groups.get(group, 1.0)), 4)
         if s != 0.0:
+            counts[group] += 1
             by_strength.setdefault(s, {})[k] = patch
     for s, patches in by_strength.items():
         m.add_patches(patches, strength_patch=s)
@@ -271,9 +273,13 @@ class HaDeSMossMultiLora:
             groups = r["groups"]
             counts = add_lora_by_group(m, model, r["name"], r["strength"], groups, groups.get("other_layers", 1.0))
             custom = {g: w for g, w in groups.items() if w != 1.0}
+            if not sum(counts.values()):  # every group of this LoRA at 0: nothing patched, so it is not a resource of the image
+                lines.append(f"  {r['strength']:+.2f}  {r['name']}  (0 weights applied: every group at 0, left out of the metadata)")
+                continue
             lines.append(f"  {r['strength']:+.2f}  {r['name']}  ({sum(counts.values())} weights)"
                          + (f"  (groups: {', '.join(f'{g} {w:.2f}' for g, w in custom.items())})" if custom else ""))
-            applied.append({"name": r["name"], "strength": r["strength"], "weights": sum(counts.values()), **({"groups": custom} if custom else {})})
+            applied.append({"name": r["name"], "strength": r["strength"], "weights": sum(counts.values()), "sig": file_sig("loras", r["name"]),
+                            **({"groups": custom} if custom else {})})
             few = few_step_settings(lora_metadata(r["name"]))
             if few is not None:
                 turbo.append({"name": r["name"], "steps": few[0], "strength": r["strength"]})

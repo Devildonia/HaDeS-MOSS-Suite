@@ -465,6 +465,7 @@
    "widgets_values": [
     "stage_ui_%model%_%seed%_%steps%",
     false,
+    true,
     true
    ],
    "properties": {

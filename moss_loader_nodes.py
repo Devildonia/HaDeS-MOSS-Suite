@@ -1,3 +1,4 @@
+from collections import Counter
 import os
 
 import torch
@@ -8,22 +9,44 @@ from comfy.ldm.moss_image.model import MOSSImage
 from comfy.quant_ops import QuantizedTensor
 from comfy.text_encoders.moss_image import MOSSImageTEModel
 
-from .moss_common import format_model_info, model_weights
+from .moss_common import file_sig, format_model_info, model_weights
 
 LATENT_CHANNELS = 128  # FLUX.2 VAE, the one MOSS-Image uses
 
 
 def model_precision(model):
-    """The precision the weights have in memory, 'bf16' / 'fp16' / 'fp32' (ComfyUI may upcast on the CPU), or the quantized layout with how many weights use it (e.g. 'int8 (TensorWiseINT8Layout, 168 weights)')."""
+    """The precision the weights have in memory, 'bf16' / 'fp16' / 'fp32' (ComfyUI may upcast on the CPU), or the quantized formats with how many weights use each (e.g. 'int8 ConvRot 168 weights (TensorWiseINT8Layout)', 'W6A8 96 + W4A8 72 weights (AsymW4A8Int8Layout)')."""
     ws = model_weights(model)
     quant = [w for w in ws.values() if isinstance(w, QuantizedTensor)]
     if quant:
-        layouts = sorted({lay if isinstance(lay := getattr(w, "layout_cls", None), str) else getattr(lay, "__name__", type(w).__name__) for w in quant})
-        kind = "fp8" if any("fp8" in l.lower() or "float8" in l.lower() for l in layouts) else "int8"
-        return f"{kind} ({', '.join(layouts)}, {len(quant)} weights)"
+        kinds = Counter(quant_kind(w) for w in quant)
+        layouts = sorted({_layout_name(w) for w in quant})
+        return f"{' + '.join(f'{k} {n}' for k, n in kinds.most_common())} weights ({', '.join(layouts)})"
     dtypes = {w.dtype for w in ws.values()}
     names = {torch.bfloat16: "bf16", torch.float16: "fp16", torch.float32: "fp32", torch.float8_e4m3fn: "fp8_e4m3fn", torch.float8_e5m2: "fp8_e5m2"}
     return " + ".join(sorted(names.get(d, str(d).removeprefix("torch.")) for d in dtypes))
+
+
+def _layout_name(w):
+    lay = getattr(w, "layout_cls", None)
+    return lay if isinstance(lay, str) else getattr(lay, "__name__", type(w).__name__)
+
+
+def quant_kind(w):
+    """The format of one quantized weight as a user reads it (audit 0.9.6 F04: an HMS model was reported as 'int8'):
+    W4A8 / W6A8 from the packed width of AsymW4A8Int8Layout (6-bit codes take 3K/4 bytes a row, 4-bit K/2), int8 with or
+    without ConvRot, fp8; any other layout by its name."""
+    lay = _layout_name(w)
+    params = getattr(w, "_params", None)
+    if "fp8" in lay.lower() or "float8" in lay.lower():
+        return "fp8"
+    if lay == "AsymW4A8Int8Layout":
+        k = (getattr(params, "orig_shape", None) or (0,))[-1]
+        cols = getattr(getattr(w, "_qdata", None), "shape", (None,))[-1]
+        return "W6A8" if k and cols == 3 * k // 4 else "W4A8" if k and cols == k // 2 else "W4A8 / W6A8"
+    if lay == "TensorWiseINT8Layout":
+        return "int8 ConvRot" if getattr(params, "convrot", False) else "int8"
+    return lay
 
 
 def first_match(names, *keys):
@@ -87,7 +110,7 @@ class HaDeSMossLoader:
                  f"  text encoder: {clip_name}" + (" (cpu)" if clip_device == "cpu" else ""),
                  f"  vae: {vae_name}"]
         # model_file / text_encoder_file: the names as listed under models/, which the MOSS Image Saver hashes
-        meta = {"model": os.path.basename(unet_name), "model_file": unet_name, "text_encoder_file": clip_name, "precision": precision, "weight_dtype": weight_dtype, "attention": attention,
+        meta = {"model": os.path.basename(unet_name), "model_file": unet_name, "model_sig": file_sig("diffusion_models", unet_name), "text_encoder_file": clip_name, "precision": precision, "weight_dtype": weight_dtype, "attention": attention,
                 "layers": len(dm.layers), "text_encoder": os.path.basename(clip_name), "vae": vae_name}
         return (model, clip, vae, format_model_info("\n".join(lines), "loader", model, **meta))
 

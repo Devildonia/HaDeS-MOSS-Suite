@@ -491,7 +491,8 @@
     "",
     false,
     0,
-    ""
+    "",
+    true
    ],
    "properties": {
     "Node name for S&R": "HaDeSMossCompareSampler"
@@ -845,7 +846,8 @@
     "",
     false,
     0,
-    ""
+    "",
+    true
    ],
    "properties": {
     "Node name for S&R": "HaDeSMossCompareSampler"
@@ -1146,7 +1148,8 @@
     "",
     false,
     0,
-    ""
+    "",
+    true
    ],
    "properties": {
     "Node name for S&R": "HaDeSMossCompareSheet"
@@ -1716,7 +1719,7 @@
     -30,
     -120,
     2740,
-    1210
+    1240
    ],
    "color": "#335533",
    "font_size": 24,
@@ -1729,7 +1732,7 @@
     -30,
     920,
     2290,
-    1170
+    1200
    ],
    "color": "#553355",
    "font_size": 24,
@@ -1742,7 +1745,7 @@
     920,
     1820,
     1340,
-    840
+    870
    ],
    "color": "#335555",
    "font_size": 24,

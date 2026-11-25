@@ -12,7 +12,7 @@ from PIL.PngImagePlugin import PngInfo
 import folder_paths
 from comfy.cli_args import args
 
-from .moss_common import format_info, parse_info_meta
+from .moss_common import file_sig, format_info, parse_info_meta, save_png
 
 # sha256 per file, kept while the file is unchanged (same size and modification time) for this ComfyUI session
 _HASHES = {}
@@ -80,7 +80,7 @@ def resources(metas):
         rows = []
         if m.get("node") == "multi_lora":
             rows = [(r["name"], r.get("strength", 1.0)) for r in m.get("loras", [])]
-        elif m.get("node") == "lora_block_weight":
+        elif m.get("node") == "lora_block_weight" and m.get("applied_weights", 1):
             rows = [(m["lora"], m.get("strength_model", 1.0))]
         elif m.get("node") == "ksampler" and m.get("turbo"):
             rows = [(m["turbo"], m.get("turbo_strength", 1.0))]
@@ -88,6 +88,28 @@ def resources(metas):
             if name not in seen:  # one LoRA in two stages (a turbo on the generation and on an upscale pass) is one resource
                 seen.add(name)
                 out.append(("lora", "loras", name, strength))
+    return out
+
+
+def recorded_sigs(metas):
+    """{(folder, file): [size, mtime_ns]} as the nodes recorded them when they loaded or sampled with each file."""
+    out = {}
+    for m in metas:
+        node = m.get("node")
+        if node == "loader" and m.get("model_sig"):
+            out[("diffusion_models", m.get("model_file"))] = m["model_sig"]
+        elif node == "ksampler":
+            for f in m.get("model_files") or []:
+                if isinstance(f, dict) and f.get("sig"):
+                    out[(f.get("folder", "diffusion_models"), f.get("file"))] = f["sig"]
+            if m.get("turbo_sig"):
+                out[("loras", m.get("turbo"))] = m["turbo_sig"]
+        elif node == "multi_lora":
+            for r in m.get("loras") or []:
+                if isinstance(r, dict) and r.get("sig"):
+                    out[("loras", r.get("name"))] = r["sig"]
+        elif node == "lora_block_weight" and m.get("lora_sig"):
+            out[("loras", m.get("lora"))] = m["lora_sig"]
     return out
 
 
@@ -110,6 +132,7 @@ def a1111_parameters(metas, positive=None, negative=None, with_hashes=True):
         fields += [("Seed", latent.get("seed", 0)), ("Size", f"{latent['width']}x{latent['height']}")]
 
     hashes, lora_hashes = {}, []
+    sigs = recorded_sigs(metas)
     for kind, folder, name, strength in resources(metas):
         if kind == "merge":  # no single file: named after its sources, no model hash for Civitai to link
             fields.append(("Model", f"merge: {name}"))
@@ -117,6 +140,11 @@ def a1111_parameters(metas, positive=None, negative=None, with_hashes=True):
             continue
         path = folder_paths.get_full_path(folder, name)
         short = file_sha256(path)[:10] if (with_hashes and path) else None
+        recorded = sigs.get((folder, name))
+        if short and recorded and recorded != file_sig(folder, name):
+            # the file on disk changed after the pipeline loaded it: its hash would name another revision (audit 0.9.6 F08)
+            notes.append(f"{name} changed on disk after it was loaded: hash not written")
+            short = None
         if path is None:
             notes.append(f"{name} not found under models/{folder}: no hash")
         if kind == "model":
@@ -187,6 +215,10 @@ class HaDeSMossImageSaver:
                                                                                       "metadata still records the complete pipeline."}),
                 "positive": ("STRING", {"forceInput": True, "tooltip": "Prompt text when no Prompt Enhancer is in the pipeline (e.g. CLIPTextEncode's text)."}),
                 "negative": ("STRING", {"forceInput": True, "tooltip": "Negative prompt text when no Prompt Enhancer is in the pipeline."}),
+                "write_metadata": ("BOOLEAN", {"default": True, "tooltip": "On: the A1111 parameters (prompt, settings, model and LoRA names "
+                                                                           "and hashes) and the Suite's metadata go into the PNG. Off: none of "
+                                                                           "them; only the workflow if embed_workflow is on. Turn both off for "
+                                                                           "an image with no generation data."}),
             },
             "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},
         }
@@ -201,7 +233,7 @@ class HaDeSMossImageSaver:
                    "size, model and LoRAs with their hashes), read from Suite Telemetry, and ComfyUI's workflow.")
 
     def save(self, images, filename_prefix, hashes, embed_workflow, metadata=None, positive=None, negative=None, prompt=None,
-             extra_pnginfo=None, primary_stage_metadata=None):
+             extra_pnginfo=None, primary_stage_metadata=None, write_metadata=True):
         metas = read_metas(metadata) if metadata else []
         primary = read_metas(primary_stage_metadata) if primary_stage_metadata else None
         if primary is not None:
@@ -213,7 +245,7 @@ class HaDeSMossImageSaver:
         selected = primary if primary is not None else metas
         parameters, notes = a1111_parameters(selected, positive, negative, hashes)
         if primary is not None and sampled_model(primary) is None:
-            notes.append("primary stage has no MOSS Loader info: model and model hash are missing")
+            notes.append("primary stage names no model (no MOSS Loader info, and the KSampler could not trace a loader): model and model hash are missing")
         if not metadata and primary is None:
             notes.insert(0, "metadata not connected: saved without sampling settings (connect Suite Telemetry's json for them)")
         if primary is None:
@@ -229,7 +261,7 @@ class HaDeSMossImageSaver:
         for batch_number, image in enumerate(images):
             img = Image.fromarray(np.clip(255.0 * image.cpu().numpy(), 0, 255).astype(np.uint8))
             info = PngInfo()
-            if not args.disable_metadata:
+            if not args.disable_metadata and write_metadata:  # audit 0.9.6 F06: its own switch, apart from the workflow
                 info.add_text("parameters", parameters)
                 info.add_text("hades_moss", json.dumps(metas if metadata else selected, ensure_ascii=False))
                 if primary is not None:
@@ -239,15 +271,16 @@ class HaDeSMossImageSaver:
                     info.add_text("prompt", json.dumps(prompt))
                 for k, v in (extra_pnginfo or {}).items():
                     info.add_text(k, json.dumps(v))
-            file = f"{filename.replace('%batch_num%', str(batch_number))}_{counter:05}_.png"
-            img.save(os.path.join(full_folder, file), pnginfo=info, compress_level=4)
+            stem_name = filename.replace('%batch_num%', str(batch_number))
+            file, counter = save_png(full_folder, lambda c: f"{stem_name}_{c:05}_.png", counter, img, info)
             results.append({"filename": file, "subfolder": subfolder, "type": "output"})
             counter += 1
         files = [f"{r['subfolder']}/{r['filename']}" if r["subfolder"] else r["filename"] for r in results]
         info = format_info(f"HaDeS MOSS Image Saver | {len(files)} image(s) | {files[0] if files else ''}"
                            + "".join(f"\nnote: {n}" for n in notes), "image_saver", files=files,
                            metadata=bool(metadata), primary_stage=primary is not None, hashes=bool(hashes),
-                           embed_workflow=bool(embed_workflow) and not args.disable_metadata, metadata_written=not args.disable_metadata, notes=notes)
+                           embed_workflow=bool(embed_workflow) and not args.disable_metadata,
+                           metadata_written=not args.disable_metadata and bool(write_metadata), notes=notes)
         if notes:
             parameters_note = "\n".join(f"note: {n}" for n in notes)
             return {"ui": {"images": results, "text": [parameters_note]}, "result": (parameters, info)}

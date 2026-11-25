@@ -468,6 +468,7 @@
    "widgets_values": [
     "MOSS/HaDeS_MOSS_enhancer_%seed%",
     true,
+    true,
     true
    ],
    "properties": {

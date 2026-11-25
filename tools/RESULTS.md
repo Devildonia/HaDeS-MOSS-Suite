@@ -3061,6 +3061,21 @@ pixel art; `H:/Comfy_UI_V61/ComfyUI/output/HaDeS/compare/Turbo v1.0 vs 2.0`, `lo
 
 Claude's votes by kind of image: text and posters `v2.0` 13 / 15; objects and food 12 / 20; photographic portraits 19 / 35;
 illustration, anime and comics 12 / 25. Many of its votes were near-ties decided by small defects (hands, a warped mug, a stray
-object); its 57 % alone is not conclusive, the text result is. Votes per sheet:
+object); its 57 % alone is not conclusive, and the text result (13 of 15) is a clear signal on a small sample, not a measured rate. Votes per sheet:
 `I:/HaDeS_MOSS/moss_turbo_runs/dmd512_base_v20/eval/claude_blind_picks_v10_vs_v20.json`.
+
+## Audit 0.9.6: the 16 findings checked and fixed (2026-11-26)
+
+All 16 findings of `docs/AUDIT_0.9.6.md` were checked against the code first: all are real (F15 reproduced by the auditor, the
+others confirmed by reading the code). None changes a published file or measurement: F01 needs an output folder reused with another
+recipe (every published turbo was trained in a folder of its own), F05 needs images of different sizes (the 133 Turbo v1.0 / v2.0
+sheets have one size), F08 a file replaced between loading and saving. Fixes and their regression tests are listed in CHANGELOG
+(Unreleased). Tests after the fixes: `test_moss_suite.py` 125 (with the two CUDA checks), `test_moss_dev_nodes.py` 15,
+`test_moss_edit_eval.py` 4, `test_moss_pair_check.py` 7, the new `test_moss_train_guard.py` 5, widgets 8; the host ComfyUI's temp
+folder kept the same 79 entries through the suite (F15).
+
+New widget `write_metadata` (MOSS Image Saver, Compare Sheet, Compare Sampler), frontend 1.57.4 on a clean 8189: the HaDeS toggle
+shows in the classic canvas with HaDeS widgets (native widget hidden), the native toggle with the standard-widgets option (styled one
+hidden), and the HaDeS toggle in Nodes 2.0 / Vue; default on in the three. The examples were regenerated (`make_examples.py`), and the
+package server check reports no widget-count error. Not checked: zoom, manual resize and save / reload with the new widget.
 

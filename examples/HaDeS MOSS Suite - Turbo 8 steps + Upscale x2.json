@@ -438,6 +438,7 @@
    "widgets_values": [
     "MOSS/HaDeS_MOSS_1024_%seed%",
     true,
+    true,
     true
    ],
    "properties": {
@@ -582,6 +583,7 @@
    ],
    "widgets_values": [
     "MOSS/HaDeS_MOSS_x2_%seed%",
+    true,
     true,
     true
    ],
@@ -781,6 +783,7 @@
    ],
    "widgets_values": [
     "MOSS/HaDeS_MOSS_x2_refined_%seed%",
+    true,
     true,
     true
    ],
@@ -1233,7 +1236,7 @@
     2270,
     -80,
     760,
-    540
+    570
    ],
    "color": "#334466",
    "font_size": 24,

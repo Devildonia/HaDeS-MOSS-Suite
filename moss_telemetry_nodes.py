@@ -147,7 +147,7 @@ class HaDeSMossSuiteTelemetry:
     DESCRIPTION = "Reads the info outputs of HaDeS MOSS nodes and checks the pipeline against what was measured (canvas sizes, shift, SLG, quantized merges, LoRA energy, few-step LoRA settings, int8 models, layout line breaks)."
 
     def audit(self, report_title, **infos):
-        metas, foreign = [], 0
+        metas, foreign, malformed = [], 0, []
         for i in range(1, N_INFO + 1):
             text = infos.get(f"info_{i}")
             if not text:
@@ -155,9 +155,18 @@ class HaDeSMossSuiteTelemetry:
             meta = parse_info_meta(text)
             if meta is not None and meta.get("node") in NODE_NAMES:
                 metas.append(meta)
-                # a Compare Sampler's branches carry the KSampler, LoRA and model settings of every model it sampled
-                for branch in (meta.get("branches") or {}).values() if meta["node"] == "compare_sampler" else ():
-                    metas += [m for m in branch if isinstance(m, dict) and m.get("node") in NODE_NAMES and m not in metas]
+                # a Compare Sampler's branches carry the KSampler, LoRA and model settings of every model it sampled; a branch
+                # container of the wrong shape is reported, never raised (audit 0.9.6 F10)
+                if meta["node"] == "compare_sampler":
+                    branches = meta.get("branches") or {}
+                    if not isinstance(branches, dict):
+                        malformed.append(f"info_{i}: the Compare Sampler's branches are not a table of branches; left out of the checks")
+                        branches = {}
+                    for s, branch in branches.items():
+                        if not isinstance(branch, list):
+                            malformed.append(f"info_{i}: Compare Sampler branch {s} is not a list of node infos; left out")
+                            continue
+                        metas += [m for m in branch if isinstance(m, dict) and m.get("node") in NODE_NAMES and m not in metas]
             else:
                 foreign += 1
         # an incomplete or hand-made trailer is reported by name and left out; the checks still run on the others (audit 0.8.1)
@@ -173,7 +182,7 @@ class HaDeSMossSuiteTelemetry:
         except (KeyError, TypeError, ValueError) as e:
             findings = [("warning", f"the connected infos could not be checked together ({type(e).__name__}: {e}); the checks were skipped")]
         findings = [("warning", f"the {NODE_NAMES[m['node']]} info is incomplete ({type(e).__name__}: {e}); left out of the checks")
-                    for m, e in bad] + findings
+                    for m, e in bad] + [("warning", w) for w in malformed] + findings
         findings = list(dict.fromkeys(findings))  # four branches with the same settings give the same note once
         counts = {lvl: sum(1 for l, _ in findings if l == lvl) for lvl in ("error", "warning", "note")}
 
@@ -181,17 +190,19 @@ class HaDeSMossSuiteTelemetry:
                  + (f" ({foreign} input(s) without a HaDeS MOSS trailer ignored)" if foreign else ""), ""]
         if findings:
             lines += ["## Findings", ""] + [f"- **{lvl.upper()}** {msg}" for lvl, msg in findings]
+        elif not good:  # nothing was checked: say so, not "consistent" (audit 0.9.6 F10)
+            lines.append("No data checked: no HaDeS MOSS info with readable settings is connected.")
         else:
             lines.append("No findings: the connected nodes are consistent with what was measured.")
         # the prompt texts (Prompt Enhancer) and file paths (Loader) ride in the json output for the MOSS Image Saver; the report stays short
-        hidden = {"node", "prompt", "negative", "model_file", "text_encoder_file", "sources"}
+        hidden = {"node", "prompt", "negative", "model_file", "text_encoder_file", "sources", "model_sig", "turbo_sig", "lora_sig"}
         def shown(k, v):  # the KSampler's model files as one readable name (a merge made in the workflow: "a + b")
             if k == "model_files" and isinstance(v, list):
                 return "model=" + " + ".join(str(f.get("file", "?")) if isinstance(f, dict) else str(f) for f in v)
             return f"{k}={v}"
         lines += ["", "## Settings", ""] + [f"- {NODE_NAMES[m['node']]}: " + ", ".join(shown(k, v) for k, v in m.items() if k not in hidden) for m in metas]
         summary = (f"{len(metas)} nodes | {counts['error']} errors, {counts['warning']} warnings, {counts['note']} notes"
-                   + (f" | {findings[0][1][:80]}" if findings else ""))
+                   + (f" | {findings[0][1][:80]}" if findings else "" if good else " | no data checked"))
         data = json.dumps({"nodes": metas, "findings": [{"level": l, "message": m} for l, m in findings]}, ensure_ascii=False, indent=1)
         report = "\n".join(lines)
         info = format_info(f"HaDeS MOSS Suite Telemetry | {summary}", "telemetry", nodes=[m["node"] for m in metas], foreign=foreign, **counts)

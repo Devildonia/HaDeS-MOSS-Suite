@@ -7,6 +7,7 @@ input it also sees the image (the text encoder file holds the vision tower).
 """
 import contextlib
 import json
+import math
 import random
 import re
 
@@ -192,10 +193,27 @@ def fit_draft(obj, width, height):
     can place them again; the compiler ignores `dropped`. Returns (draft, notes)."""
     notes = []
     summary = obj.get("summary") if isinstance(obj.get("summary"), dict) else {}
-    summary = {k: v for k, v in summary.items() if k in ("caption", "meta", "canvas", "palette")}
-    if not str(summary.get("caption", "")).strip():
-        summary["caption"] = str(obj.get("caption", "")).strip() or "An image."
+    # one output contract with the compiler (audit 0.9.6 F07): text as text, lists of nonempty strings, a canvas it knows
+    raw, summary = summary, {}
+    caption = raw.get("caption")
+    if isinstance(caption, (str, int, float)) and not isinstance(caption, bool) and str(caption).strip():
+        summary["caption"] = str(caption).strip()
+    else:
+        summary["caption"] = str(obj.get("caption", "")).strip() if isinstance(obj.get("caption"), str) else ""
+        summary["caption"] = summary["caption"] or "An image."
         notes.append("no summary caption in the answer")
+    for k in ("meta", "palette"):
+        if k in raw:
+            vals = [str(v).strip() for v in raw[k] if isinstance(v, (str, int, float)) and str(v).strip()] if isinstance(raw[k], list) else []
+            if vals:
+                summary[k] = vals
+            else:
+                notes.append(f"summary.{k} was not a list of texts, left out")
+    if "canvas" in raw:
+        if raw["canvas"] in ("single", "multi_panel", "collage"):
+            summary["canvas"] = raw["canvas"]
+        else:
+            notes.append(f"summary.canvas {str(raw['canvas'])[:30]!r} unknown, left out")
     items, dropped = [], []
 
     def drop(it, reason):
@@ -211,7 +229,8 @@ def fit_draft(obj, width, height):
         if not isinstance(it, dict):
             continue
         box = it.get("bbox") or it.get("bbox_2d")
-        if not (isinstance(box, list) and len(box) == 4 and all(isinstance(v, (int, float)) for v in box)):
+        if not (isinstance(box, list) and len(box) == 4
+                and all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in box)):
             notes.append(f"item {i} has no box, left out (kept in dropped)")
             drop(it, "no box in the answer")
             continue

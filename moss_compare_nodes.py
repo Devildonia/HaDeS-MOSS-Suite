@@ -15,7 +15,7 @@ from comfy.cli_args import args
 
 import comfy.samplers
 
-from .moss_common import format_info, parse_info_meta
+from .moss_common import format_info, parse_info_meta, save_png
 from .moss_sampler_nodes import DENOISE_CORE, SLG_MODES, HaDeSMossKSampler, model_files
 
 SLOTS = "ABCD"
@@ -50,7 +50,7 @@ def auto_label(metas):
     for m in metas:
         if m.get("node") == "multi_lora":
             parts += [stem(r["name"]) + strength_text(r.get("strength", 1.0)) for r in m.get("loras") or [] if isinstance(r, dict) and r.get("name")]
-        elif m.get("node") == "lora_block_weight" and m.get("lora"):
+        elif m.get("node") == "lora_block_weight" and m.get("lora") and m.get("applied_weights", 1):
             parts.append(stem(m["lora"]) + strength_text(m.get("strength_model", 1.0)))
         elif m.get("node") == "ksampler" and m.get("turbo"):
             turbo.append(stem(m["turbo"]) + strength_text(m.get("turbo_strength", 1.0)))
@@ -150,10 +150,11 @@ def fit(draw, text, fnt, width):
     return text + "..."
 
 
-def build_sheet(panels, labels, footer):
-    """panels: PIL images; all scaled to the first one's height, joined left to right with labels above and footer below."""
-    h = panels[0].height
-    panels = [p if p.height == h else p.resize((round(p.width * h / p.height), h), Image.LANCZOS) for p in panels]
+def build_sheet(panels, labels, footer, height=None):
+    """panels: PIL images; all scaled to `height` (image A's, fixed before a blind shuffle: audit 0.9.6 F05), else the first
+    panel's, joined left to right with labels above and footer below."""
+    h = height or panels[0].height
+    panels = [p if p.height == h else p.resize((max(1, round(p.width * h / p.height)), h), Image.LANCZOS) for p in panels]
     width = sum(p.width for p in panels) + GAP * (len(panels) - 1)
     f_label = font(max(18, h // 45))
     f_foot = font(max(14, h // 65))
@@ -190,12 +191,14 @@ class HaDeSMossCompareSheet:
             optional[f"label_{s}"] = ("STRING", {"default": "", "tooltip": f"Label over image {s}. Empty: the LoRA names (and strength when not 1) "
                                                                             f"from info_{s}, else its model file, else '{s}'."})
         optional["blind"] = ("BOOLEAN", {"default": False, "tooltip": "Blind comparison: the panels are shuffled and numbered 1 to 4 "
-                                                                    "without names; the key (number -> branch) is in the info output and "
-                                                                    "in the PNG. Pick your favourite before looking at it."})
+                                                                    "without names. The PNG keeps no names, no key and no workflow; the key, "
+                                                                    "names and workflow go to a separate <sheet>_key.json next to it and to "
+                                                                    "the info output. Pick your favourite before opening the key."})
         optional["blind_seed"] = ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFF, "tooltip": "Order of the blind shuffle; change it "
                                                                                               "for a new order of the same images."})
         optional["footer"] = ("STRING", {"default": "", "multiline": True, "tooltip": "Text under the sheet. Empty: seed and prompt read from the "
                                                                                        "branch infos (KSampler and Prompt Enhancer) when connected."})
+        optional["write_metadata"] = ("BOOLEAN", {"default": True, "tooltip": "On: the Suite's own metadata goes into the PNG (labels, files, branch settings). Off: only what embed_workflow allows. Labels drawn on the sheet stay, they are pixels."})
         return {
             "required": {
                 "image_A": ("IMAGE", {"tooltip": "Image A, the leftmost. Its height sets the sheet's height; other images are scaled to it."}),
@@ -217,7 +220,7 @@ class HaDeSMossCompareSheet:
                    "branch's info), with seed and prompt underneath, and saves the sheet as one PNG.")
 
     def compare(self, image_A, filename_prefix, save, embed_workflow, prompt=None, extra_pnginfo=None, footer="", blind=False,
-                blind_seed=0, **kw):
+                blind_seed=0, write_metadata=True, **kw):
         images = [(s, image_A if s == "A" else kw.get(f"image_{s}")) for s in SLOTS]
         images = [(s, im) for s, im in images if im is not None]
         metas = {s: branch_metas(kw.get(f"info_{s}")) for s, _ in images}
@@ -255,7 +258,7 @@ class HaDeSMossCompareSheet:
         batch = min(im.shape[0] for _, im in images)
         order, key = list(range(len(images))), {}
         shown = labels
-        if blind:  # shuffled panels numbered 1..n; the key goes to info and the PNG, never onto the sheet
+        if blind:  # shuffled panels numbered 1..n; the key goes to info and a separate key file, never onto the sheet or into its PNG
             random.Random(blind_seed).shuffle(order)
             shown = [str(k + 1) for k in range(len(order))]
             key = {str(k + 1): labels[i] for k, i in enumerate(order)}
@@ -263,31 +266,42 @@ class HaDeSMossCompareSheet:
         # every sheet, then a float copy of each, then the stacked batch added about 640 MB at the peak for 4 panels x batch 4 at
         # 1344 x 1792 (audit 0.8.1 #9, tools/RESULTS.md); the IMAGE output itself (475 MB there) cannot be avoided.
         def make(b):
-            return build_sheet([to_pil(images[i][1][b]) for i in order], shown, footer.strip())
+            return build_sheet([to_pil(images[i][1][b]) for i in order], shown, footer.strip(), height=images[0][1].shape[1])
 
-        results, files = [], []
+        results, files, key_files = [], [], []
         sheet = make(0)
         out = torch.empty((batch, sheet.height, sheet.width, 3), dtype=torch.float32)
         if save:
             out_dir = folder_paths.get_output_directory()
             full_folder, filename, counter, subfolder, _ = folder_paths.get_save_image_path(filename_prefix, out_dir, sheet.width, sheet.height)
             pnginfo = PngInfo()
-            if not args.disable_metadata:
-                pnginfo.add_text("hades_moss_compare", json.dumps({"labels": labels, "footer": footer.strip(), "blind_key": key,
-                                                                   "branches": {s: metas[s] for s, _ in images}}, ensure_ascii=False))
+            record = {"labels": labels, "footer": footer.strip(), "blind_key": key, "branches": {s: metas[s] for s, _ in images}}
+            # audit 0.9.6 F06: a blind sheet carries nothing that tells the panels apart (names, key, branch settings, the workflow,
+            # whose blind_seed rebuilds the order); all of it goes to the key file, the artefact the reviewer does not open
+            if not args.disable_metadata and not blind:
+                if write_metadata:
+                    pnginfo.add_text("hades_moss_compare", json.dumps(record, ensure_ascii=False))
                 if embed_workflow:
                     if prompt is not None:
                         pnginfo.add_text("prompt", json.dumps(prompt))
                     for k, v in (extra_pnginfo or {}).items():
                         pnginfo.add_text(k, json.dumps(v))
+            elif not args.disable_metadata:
+                pnginfo.add_text("hades_moss_compare", json.dumps({"blind": True, "footer": footer.strip()}, ensure_ascii=False))
         for b in range(batch):
             if b:
                 sheet = make(b)
             if save:
-                file = f"{filename.replace('%batch_num%', str(b))}_{counter:05}_.png"
-                sheet.save(os.path.join(full_folder, file), pnginfo=pnginfo, compress_level=4)
+                stem_name = filename.replace('%batch_num%', str(b))
+                file, counter = save_png(full_folder, lambda c: f"{stem_name}_{c:05}_.png", counter, sheet, pnginfo)
                 results.append({"filename": file, "subfolder": subfolder, "type": "output"})
                 files.append(f"{subfolder}/{file}" if subfolder else file)
+                if blind and not args.disable_metadata:
+                    key_rec = {**record, "blind_seed": blind_seed, "sheet": file,
+                               **({"prompt": prompt, "extra_pnginfo": extra_pnginfo} if embed_workflow else {})}
+                    with open(os.path.join(full_folder, file[:-4] + "_key.json"), "w", encoding="utf-8") as kf:
+                        json.dump(key_rec, kf, ensure_ascii=False, indent=1)
+                    key_files.append(file[:-4] + "_key.json")
                 counter += 1
             else:
                 tmp_dir = folder_paths.get_temp_directory()
@@ -309,8 +323,10 @@ class HaDeSMossCompareSheet:
         text = (f"HaDeS MOSS Compare Sheet | {len(images)} images | " + head
                 + (f"\nsaved: {files[0]}" + (f" (+{len(files) - 1})" if len(files) > 1 else "") if files else "\nnot saved (preview only)")
                 + "".join(f"\nnote: {n}" for n in notes))
+        if key_files:
+            text += f"\nkey file: {key_files[0]}" + (f" (+{len(key_files) - 1})" if len(key_files) > 1 else "")
         info = format_info(text, "compare_sheet", labels=labels, label_sources=sources, files=files, footer=footer.strip(), notes=notes,
-                           **({"blind_key": key, "blind_seed": blind_seed} if blind else {}))
+                           **({"blind_key": key, "blind_seed": blind_seed, "key_files": key_files} if blind else {}))
         return {"ui": {"images": results}, "result": (out, info)}
 
 
@@ -348,7 +364,7 @@ class HaDeSMossCompareSampler:
         for s in SLOTS:
             optional[f"label_{s}"] = ("STRING", {"default": "", "tooltip": f"Label over image {s}. Empty: the LoRAs model_{s} carries (and strength "
                                                                             "when not 1), else its model file; the turbo is added when on."})
-        for k in ("blind", "blind_seed", "footer"):
+        for k in ("blind", "blind_seed", "footer", "write_metadata"):
             optional[k] = sheet["optional"][k]
         return {
             "required": {
@@ -377,7 +393,7 @@ class HaDeSMossCompareSampler:
 
     def compare(self, model_A, positive, negative, latent_image, vae, seed, steps, cfg, sampler_name, scheduler, filename_prefix, save,
                 embed_workflow, prompt=None, extra_pnginfo=None, turbo=None, prompt_info=None, flow_shift=0.0, slg="off", footer="",
-                blind=False, blind_seed=0, unique_id=None, **kw):
+                blind=False, blind_seed=0, unique_id=None, write_metadata=True, **kw):
         models = [(s, model_A if s == "A" else kw.get(f"model_{s}")) for s in SLOTS]
         models = [(s, m) for s, m in models if m is not None]
         extra = [m for m in [parse_info_meta(prompt_info)] if m and m.get("node") == "prompt_enhancer"] if prompt_info else []
@@ -386,12 +402,18 @@ class HaDeSMossCompareSampler:
             _, image, ks_info = HaDeSMossKSampler().sample(model, positive, negative, latent_image, seed, steps, cfg, sampler_name, scheduler,
                                                            1.0, flow_shift, slg, vae=vae, turbo=turbo, denoise_mode=DENOISE_CORE)
             loras, model_name, base = recipe_chain(model.get_attachment("hades_moss_recipe"))
-            if not model_name:  # a core loader (Load Diffusion Model ...): the file its cable comes from, through LoRA nodes and mergers
-                model_name = files_label(model_files(prompt, unique_id, f"model_{s}"))
+            # the files this branch's cable comes from (core loaders, through LoRA nodes and mergers), kept on the branch's KSampler
+            # entry as a MOSS KSampler records them, so Telemetry and scripts read which model each branch ran (audit 0.9.6 F02)
+            files = model_files(prompt, unique_id, f"model_{s}")
+            if not model_name:  # a core loader (Load Diffusion Model ...)
+                model_name = files_label(files)
             if not model_name and not (kw.get(f"label_{s}") or "").strip():
                 notes.append(f"model_{s} carries no HaDeS MOSS recipe (not from a MOSS Loader): name it with label_{s}")
+            ks_meta = parse_info_meta(ks_info)
+            if files and isinstance(ks_meta, dict) and not ks_meta.get("model_files"):
+                ks_meta["model_files"] = files
             # LoRAs in the order they were applied, then the KSampler (its turbo goes last on the label), the model, the prompt
-            head = loras[::-1] + [parse_info_meta(ks_info)]
+            head = loras[::-1] + [ks_meta]
             branches[s] = head + ([base] if base else []) + extra  # the nodes' own trailers, for Suite Telemetry
             # the sheet labels a merge too; a model without a recipe is named as such, so the turbo alone never reads as the model
             metas = head + [{"node": "loader", "model_file": model_name or "unknown model"}] + extra
@@ -400,7 +422,8 @@ class HaDeSMossCompareSampler:
             sheet_kw[f"info_{s}"] = json.dumps({"nodes": metas})
             sheet_kw[f"label_{s}"] = kw.get(f"label_{s}", "")
         out = HaDeSMossCompareSheet().compare(filename_prefix=filename_prefix, save=save, embed_workflow=embed_workflow, prompt=prompt,
-                                              extra_pnginfo=extra_pnginfo, footer=footer, blind=blind, blind_seed=blind_seed, **sheet_kw)
+                                              extra_pnginfo=extra_pnginfo, footer=footer, blind=blind, blind_seed=blind_seed,
+                                              write_metadata=write_metadata, **sheet_kw)
         sheet_out, sheet_info = out["result"]
         sm = parse_info_meta(sheet_info)
         text = sheet_info.split("\nHADES_META", 1)[0].replace("HaDeS MOSS Compare Sheet", "HaDeS MOSS Compare Sampler", 1)

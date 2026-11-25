@@ -1,11 +1,16 @@
 """Checks that two images form a fair A / B pair before they are compared: same size and the same declared sampling settings.
 
-    python tools/moss_pair_check.py reference.png candidate.png [--no-prompt]
+    python tools/moss_pair_check.py reference.png candidate.png [--no-prompt] [--strict]
+    python tools/moss_pair_check.py sheet.png:A sheet.png:B        (two branches of a MOSS Compare Sheet / Compare Sampler PNG)
 
 Each side is a PNG saved by the MOSS Image Saver (its `hades_moss_primary_stage` chunk when present, else `hades_moss`), a Suite
 Telemetry json file, or a text file with one MOSS info output. A different model or LoRA is what an A / B test changes, so it is
-listed, not rejected. Exit code 0: a fair pair; 1: a setting differs (printed). It reads metadata only: it cannot tell whether the
-metadata belongs to the pixels, nor judge the images.
+listed, not rejected. Verdicts (audit 0.9.6 F16: "fair pair" was printed even with fields it could not check):
+  fair pair: every field compared and equal (exit 0)
+  fair on what was recorded: no difference, some optional fields unverified, listed (exit 0; exit 2 with --strict)
+  NOT ENOUGH EVIDENCE: a field every pair needs (seed, steps, CFG, sampler, scheduler, size) could not be compared (exit 2)
+  MISMATCH: a setting differs (exit 1)
+It reads metadata only: it cannot tell whether the metadata belongs to the pixels, nor judge the images.
 """
 import argparse
 import json
@@ -20,6 +25,7 @@ SAMPLING = ("seed", "steps", "cfg", "sampler", "scheduler", "flow_shift", "denoi
 PROMPT = ("prompt", "negative")
 ALLOWED = (("loader", "model_file"), ("multi_lora", "loras"), ("ksampler", "turbo"))
 PREFIX = "HADES_META "
+REQUIRED = ("seed", "steps", "cfg", "sampler", "scheduler", "width", "height")
 
 
 def metas_from_text(text):
@@ -41,8 +47,21 @@ def metas_from_text(text):
 
 
 def load_side(path):
-    """(metas, (width, height) or None) of a PNG or a text / json file."""
-    path = pathlib.Path(path)
+    """(metas, (width, height) or None) of a PNG or a text / json file; 'sheet.png:B' reads branch B of a Compare Sheet PNG."""
+    branch = None
+    text_path = str(path)
+    if ":" in text_path[2:] and text_path.rsplit(":", 1)[1] in ("A", "B", "C", "D"):
+        text_path, branch = text_path.rsplit(":", 1)
+    path = pathlib.Path(text_path)
+    if branch is not None:
+        with Image.open(path) as img:
+            chunk = dict(img.text).get("hades_moss_compare")
+        if chunk is None:
+            raise ValueError(f"{path.name}: no hades_moss_compare chunk (not a Compare Sheet PNG, a blind sheet, or saved without metadata)")
+        metas = (json.loads(chunk).get("branches") or {}).get(branch)
+        if not isinstance(metas, list):
+            raise ValueError(f"{path.name}: no branch {branch} in the sheet")
+        return [m for m in metas if isinstance(m, dict) and "node" in m], None  # the sheet's size is not the panel's
     if path.suffix.lower() == ".png":
         with Image.open(path) as img:
             chunks, size = dict(img.text), img.size
@@ -96,13 +115,27 @@ def main(argv=None):
     p.add_argument("reference")
     p.add_argument("candidate")
     p.add_argument("--no-prompt", action="store_true", help="do not compare the prompt texts (e.g. a prompt A / B test)")
+    p.add_argument("--strict", action="store_true", help="exit 2 when any field could not be compared, not only the required ones")
     args = p.parse_args(argv)
     result = check_pair(load_side(args.reference), load_side(args.candidate), compare_prompt=not args.no_prompt)
-    print(("MISMATCH" if result["mismatches"] else "fair pair") + f" | matched: {', '.join(result['matched']) or 'none'}")
+    text, code = verdict(result, args.strict)
+    print(text + f" | matched: {', '.join(result['matched']) or 'none'}")
     for key, label in (("mismatches", "differs"), ("differences", "compared"), ("unverified", "unverified")):
         for item in result[key]:
             print(f"  {label}: {item}")
-    return 1 if result["mismatches"] else 0
+    return code
+
+
+def verdict(result, strict=False):
+    """(text, exit code) of a check_pair result: equality of the fields available is told apart from enough evidence."""
+    if result["mismatches"]:
+        return "MISMATCH", 1
+    missing = [f for f in REQUIRED if f not in result["matched"]]
+    if missing:
+        return f"NOT ENOUGH EVIDENCE (not compared: {', '.join(missing)})", 2
+    if result["unverified"]:
+        return f"fair on what was recorded ({len(result['unverified'])} field(s) unverified)", 2 if strict else 0
+    return "fair pair", 0
 
 
 if __name__ == "__main__":

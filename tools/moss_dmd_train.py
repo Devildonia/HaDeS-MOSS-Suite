@@ -47,6 +47,7 @@ import comfy.samplers  # noqa: E402
 import comfy.sd  # noqa: E402
 import comfy.utils  # noqa: E402
 import folder_paths  # noqa: E402
+from moss_train_guard import prompt_tag, run_lock, save_torch_atomic, seal_run  # noqa: E402
 
 WEIGHTS = ("qkv", "o", "ffn_up_gate", "ffn_down")
 
@@ -187,15 +188,11 @@ def main():
     p.add_argument("--out", required=True)
     args = p.parse_args(ARGV)
     os.makedirs(args.out, exist_ok=True)
-    lock = os.path.join(args.out, "TRAIN_RUNNING")
-    if os.path.exists(lock):
-        raise SystemExit(f"{lock} exists: another run may be writing to this folder (delete the file if it is not)")
-    with open(lock, "w") as f:
-        f.write(str(os.getpid()))
-    try:
+    # one run per folder, and only the run it was started with (audit 0.9.6 F01 / F09: tools/moss_train_guard.py)
+    with run_lock(args.out):
+        seal_run(args.out, args, {"unet": folder_paths.get_full_path_or_raise("diffusion_models", args.unet), "clip": folder_paths.get_full_path_or_raise("text_encoders", args.clip),
+                                  "vae": folder_paths.get_full_path_or_raise("vae", args.vae), "prompts_file": args.prompts_file, "init_lora": args.init_lora})
         train(args)
-    finally:
-        os.remove(lock)
 
 
 def train(args):
@@ -216,7 +213,7 @@ def train(args):
                 cache[prompt] = clip.encode_from_tokens_scheduled(clip.tokenize(prompt))[0][0].to(torch.bfloat16).cpu()
             if i % 100 == 0:
                 print(f"encoded {i + 1} prompts ({time.time() - t0:.0f}s)", flush=True)
-    torch.save(cache, cache_path)
+    save_torch_atomic(cache, cache_path)
     with open(os.path.join(args.out, "prompts.json"), "w", encoding="utf-8") as f:
         json.dump(prompts, f, indent=0, ensure_ascii=False)
     del clip
@@ -391,7 +388,7 @@ def train(args):
 
         t1 = time.time()
         for i, prompt in enumerate(reg_prompts):
-            key = f"{i}_{args.reg_teacher_steps}_{args.size}"
+            key = f"{i}_{args.reg_teacher_steps}_{args.size}_{prompt_tag(prompt)}"  # the prompt in the key: another prompt at i is a new target
             if key not in done:
                 x, c = reg_noise(i), ctx(prompt)
                 with torch.no_grad():
@@ -401,8 +398,7 @@ def train(args):
                         x = euler(x, uncond + args.guidance * (cond - uncond), t_sig[s], t_sig[s + 1])
                 done[key] = x.cpu()
                 if (i + 1) % 16 == 0 or i + 1 == len(reg_prompts):
-                    torch.save(done, reg_path + ".tmp")
-                    os.replace(reg_path + ".tmp", reg_path)
+                    save_torch_atomic(done, reg_path)
                     print(f"regression pairs: {i + 1} / {len(reg_prompts)} ({time.time() - t1:.0f}s)", flush=True)
             reg.append((prompt, i, done[key]))
 

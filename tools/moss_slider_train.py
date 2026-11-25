@@ -47,6 +47,7 @@ import comfy.samplers  # noqa: E402
 import comfy.sd  # noqa: E402
 import comfy.utils  # noqa: E402
 import folder_paths  # noqa: E402
+from moss_train_guard import run_lock, save_torch_atomic, seal_run  # noqa: E402
 
 PREVIEW_PROMPTS = [
     "A busy street market in Marrakech with spice stalls, colorful lanterns and fabrics, photograph.",
@@ -122,15 +123,13 @@ def main():
     if not args.pairs and not (args.positive and args.negative):
         raise SystemExit("prompt mode needs --positive and --negative (or --pairs N for image-pair mode)")
     os.makedirs(args.out, exist_ok=True)
-    lock = os.path.join(args.out, "TRAIN_RUNNING")
-    if os.path.exists(lock):
-        raise SystemExit(f"{lock} exists: another run may be writing to this folder (delete the file if it is not)")
-    with open(lock, "w") as f:
-        f.write(str(os.getpid()))
-    try:
+    # one run per folder, and only the run it was started with (audit 0.9.6 F01 / F09: tools/moss_train_guard.py)
+    with run_lock(args.out):
+        seal_run(args.out, args, {"unet": folder_paths.get_full_path_or_raise("diffusion_models", args.unet), "clip": folder_paths.get_full_path_or_raise("text_encoders", args.clip),
+                                  "vae": folder_paths.get_full_path_or_raise("vae", args.vae), "turbo": folder_paths.get_full_path_or_raise("loras", args.turbo) if args.turbo else None,
+                                  "merge_base": folder_paths.get_full_path_or_raise("diffusion_models", args.merge_base) if args.merge_base else None,
+                                  "pairs_from": args.pairs_from})
         train(args)
-    finally:
-        os.remove(lock)
 
 
 def train(args):
@@ -164,7 +163,7 @@ def train(args):
                 cache[prompt] = clip.encode_from_tokens_scheduled(clip.tokenize(prompt))[0][0].to(torch.bfloat16).cpu()
             if i % 300 == 0:
                 print(f"encoded {i + 1} / {len(needed)} prompts ({time.time() - t0:.0f}s)", flush=True)
-    torch.save(cache, cache_path)
+    save_torch_atomic(cache, cache_path)
     with open(os.path.join(args.out, "prompts.json"), "w", encoding="utf-8") as f:
         json.dump(prompts, f, indent=0, ensure_ascii=False)
     del clip
@@ -329,8 +328,7 @@ def train(args):
                     side.paste(soft, (args.size, 0))
                     side.save(os.path.join(args.out, f"pair_{i:02d}_{args.pair_kind}{amount:.2f}.png"))
                 if (i + 1) % 16 == 0 or i + 1 == args.pairs:
-                    torch.save(done, pair_path + ".tmp")
-                    os.replace(pair_path + ".tmp", pair_path)
+                    save_torch_atomic(done, pair_path)
                     print(f"pairs: {i + 1} / {args.pairs} ({time.time() - t1:.0f}s)", flush=True)
             pairs.append(done[i])
 

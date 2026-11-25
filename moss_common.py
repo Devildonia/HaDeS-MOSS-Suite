@@ -81,6 +81,33 @@ def reserve_path(candidate_fn):
             i += 1
 
 
+def file_sig(folder, name):
+    """[size, modification time in ns] of a file under models/<folder>, recorded when a node loads or samples with it, so the
+    MOSS Image Saver can tell whether the file it hashes later is still that one (audit 0.9.6 F08); None if not found."""
+    import folder_paths
+    try:
+        path = folder_paths.get_full_path(folder, name) if folder and name else None
+        st = os.stat(path) if path else None
+    except OSError:
+        return None
+    return [st.st_size, st.st_mtime_ns] if st else None
+
+
+def save_png(folder, name_fn, counter, image, pnginfo=None, compress_level=4):
+    """Saves a PIL image as the first free name_fn(counter), name_fn(counter + 1) ...: the name is reserved with O_EXCL and the
+    PNG written to a temporary file then renamed, so two ComfyUIs sharing an output folder never overwrite each other and an
+    interrupted save leaves no partial PNG (audit 0.9.6 F03). Returns (file name, the counter used)."""
+    used = []
+
+    def candidate(i):
+        used[:] = [counter + i]
+        return os.path.join(folder, name_fn(counter + i))
+    path = reserve_path(candidate)
+    with reserved(path):
+        write_atomic(path, lambda tmp: image.save(tmp, format="PNG", pnginfo=pnginfo, compress_level=compress_level))
+    return os.path.basename(path), used[0]
+
+
 # ==============================================================================
 # MOSS-IMAGE TOPOLOGY
 # ==============================================================================

@@ -10,7 +10,7 @@ import latent_preview
 import nodes
 from comfy_extras.nodes_slg import SkipLayerGuidanceDiTSimple
 
-from .moss_common import format_info, parse_info_meta
+from .moss_common import file_sig, format_info, parse_info_meta
 from .moss_lora_nodes import load_lora_patches
 
 # single block, start / end of the negative-pass skip; "Base template" is SkipLayerGuidanceDiTSimple as the official
@@ -49,7 +49,8 @@ def model_files(prompt, node_id, input_name="model"):
             if isinstance(inputs.get(widget), str):
                 if inputs[widget] not in seen:
                     seen.add(inputs[widget])
-                    out.append({"file": inputs[widget], "folder": folder})
+                    sig = file_sig(folder, inputs[widget])
+                    out.append({"file": inputs[widget], "folder": folder, **({"sig": sig} if sig else {})})
                 return
         for value in inputs.values():
             walk(value, depth + 1)
@@ -286,7 +287,7 @@ class HaDeSMossKSampler:
             extra["schedule_steps"] = core_schedule_steps(steps, denoise)
         if turbo is not None:
             text += f" | turbo {turbo['lora_name']} x {turbo['strength']:g}"
-            extra.update(turbo=turbo["lora_name"], turbo_strength=turbo["strength"])
+            extra.update(turbo=turbo["lora_name"], turbo_strength=turbo["strength"], turbo_sig=file_sig("loras", turbo["lora_name"]))
         files = model_files(prompt, unique_id)
         if files:  # the files this model comes from, for the Image Saver's Model field (a merge made here lists its sources)
             extra["model_files"] = files

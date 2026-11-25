@@ -60,6 +60,7 @@ jobs:
           python ComfyUI/custom_nodes/HaDeS-MOSS-Suite/tests/test_moss_edit_eval.py
           python ComfyUI/custom_nodes/HaDeS-MOSS-Suite/tests/test_moss_dev_nodes.py
           python ComfyUI/custom_nodes/HaDeS-MOSS-Suite/tests/test_moss_pair_check.py
+          python ComfyUI/custom_nodes/HaDeS-MOSS-Suite/tests/test_moss_train_guard.py
 
   package:
     # The Comfy Registry package as a user gets it: built by comfy-cli from this commit (honouring .comfyignore), unpacked into

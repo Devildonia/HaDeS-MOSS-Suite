@@ -194,7 +194,7 @@ class HaDeSMossModelSaver:
         with reserved(out_path):
             write_atomic(out_path, lambda tmp: comfy.utils.save_torch_file(sd, tmp, metadata=metadata))
 
-        size_gb = os.path.getsize(out_path) / 1024 ** 3
+        size_gb = os.path.getsize(out_path) / 1e9  # decimal GB, as the docs
         info = format_info(f"HaDeS MOSS Model Saver | {os.path.basename(out_path)} | {precision}{', stochastic rounding' if stochastic else ''} | "
                            f"{size_gb:.2f} GB | {n_layers} layers" + (" | recipe saved" if metadata and "hades/recipe" in metadata else "")
                            + (" | recipe NOT saved: include_metadata is off" if recipe.strip() and not include_metadata else ""),
@@ -203,15 +203,41 @@ class HaDeSMossModelSaver:
         return {"ui": {"saved_path": [out_path], "info": [info]}, "result": (model, out_path, info)}
 
     @staticmethod
+    def hms_precheck(model, clip, device, names):
+        """Everything HMS v1 needs, checked before a minute of calibration (audit 0.9.6 F11): a MOSS-Image model, the MOSS-Image
+        text encoder, a CUDA device with comfy-kitchen's W4A8 / W6A8 functions, and in every layer the four fused projections
+        HMS was measured on, each a multiple of the ConvRot group (256) wide."""
+        from comfy.ldm.moss_image.model import MOSSImage
+        from comfy.text_encoders.moss_image import MOSSImageTEModel
+        dm = model.model.diffusion_model
+        if not isinstance(dm, MOSSImage):
+            raise ValueError(f"MOSS Model Saver: HMS v1 is for MOSS-Image models; this is {type(dm).__name__}.")
+        if not isinstance(getattr(clip, "cond_stage_model", None), MOSSImageTEModel):
+            raise ValueError("MOSS Model Saver: HMS v1 calibrates with the MOSS-Image text encoder (Qwen3.5-9B, CLIPLoader type "
+                             f"moss_image); the clip connected is {type(getattr(clip, 'cond_stage_model', clip)).__name__}.")
+        if getattr(device, "type", str(device)) != "cuda":
+            raise ValueError(f"MOSS Model Saver: HMS v1 needs a CUDA GPU (its W4A8 / W6A8 kernels); this ComfyUI runs on {device}.")
+        moss_hms._kitchen()  # a clear error when this comfy-kitchen lacks the functions HMS v1 uses
+        n_layers = len(dm.layers)
+        found = {(int(n.split(".")[1]), n.split(".")[3]) for n in names}
+        missing = [f"layers.{i}.proj.{f}" for i in range(n_layers) for f in moss_hms.FAMILIES if (i, f) not in found]
+        if missing:
+            raise ValueError("MOSS Model Saver: HMS v1 needs the fused layout of the MOSS-Image files (proj.qkv, proj.o, ffn_up_gate, "
+                             f"ffn_down in every layer); missing {len(missing)}, first {missing[0]}.")
+        state = dm.state_dict(keep_vars=True)
+        narrow = [n for n in names if state[f"{n}.weight"].shape[-1] % 256]
+        if narrow:
+            raise ValueError(f"MOSS Model Saver: HMS v1 needs projection widths in multiples of 256 (ConvRot groups); {narrow[0]} is "
+                             f"{state[narrow[0] + '.weight'].shape[-1]} wide.")
+
+    @staticmethod
     def _hms(model, clip, device, steps, cfg, sampler_name, scheduler):
         """HMS v1: calibration runs on the model itself, then every layer projection in its native W4A8 / W6A8 layout (C1 + GPTQ)."""
         names = sorted({m.group(0)[:-len(".weight")] for k in model.model.diffusion_model.state_dict(keep_vars=True)
                         for m in [_HMS_LINEAR_RE.match(k)] if m},
                        key=lambda n: (int(n.split(".")[1]), moss_hms.FAMILIES.index(n.split(".")[3])))
+        HaDeSMossModelSaver.hms_precheck(model, clip, device, names)
         n_layers = len(model.model.diffusion_model.layers)
-        if len(names) != 4 * n_layers:
-            raise ValueError("MOSS Model Saver: HMS v1 needs the fused layout of the MOSS-Image files (proj.qkv, proj.o, ffn_up_gate, "
-                             f"ffn_down in every layer); this model has {len(names)} of {4 * n_layers}.")
         bar = comfy.utils.ProgressBar(2 * len(moss_hms.PROMPTS) + len(names))
         diagonals, counts, rows = moss_hms.capture(model, clip, steps, cfg, sampler_name, scheduler, n_layers, bar)
         out = {}

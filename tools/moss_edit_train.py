@@ -46,6 +46,7 @@ import comfy.samplers  # noqa: E402
 import comfy.sd  # noqa: E402
 import comfy.utils  # noqa: E402
 import folder_paths  # noqa: E402
+from moss_train_guard import run_lock, save_torch_atomic, seal_run  # noqa: E402
 
 WEIGHTS = ("qkv", "o", "ffn_up_gate", "ffn_down")
 METHOD = "index_timestep_zero_text_start"  # the core's EDIT_FORMATS["Moss-Image-Edit"]
@@ -135,15 +136,11 @@ def main():
     p.add_argument("--out", required=True)
     args = p.parse_args(ARGV)
     os.makedirs(args.out, exist_ok=True)
-    lock = os.path.join(args.out, "TRAIN_RUNNING")
-    if os.path.exists(lock):
-        raise SystemExit(f"{lock} exists: another run may be writing to this folder (delete the file if it is not)")
-    with open(lock, "w") as f:
-        f.write(str(os.getpid()))
-    try:
+    # one run per folder, and only the run it was started with (audit 0.9.6 F01 / F09: tools/moss_train_guard.py)
+    with run_lock(args.out):
+        seal_run(args.out, args, {"unet": folder_paths.get_full_path_or_raise("diffusion_models", args.unet), "clip": folder_paths.get_full_path_or_raise("text_encoders", args.clip),
+                                  "vae": folder_paths.get_full_path_or_raise("vae", args.vae), **{f"pairs_{i}": d for i, d in enumerate(args.pairs)}})
         train(args)
-    finally:
-        os.remove(lock)
 
 
 def build_cache(args, pairs):
@@ -176,8 +173,7 @@ def build_cache(args, pairs):
                 print(f"encoded {i + 1} / {len(imgs)} images ({time.time() - t0:.0f}s)", flush=True)
     del vae
     comfy.model_management.unload_all_models()
-    torch.save(cache, path + ".tmp")
-    os.replace(path + ".tmp", path)
+    save_torch_atomic(cache, path)
     return cache
 
 

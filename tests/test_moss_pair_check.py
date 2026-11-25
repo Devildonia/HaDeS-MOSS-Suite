@@ -62,6 +62,31 @@ class TestPairCheck(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "no hades_moss chunk"):
                 pc.load_side(plain)
 
+    def test_verdict_tells_equality_from_evidence(self):
+        """Audit 0.9.6 F16: 'fair pair' was printed with fields left unverified."""
+        full = pc.check_pair((stage(), None), (stage(), None))
+        self.assertEqual(pc.verdict(full)[1], 0)  # no prompt-schedule fields recorded: fair on what was recorded
+        self.assertTrue(pc.verdict(full)[0].startswith("fair on what was recorded"))
+        self.assertEqual(pc.verdict(full, strict=True)[1], 2)
+        thin = [{"node": "ksampler", "seed": 1, "steps": 8}]
+        text, code = pc.verdict(pc.check_pair((thin, None), (thin, None), compare_prompt=False))
+        self.assertEqual(code, 2)
+        self.assertIn("NOT ENOUGH EVIDENCE", text)
+        self.assertEqual(pc.verdict(pc.check_pair((stage(seed=1), None), (stage(seed=2), None)))[1], 1)
+
+    def test_reads_two_branches_of_a_compare_sheet(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            info = PngInfo()
+            info.add_text("hades_moss_compare", json.dumps({"labels": ["A", "B"], "branches": {"A": stage(), "B": stage(model="sft.safetensors")}}))
+            png = pathlib.Path(tmp, "sheet.png")
+            Image.new("RGB", (80, 20)).save(png, pnginfo=info)
+            metas, size = pc.load_side(f"{png}:B")
+            self.assertIsNone(size)
+            self.assertEqual(metas[0]["model_file"], "sft.safetensors")
+            self.assertEqual(pc.main([f"{png}:A", f"{png}:B"]), 0)
+            with self.assertRaisesRegex(ValueError, "no branch C"):
+                pc.load_side(f"{png}:C")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -47,6 +47,8 @@ DIM, LAYERS = 256, 6  # 2 heads of 128; 256 keeps every linear a multiple of the
 TMP = tempfile.mkdtemp(prefix="hades_moss_tests_")
 folder_paths.folder_names_and_paths["loras"] = ([TMP], {".safetensors"})
 folder_paths.set_output_directory(TMP)
+os.makedirs(os.path.join(TMP, "temp"), exist_ok=True)
+folder_paths.set_temp_directory(os.path.join(TMP, "temp"))  # previews too: never the host ComfyUI's temp folder (audit 0.9.6 F15)
 sampler = importlib.import_module(f"{PACK}.moss_sampler_nodes")
 
 
@@ -364,7 +366,7 @@ class TestLoras(unittest.TestCase):
         full = dict.fromkeys(mergers.GROUPS, 1.0)
         m, info = node.apply(self.model, "fused.safetensors", 1.0, 1.0, **{**full, mergers.GROUPS[2]: 0.0})
         counts = common.parse_info_meta(info)["counts"]
-        self.assertEqual(sum(counts.values()), 2 * LAYERS)
+        self.assertEqual(sum(counts.values()), 2 * LAYERS - 2)  # applied weights only: layer 2's two patches are at 0 (audit 0.9.6 F12)
         # layer 2 sits in group 2 on a 6-layer model (proportional split onto 7 groups): no patch there, layer 3 patched
         self.assertNotIn("diffusion_model.layers.2.proj.o.weight", m.patches)
         self.assertIn("diffusion_model.layers.3.proj.o.weight", m.patches)
@@ -409,6 +411,23 @@ class TestLoras(unittest.TestCase):
         sampler_info = common.format_info("x", "ksampler", width=1024, height=1024, steps=30, cfg=4.0, flow_shift=5.0, slg="off")
         findings = json.loads(telemetry.HaDeSMossSuiteTelemetry().audit("T", info_1=info, info_2=sampler_info)["result"][1])["findings"]
         self.assertTrue(any("trained for 4 steps" in f["message"] for f in findings))
+
+    def test_a_lora_with_every_group_at_zero_is_not_a_resource(self):
+        """Audit 0.9.6 F12: every group at 0 adds no patch, so the LoRA is neither listed, counted, nor taken for a turbo."""
+        meta = {"settings": "4 steps, CFG 1, euler / simple, strength 1.0, shift 5"}
+        safetensors.torch.save_file(self.fused, os.path.join(TMP, "turbo_zero.safetensors"), metadata=meta)
+        zero = {**dict.fromkeys(mergers.GROUPS, 0.0), "other_layers": 0.0}
+        m, info = loras.HaDeSMossMultiLora().apply(self.model, True, json.dumps([{"name": "turbo_zero.safetensors", "groups": zero}]))
+        meta_out = common.parse_info_meta(info)
+        self.assertEqual((meta_out["loras"], meta_out["turbo"]), ([], []))
+        self.assertIn("0 weights applied", info)
+        one = {**zero, mergers.GROUPS[0]: 1.0}
+        info = loras.HaDeSMossMultiLora().apply(self.model, True, json.dumps([{"name": "turbo_zero.safetensors", "groups": one}]))[1]
+        self.assertGreater(common.parse_info_meta(info)["loras"][0]["weights"], 0)
+        bw = loras.HaDeSMossLoraBlockWeight().apply(self.model, "fused.safetensors", 1.0, 0.0, **dict.fromkeys(mergers.GROUPS, 0.0))[1]
+        bw_meta = common.parse_info_meta(bw)
+        self.assertEqual(bw_meta["applied_weights"], 0)
+        self.assertEqual(importlib.import_module(f"{PACK}.moss_image_saver_nodes").resources([bw_meta]), [])
 
     def test_layout_editor_outputs_a_compilable_draft(self):
         # an output node: the editor's DRAFT LAYOUT button runs the graph only up to it (partial execution)
@@ -558,6 +577,24 @@ class TestSaverAndSampler(unittest.TestCase):
         meta = json.loads(hms.recipe_metadata(8, 1.0, "euler", "simple"))
         self.assertEqual((meta["method"], meta["version"], meta["protected_ffn_blocks"]), ("HMS", 1, list(range(30, 42))))
         hms._kitchen()  # the comfy-kitchen helpers HMS needs are present
+
+    def test_hms_checks_what_it_needs_before_calibrating(self):
+        """Audit 0.9.6 F11: only the number of projections was checked; the encoder, the device, every layer's four projections
+        and their widths are now checked before any sampling."""
+        model = comfy.sd.load_diffusion_model_state_dict(tiny_state_dict(31))
+        names = [f"layers.{i}.proj.{f}" for i in range(LAYERS) for f in ("qkv", "o", "ffn_up_gate", "ffn_down")]
+        check = saver.HaDeSMossModelSaver.hms_precheck
+        with self.assertRaisesRegex(ValueError, "text encoder"):
+            check(model, object(), torch.device("cuda"), names)
+
+        class TE:
+            pass
+        clip = type("Clip", (), {"cond_stage_model": TE()})()
+        with patch("comfy.text_encoders.moss_image.MOSSImageTEModel", TE):
+            with self.assertRaisesRegex(ValueError, "CUDA"):
+                check(model, clip, torch.device("cpu"), names)
+            with self.assertRaisesRegex(ValueError, "missing 1, first layers.0.proj.qkv"):
+                check(model, clip, torch.device("cuda"), names[1:])
 
     @unittest.skipUnless(os.environ.get("HADES_MOSS_TEST_CUDA") == "1", "opt-in CUDA export checks")
     def test_hms_projection_matches_the_native_layout_on_cuda(self):
@@ -863,6 +900,19 @@ class TestImageSaver(unittest.TestCase):
                 self.assertEqual(png.text, {})
             self.assertIn("PRIVATE", out["result"][0])
 
+    def test_write_metadata_off_keeps_only_the_workflow(self):
+        """Audit 0.9.6 F06: embed_workflow off still wrote the prompt and resource names; write_metadata is now their own switch."""
+        from PIL import Image
+        isaver = importlib.import_module(f"{PACK}.moss_image_saver_nodes")
+        meta = common.format_info("private", "prompt_enhancer", prompt="PRIVATE", negative="PRIVATE NEGATIVE")
+        for embed, chunks in ((False, set()), (True, {"prompt", "workflow"})):
+            out = isaver.HaDeSMossImageSaver().save(torch.zeros(1, 8, 8, 3), "tests/no_meta", False, embed, metadata=meta,
+                                                   prompt={"x": 1}, extra_pnginfo={"workflow": {"y": 2}}, write_metadata=False)
+            item = out["ui"]["images"][0]
+            with Image.open(os.path.join(TMP, item["subfolder"], item["filename"])) as png:
+                self.assertEqual(set(png.text), chunks)
+            self.assertFalse(common.parse_info_meta(out["result"][1])["metadata_written"])
+
     def test_png_carries_a1111_parameters_and_hashes(self):
         from PIL import Image
         isaver = importlib.import_module(f"{PACK}.moss_image_saver_nodes")
@@ -898,6 +948,24 @@ class TestImageSaver(unittest.TestCase):
         self.assertEqual(len(out["ui"]["images"]), 1)
         self.assertTrue(out["result"][0].startswith("A cat."))
         self.assertIn("metadata not connected", out["ui"]["text"][0])
+
+    def test_a_file_replaced_after_loading_gets_no_hash(self):
+        """Audit 0.9.6 F08: the hash was read at save time, so a LoRA replaced under the same name after the pipeline loaded it was
+        credited with the new file's hash."""
+        isaver = importlib.import_module(f"{PACK}.moss_image_saver_nodes")
+        path = os.path.join(TMP, "swapped.safetensors")
+        safetensors.torch.save_file({"x": torch.ones(3)}, path)
+        sig = common.file_sig("loras", "swapped.safetensors")
+        self.assertEqual(sig[0], os.path.getsize(path))
+        meta = common.format_info("x", "multi_lora", enabled=True, turbo=[],
+                                  loras=[{"name": "swapped.safetensors", "strength": 1.0, "weights": 2, "sig": sig}])
+        params, notes = isaver.a1111_parameters([common.parse_info_meta(meta)], "A cat.", "", True)
+        self.assertIn("Lora hashes", params)
+        safetensors.torch.save_file({"x": torch.zeros(5)}, path)  # replaced with another file under the same name
+        os.utime(path, ns=(sig[1] + 10**9, sig[1] + 10**9))
+        params, notes = isaver.a1111_parameters([common.parse_info_meta(meta)], "A cat.", "", True)
+        self.assertNotIn("Lora hashes", params)
+        self.assertTrue(any("changed on disk after it was loaded" in n for n in notes))
 
     def test_primary_stage_keeps_full_pipeline_and_uses_only_selected_resources(self):
         from PIL import Image
@@ -956,7 +1024,7 @@ class TestImageSaver(unittest.TestCase):
         self.assertIn("Seed: 22", partial["result"][0])
         self.assertNotIn("Model:", partial["result"][0])
         self.assertNotIn("Lora hashes:", partial["result"][0])
-        self.assertIn("primary stage has no MOSS Loader info", partial["ui"]["text"][0])
+        self.assertIn("primary stage names no model", partial["ui"]["text"][0])
         with patch.object(isaver.args, "disable_metadata", True):
             private = isaver.HaDeSMossImageSaver().save(torch.rand(1, 8, 8, 3), "tests/private_stage", False, False,
                                                         metadata=full_json, primary_stage_metadata=refine_json)
@@ -1110,7 +1178,8 @@ class TestLoader(unittest.TestCase):
         sd = tiny_state_dict(9)
         self.assertIn(loader.model_precision(load(sd)), ("bf16", "fp32"))  # the precision in memory: fp32 when ComfyUI runs on the CPU
         q = loader.model_precision(load_int8(sd))
-        self.assertTrue(q.startswith("int8 ("), q)
+        self.assertTrue(q.startswith("int8") and "weights (TensorWiseINT8Layout)" in q, q)
+
         info = common.format_info("x", "loader", model="m.safetensors", precision=q, weight_dtype="default", attention="comfy_kitchen_int8",
                                   layers=LAYERS, text_encoder="te.safetensors", vae="flux2-vae.safetensors")
         findings = json.loads(telemetry.HaDeSMossSuiteTelemetry().audit("T", info_1=info)["result"][1])["findings"]
@@ -1118,6 +1187,37 @@ class TestLoader(unittest.TestCase):
 
 
 class TestCompareSheet(unittest.TestCase):
+
+    def test_quant_formats_are_named_from_the_file_and_the_weights(self):
+        """Audit 0.9.6 F04: an HMS model read as 'int8' (Loader) and 'int8 ConvRot' (Metadata Reader). The reader now reads each
+        comfy_quant descriptor and the HMS recipe; the Loader tells W6A8 from W4A8 by the packed width."""
+        loader = importlib.import_module(f"{PACK}.moss_loader_nodes")
+        conf = lambda fmt, **kw: torch.tensor(list(json.dumps({"format": fmt, **kw}).encode()), dtype=torch.uint8)
+        sd = {"layers.0.proj.o.weight": torch.zeros(4, 3, dtype=torch.int8), "layers.0.proj.o.comfy_quant": conf("w6a8_int8"),
+              "layers.0.proj.ffn_down.weight": torch.zeros(4, 2, dtype=torch.int8), "layers.0.proj.ffn_down.comfy_quant": conf("asym_w4a8_int8"),
+              "layers.0.proj.qkv.weight": torch.zeros(4, 4, dtype=torch.int8), "layers.0.proj.qkv.comfy_quant": conf("mystery_v9")}
+        path = os.path.join(TMP, "quant_formats.safetensors")
+        safetensors.torch.save_file(sd, path, metadata={"hades/quantization": json.dumps({"method": "HMS", "version": 1})})
+        meta, tensors, start = metadata.read_header(path)
+        s = metadata.model_summary(tensors, path, start)
+        self.assertEqual(s["quant"], {"W6A8": 1, "W4A8": 1, "unknown format 'mystery_v9'": 1})
+        self.assertFalse(s["int8_convrot"])
+        self.assertTrue(metadata.quant_text(s, meta).startswith("HMS v1: "))
+        sd = {"layers.0.proj.o.weight": torch.zeros(4, 4, dtype=torch.int8), "layers.0.proj.o.comfy_quant": conf("int8_tensorwise", convrot=True)}
+        safetensors.torch.save_file(sd, path)
+        meta, tensors, start = metadata.read_header(path)
+        s = metadata.model_summary(tensors, path, start)
+        self.assertEqual((s["quant"], s["int8_convrot"], metadata.quant_text(s, meta)), ({"int8 ConvRot": 1}, True, "int8 ConvRot 1 weights"))
+        self.assertEqual(metadata.quant_text({"quant": {}}), "not quantized")
+
+        class Fake:
+            def __init__(self, layout, cols, k=512, convrot=False):
+                self.layout_cls, self._qdata = layout, torch.zeros(1, cols)
+                self._params = type("P", (), {"orig_shape": (1, k), "convrot": convrot})()
+        self.assertEqual([loader.quant_kind(Fake("AsymW4A8Int8Layout", c)) for c in (384, 256, 100)], ["W6A8", "W4A8", "W4A8 / W6A8"])
+        self.assertEqual(loader.quant_kind(Fake("TensorWiseINT8Layout", 512, convrot=True)), "int8 ConvRot")
+        self.assertEqual(loader.quant_kind(Fake("TensorCoreFP8E4M3Layout", 512)), "fp8")
+
     def test_labels_from_branch_infos_and_saved_sheet(self):
         from PIL import Image
         cmp = importlib.import_module(f"{PACK}.moss_compare_nodes")
@@ -1239,6 +1339,48 @@ class TestCompareSheet(unittest.TestCase):
         self.assertNotIn("blind_key", common.parse_info_meta(cmp.HaDeSMossCompareSheet().compare(
             torch.zeros(1, 16, 16, 3), "tests/blind", False, False, footer="", **imgs, **infos)["result"][1]))
 
+    def test_image_a_sets_the_height_whatever_the_blind_order(self):
+        """Audit 0.9.6 F05: with images of different sizes the blind seed changed the sheet's scale (B first set the height)."""
+        from PIL import Image
+        cmp = importlib.import_module(f"{PACK}.moss_compare_nodes")
+        sizes = set()
+        for seed in range(6):
+            sheet = cmp.HaDeSMossCompareSheet().compare(torch.zeros(1, 32, 32, 3), "tests/f05", False, False, footer="",
+                                                         blind=True, blind_seed=seed, image_B=torch.ones(1, 64, 64, 3))["result"][0]
+            sizes.add(tuple(sheet.shape[1:3]))
+        plain = cmp.HaDeSMossCompareSheet().compare(torch.zeros(1, 32, 32, 3), "tests/f05", False, False, footer="",
+                                                    image_B=torch.ones(1, 64, 64, 3))["result"][0]
+        self.assertEqual(sizes, {tuple(plain.shape[1:3])})
+        thin = cmp.build_sheet([Image.new("RGB", (4, 400)), Image.new("RGB", (1, 4000))], ["A", "B"], "", height=40)
+        self.assertGreaterEqual(thin.width, 1)
+
+    def test_a_saved_blind_sheet_tells_nothing_and_the_key_goes_apart(self):
+        """Audit 0.9.6 F06: the blind key, the names and the workflow were inside the PNG the reviewer looks at."""
+        from PIL import Image
+        cmp = importlib.import_module(f"{PACK}.moss_compare_nodes")
+        f = common.format_info
+        imgs = {"image_B": torch.full((1, 16, 16, 3), 0.5)}
+        infos = {f"info_{s}": f("x", "lora_block_weight", lora=f"secret_{s}.safetensors", strength_model=1.0, weights="") for s in "AB"}
+        graph, extra = {"1": {"class_type": "X", "inputs": {"blind_seed": 3}}}, {"workflow": {"nodes": []}}
+        out = cmp.HaDeSMossCompareSheet().compare(torch.zeros(1, 16, 16, 3), "tests/blind_saved", True, True, prompt=graph,
+                                                   extra_pnginfo=extra, footer="", blind=True, blind_seed=3, **imgs, **infos)
+        meta = common.parse_info_meta(out["result"][1])
+        png = os.path.join(TMP, meta["files"][0])
+        with Image.open(png) as im:
+            text = json.dumps(dict(im.text))
+        self.assertNotIn("secret_", text)
+        self.assertNotIn("blind_key", text)
+        self.assertNotIn("workflow", text)
+        with open(os.path.join(os.path.dirname(png), meta["key_files"][0]), encoding="utf-8") as kf:
+            key = json.load(kf)
+        self.assertEqual(sorted(key["blind_key"].values()), ["A: secret_A", "B: secret_B"])
+        self.assertIn("extra_pnginfo", key)
+        # write_metadata off: no Suite chunk at all on an ordinary sheet
+        out = cmp.HaDeSMossCompareSheet().compare(torch.zeros(1, 16, 16, 3), "tests/no_meta", True, False, footer="",
+                                                   write_metadata=False, **imgs, **infos)
+        with Image.open(os.path.join(TMP, common.parse_info_meta(out["result"][1])["files"][0])) as im:
+            self.assertNotIn("hades_moss_compare", im.text)
+
 
 class TestCompareSampler(unittest.TestCase):
     class Model:
@@ -1284,6 +1426,18 @@ class TestCompareSampler(unittest.TestCase):
         self.assertTrue(any("model_D carries no HaDeS MOSS recipe" in n for n in meta["notes"]))
         self.assertEqual(tuple(out["result"][1].shape), (4, 16, 16, 3))
         self.assertEqual([m["node"] for m in meta["branches"]["A"]], ["multi_lora", "ksampler", "loader"])
+
+    def test_branches_keep_the_core_loader_files(self):
+        """Audit 0.9.6 F02: two models from Load Diffusion Model were named on the sheet but not in the branches Telemetry reads."""
+        graph = {"1": {"class_type": "UNETLoader", "inputs": {"unet_name": "sft.safetensors", "weight_dtype": "default"}},
+                 "2": {"class_type": "UNETLoader", "inputs": {"unet_name": "base.safetensors", "weight_dtype": "default"}},
+                 "9": {"class_type": "HaDeSMossCompareSampler", "inputs": {"model_A": ["1", 0], "model_B": ["2", 0]}}}
+        with patch.object(importlib.import_module(f"{PACK}.moss_compare_nodes").folder_paths, "get_temp_directory", return_value=TMP):
+            out, _ = self.run_sampler([self.Model(None), self.Model(None)], footer="", prompt=graph, unique_id="9")
+        meta = common.parse_info_meta(out["result"][2])
+        files = {s: [m for m in meta["branches"][s] if m["node"] == "ksampler"][0]["model_files"] for s in "AB"}
+        self.assertEqual([f["file"] for f in files["A"]], ["sft.safetensors"])
+        self.assertEqual([f["file"] for f in files["B"]], ["base.safetensors"])
 
     def test_images_output_keeps_every_batch_item(self):
         """Audit 0.8.1: the sheets showed whole batches but `images` gave only the first image of each model."""
@@ -1416,6 +1570,26 @@ class TestTextCheck(unittest.TestCase):
 
 
 class TestAuditFixes(unittest.TestCase):
+    def test_png_saves_never_overwrite_and_never_leave_partial_files(self):
+        """Audit 0.9.6 F03: Image Saver and Compare Sheet chose a counter, then wrote; a second ComfyUI on the same folder could
+        take the same name, and an interrupted write left a partial PNG."""
+        from PIL import Image
+        folder = tempfile.mkdtemp(dir=TMP)
+        name = lambda c: f"img_{c:05}_.png"  # noqa: E731
+        open(os.path.join(folder, name(1)), "wb").close()  # another writer took counter 1 meanwhile
+        f1, c1 = common.save_png(folder, name, 1, Image.new("RGB", (4, 4), "red"))
+        f2, c2 = common.save_png(folder, name, 1, Image.new("RGB", (4, 4), "blue"))
+        self.assertEqual((f1, c1, f2, c2), (name(2), 2, name(3), 3))
+        with Image.open(os.path.join(folder, f1)) as a, Image.open(os.path.join(folder, f2)) as b:
+            self.assertEqual((a.getpixel((0, 0)), b.getpixel((0, 0))), ((255, 0, 0), (0, 0, 255)))
+
+        class Broken:
+            def save(self, *a, **k):
+                raise OSError("disk full")
+        with self.assertRaises(OSError):
+            common.save_png(folder, name, 1, Broken())
+        self.assertEqual(sorted(os.listdir(folder)), [name(1), name(2), name(3)])  # no empty reservation, no .part left
+
     def test_ties_trim_keeps_exactly_k_with_ties(self):
         """Audit 0.8.0 #10: a magnitude threshold dropped every entry tied at the cut."""
         self.assertEqual(mergers.ties_trim(torch.ones(4), 0.5).tolist(), [1.0, 1.0, 0.0, 0.0])
@@ -1472,6 +1646,20 @@ class TestAuditFixes(unittest.TestCase):
         self.assertEqual([d["label"] for d in draft["dropped"]], ["text", "object"])  # a text item with no text comes back as object
         with self.assertRaisesRegex(ValueError, "Layout Editor"):
             pipeline.compile_layout(draft)
+
+    def test_an_irregular_layout_answer_still_compiles(self):
+        """Audit 0.9.6 F07: a numeric summary caption, an unknown canvas, a meta that is not a list and non-finite or boolean
+        coordinates passed the Enhancer and failed in the compiler."""
+        answer = {"summary": {"caption": 7, "canvas": "panorama", "meta": "photo", "palette": ["red", 3, ""]},
+                  "items": [{"label": "object", "caption": "a boat", "bbox": [10, 20, 200, 300]},
+                            {"label": "object", "caption": "the sun", "bbox": [0, 0, float("inf"), 50]},
+                            {"label": "object", "caption": "a gull", "bbox": [True, 0, 40, 40]}]}
+        draft, notes = enhancer.fit_draft(answer, 512, 512)
+        self.assertEqual(draft["summary"], {"caption": "7", "palette": ["red", "3"]})
+        self.assertEqual([it["caption"] for it in draft["items"]], ["a boat"])
+        self.assertEqual(sorted(d["caption"] for d in draft["dropped"]), ["a gull", "the sun"])
+        self.assertTrue(any("canvas" in n for n in notes) and any("meta" in n for n in notes))
+        pipeline.compile_layout({k: v for k, v in draft.items() if k != "dropped"})
 
     def test_multi_lora_row_validation(self):
         """Audit 0.8.0 minor: "on": "false" stayed on, a misspelt group key was silently dropped."""
@@ -1549,6 +1737,19 @@ class TestDenoiseSchedule(unittest.TestCase):
 
 
 class TestTelemetry(unittest.TestCase):
+    def test_malformed_branches_and_empty_input_are_reported(self):
+        """Audit 0.9.6 F10: branches given as a list raised AttributeError; nothing connected read as 'No findings'."""
+        f = common.format_info
+        bad_list = f("x", "compare_sampler", labels=[], files=[], footer="", notes=[], branches=[{"node": "ksampler"}])
+        bad_branch = f("x", "compare_sampler", labels=[], files=[], footer="", notes=[], branches={"A": "not a list"})
+        for info in (bad_list, bad_branch):
+            report, data = telemetry.HaDeSMossSuiteTelemetry().audit("T", info_1=info)["result"][:2]
+            self.assertTrue(any("Compare Sampler" in x["message"] for x in json.loads(data)["findings"]), report)
+        report, _, summary, _ = telemetry.HaDeSMossSuiteTelemetry().audit("T", info_1="no trailer here")["result"]
+        self.assertIn("No data checked", report)
+        self.assertNotIn("No findings", report)
+        self.assertIn("no data checked", summary)
+
     def test_every_trailer_is_known_to_telemetry(self):
         """The Suite's rule: every node writes a HADES_META trailer and Suite Telemetry names it instead of counting it as foreign."""
         import ast

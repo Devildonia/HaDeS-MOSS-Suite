@@ -66,7 +66,25 @@ def check_contents(zip_path):
     for name in sorted(names):
         if name in DEV_FILES or name.startswith(FORBIDDEN_DIRS) or (name.startswith("tools/") and name != "tools/RESULTS.md"):
             errors.append(f"must not ship: {name}")
+    errors += broken_links(names)
     print(f"package: {len(names)} files, {len(expected_py)} node modules, {len(expected_web)} frontend files, {len(expected_examples)} examples")
+    return errors
+
+
+def broken_links(names, docs=("README.md", "CHANGELOG.md")):
+    """Relative links in the shipped docs whose target is not in the package (audit 0.9.6 F13): a link to something the
+    Registry package leaves out must be a full URL to the repository."""
+    import re
+    dirs = {n.rsplit("/", 1)[0] for n in names if "/" in n}
+    errors = []
+    for doc in docs:
+        text = (ROOT / doc).read_text(encoding="utf-8")
+        for target in re.findall(r"\]\(([^)\s]+)\)", text):
+            if target.startswith(("http://", "https://", "#", "mailto:")):
+                continue
+            path = target.split("#", 1)[0].rstrip("/")
+            if path and path not in names and path not in dirs:
+                errors.append(f"{doc}: relative link to {target}, which the package does not contain")
     return errors
 
 

@@ -764,6 +764,7 @@
    "widgets_values": [
     "MOSS/HaDeS_MOSS_lora_%seed%",
     true,
+    true,
     true
    ],
    "properties": {

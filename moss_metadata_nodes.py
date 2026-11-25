@@ -122,15 +122,62 @@ def lora_summary(path, tensors, start):
     return s
 
 
-def model_summary(tensors):
+_QUANT_NAMES = {"asym_w4a8_int8": "W4A8", "w6a8_int8": "W6A8", "float8_e4m3fn": "fp8 e4m3fn", "float8_e5m2": "fp8 e5m2",
+                "nvfp4": "nvfp4", "mxfp8": "mxfp8", "convrot_w4a4": "W4A4 ConvRot"}
+
+
+def quant_formats(path, start, tensors):
+    """{format as a user reads it: weights} from the files' own comfy_quant descriptors (small JSON tensors), read one by one
+    (audit 0.9.6 F04: the reader called an HMS file 'int8 ConvRot' because it guessed from dtypes). An unreadable or
+    unknown descriptor is reported as such, never guessed."""
+    out = Counter()
+    entries = [t for k, t in tensors.items() if k.endswith("comfy_quant") and isinstance(t, dict)]
+    if not entries or path is None:
+        return dict(out)
+    with open(path, "rb") as f:
+        for t in entries:
+            a, b = t.get("data_offsets", (0, 0))
+            if not 0 < b - a <= 4096:
+                out["unreadable descriptor"] += 1
+                continue
+            f.seek(start + a)
+            try:
+                conf = json.loads(f.read(b - a).decode("utf-8"))
+                fmt = str(conf.get("format", "?"))
+            except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+                out["unreadable descriptor"] += 1
+                continue
+            if fmt == "int8_tensorwise":
+                out["int8 ConvRot" if conf.get("convrot") else "int8"] += 1
+            else:
+                out[_QUANT_NAMES.get(fmt, f"unknown format '{fmt}'")] += 1
+    return dict(out.most_common())
+
+
+def model_summary(tensors, path=None, start=0):
     s = tensor_summary(tensors)
     keys = [_strip(k) for k in tensors]
+    quant = quant_formats(path, start, tensors)
     s.update(moss_image=any(k.startswith("shared_block_modulation") for k in keys),
              fused_qkv=any(k.endswith("proj.qkv.weight") for k in keys),
-             # comfy_quant marks any per-tensor format (fp8, nvfp4, int8...); ConvRot int8 files carry int8 weight_scale tensors
-             int8_convrot=any(k.endswith("comfy_quant") for k in keys) and any(t.get("dtype") == "I8" for t in tensors.values() if isinstance(t, dict)),
+             quant=quant, int8_convrot=set(quant) == {"int8 ConvRot"},
              text_embedder_blocks=len({k.split(".")[2] for k in keys if k.startswith("text_embedder.blocks.")}))
     return s
+
+
+def quant_text(s, meta=None):
+    """'not quantized', 'int8 ConvRot (168 weights)', 'HMS v1: W6A8 96 + W4A8 72 weights' ..."""
+    q = s.get("quant") or {}
+    if not q:
+        return "not quantized"
+    hms = ""
+    try:
+        hq = json.loads((meta or {}).get("hades/quantization", "{}"))
+        if isinstance(hq, dict) and hq.get("method") == "HMS":
+            hms = f"HMS v{hq.get('version', '?')}: "
+    except json.JSONDecodeError:
+        pass
+    return hms + " + ".join(f"{k} {n}" for k, n in q.items()) + " weights"
 
 
 def _weights(text):
@@ -356,7 +403,7 @@ def model_report(d):
     lines = ["== Model =="] + _common_lines(d)
     if s["moss_image"]:
         lines.append(f"Measured: MOSS-Image, {len(s['layers'])} layers, {s['elements'] / 1e9:.2f} B parameters | "
-                     f"q/k/v {'fused (proj.qkv)' if s['fused_qkv'] else 'split'} | {'int8 ConvRot' if s['int8_convrot'] else 'not quantized'} | "
+                     f"q/k/v {'fused (proj.qkv)' if s['fused_qkv'] else 'split'} | {quant_text(s, d['metadata'])} | "
                      f"text embedder blocks {s['text_embedder_blocks']}")
     else:
         lines.append(f"Measured: no shared_block_modulation key, so not a MOSS-Image diffusion model ({s['elements'] / 1e9:.2f} B elements)")
@@ -379,7 +426,7 @@ def describe(folder, name, sha256):
         d["tensors"] = lora_summary(path, tensors, start)
         d["recipe"] = recipe(name)
     else:
-        d["tensors"] = model_summary(tensors)
+        d["tensors"] = model_summary(tensors, path, start)
         d["recipe"] = model_recipe(name)
     return d
 
