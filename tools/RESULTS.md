@@ -3077,5 +3077,17 @@ folder kept the same 79 entries through the suite (F15).
 New widget `write_metadata` (MOSS Image Saver, Compare Sheet, Compare Sampler), frontend 1.57.4 on a clean 8189: the HaDeS toggle
 shows in the classic canvas with HaDeS widgets (native widget hidden), the native toggle with the standard-widgets option (styled one
 hidden), and the HaDeS toggle in Nodes 2.0 / Vue; default on in the three. The examples were regenerated (`make_examples.py`), and the
-package server check reports no widget-count error. Not checked: zoom, manual resize and save / reload with the new widget.
+package server check reports no widget-count error.
+
+Follow-up the same day (clean 8189, frontend 1.57.4), `write_metadata` on MOSS Image Saver and Compare Sheet:
+
+| View | Real click | Zoom 60 % / 150 % | Manual resize | Save and reload | 0.9.6 workflow (no value saved) |
+|---|---|---|---|---|---|
+| Classic, HaDeS widgets | toggles off, other switches unchanged | row drawn, OFF readable | row stretches with the node | value and size kept | loads with the default, on |
+| Classic, standard widgets | toggles off | drawn | (see below) | value kept | on |
+| Nodes 2.0 / Vue | toggles off | row drawn, OFF readable | corner drag resizes, rows stretch | value kept | on |
+
+Found on the way, not caused by this change: in the classic canvas with the standard-widgets option a node's manual size is not kept
+on reload (Image Saver 500 x 400 came back 380 x 216, the untouched MOSS Latent 500 x 400 came back 380 x 288); the HaDeS and Vue views
+keep it. Queued as a separate fix.
 

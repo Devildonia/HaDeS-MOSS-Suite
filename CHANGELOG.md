@@ -7,6 +7,8 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.7] - 2026-11-26
+
 ### Fixed
 The 16 findings of the 0.9.6 audit (`docs/AUDIT_0.9.6.md`), each with a regression test:
 - **F04 Quantization named right.** The Metadata Reader reads each tensor's own `comfy_quant` descriptor (an HMS file was called "int8 ConvRot"; now "HMS v1: W6A8 96 + W4A8 72 weights", unknown formats said as such); the MOSS Loader tells W6A8 from W4A8 by the packed width (it said "int8").
