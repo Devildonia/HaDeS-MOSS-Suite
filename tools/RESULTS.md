@@ -3048,3 +3048,19 @@ Clean ComfyUI on port 8189 (`--use-sage-attention`, RTX 5090), `qwen3.5_9b_int8_
   - `portrait_outdoor` (`natural light portrait photograph of a young adult smiling in a public park`, 24 seeds): `v1.0` **10–11 / 24** East Asian faces vs `v2.0` **3–4 / 24**.
   - Combined across the 2 face-visible prompts (48 seeds per LoRA): **`v1.0` 19–22 / 48 (40–46%)** vs **`v2.0` 10–12 / 48 (21–25%)**.
   - `street_man` (24 seeds) and `library_person` (24 seeds): framed from behind / silhouette or hands-only in both LoRAs (0 readable East Asian faces in `street_man`; only `s16` shows a face in `library_person`, Caucasian in both), so those two prompts were non-discriminative for facial ethnicity.
+
+**Blind review on 133 sheets (2026-11-26).** Compare Sheet pairs `v1.0` | `v2.0` on MOSS-Image Base (seed 1200, 8 steps, CFG 1.5,
+euler / simple, 1344 x 1792 and other sizes; portraits, products, food, text and posters, infographics, illustration, anime, comics,
+pixel art; `H:/Comfy_UI_V61/ComfyUI/output/HaDeS/compare/Turbo v1.0 vs 2.0`, `lora_compare_00245_` to `00377_`). Three reviewers:
+
+| Reviewer | Preferred `v2.0` |
+|---|---|
+| HaDeS (maintainer) | 65 % |
+| A second human reviewer | 70 % without ties, 62.5 % counting ties |
+| Claude (labels cropped, sides shuffled with a fixed seed, key opened after voting; no ties allowed) | 57 % (76 of 133) |
+
+Claude's votes by kind of image: text and posters `v2.0` 13 / 15; objects and food 12 / 20; photographic portraits 19 / 35;
+illustration, anime and comics 12 / 25. Many of its votes were near-ties decided by small defects (hands, a warped mug, a stray
+object); its 57 % alone is not conclusive, the text result is. Votes per sheet:
+`I:/HaDeS_MOSS/moss_turbo_runs/dmd512_base_v20/eval/claude_blind_picks_v10_vs_v20.json`.
+
