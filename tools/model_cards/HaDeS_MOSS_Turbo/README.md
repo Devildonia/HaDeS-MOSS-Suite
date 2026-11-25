@@ -102,6 +102,8 @@ ethnicity named) and 2,048 regression pairs; 4,000 updates, released at update 2
 | "photograph of a woman sitting in a café" | 9–11 / 24 | **7–8 / 24** |
 | Both | 19–22 / 48 | **10–12 / 48** |
 
+  ![Turbo 8-steps v2.0, "photograph of a woman sitting in a café", seeds 0-15](images/v20_cafe.jpg)
+
   Lower, not gone: name the appearance in the prompt for anything specific. Two other prompts (a man in the street, a person in a
   library) showed almost no faces with either LoRA, so they say nothing about the bias.
 - **Text:** 19 of 20 exact over five seeds on four text prompts (one faint extra letter), 4 / 4 for v1.0 on the same first seed.
