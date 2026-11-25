@@ -4828,6 +4828,305 @@ async def img2img_video(d: Director):
 img2img_video.prepare = i2i_prepare
 
 
+# ---- hms_v1 (HMS v1: 10 GB to 4 GB in ComfyUI) ----
+
+HMS_LINES = [
+    ("Hi, I'm HaDeS, and welcome to tutorial number eleven.",
+     "Hola, soy HaDeS, y bienvenido al tutorial número once."),
+    ("Today we're talking about HMS v1, the Suite's own quantization format that shrinks any ten-gigabyte MOSS-Image model down to under four gigabytes.",
+     "Hoy hablamos de HMS v1, el formato de cuantización propio de la Suite que reduce cualquier modelo de MOSS-Image de diez gigas a menos de cuatro.",
+     "Today we're talking about HMS version one, the Suite's own quantization format that shrinks any ten-gigabyte MOSS-Image model down to under four gigabytes."),
+    ("It cuts VRAM from nearly eighteen gigabytes to eleven point six, runs more than twice as fast, and loads with ComfyUI's stock diffusion model loader.",
+     "Baja la VRAM de casi dieciocho gigas a once coma seis, corre más del doble de rápido y carga con el cargador estándar de ComfyUI."),
+    ("I'll explain how it works, build the converter workflow from scratch, compare BF16 against HMS v1 live, and give you the honest pros and cons.",
+     "Te explicaré cómo funciona, montaremos el workflow conversor desde cero, compararemos BF16 frente a HMS v1 en directo y veremos sus pros y contras con total honestidad.",
+     "I'll explain how it works, build the converter workflow from scratch, compare BF sixteen against HMS version one live, and give you the honest pros and cons."),
+    ("First, why isn't HMS v1 just naive four-bit quantization? Because naive quantization breaks text and fine details.",
+     "Primero, ¿por qué HMS v1 no es una simple cuantización a cuatro bits? Porque cuantizar a ciegas rompe el texto y el detalle fino.",
+     "First, why isn't HMS version one just naive four-bit quantization? Because naive quantization breaks text and fine details."),
+    ("HMS v1 combines two ideas: mixed precision and calibration.",
+     "HMS v1 combina dos ideas: precisión mixta y calibración.",
+     "HMS version one combines two ideas: mixed precision and calibration."),
+    ("For mixed precision, it puts the heavy feed-forward layers of blocks zero to twenty-nine in four-bit W4A8, while protecting all attention layers and the last twelve blocks in six-bit W6A8.",
+     "En precisión mixta, pone las capas feed-forward de los bloques cero a veintinueve en W4A8 de cuatro bits, mientras protege toda la atención y los últimos doce bloques en W6A8 de seis bits.",
+     "For mixed precision, it puts the heavy feed-forward layers of blocks zero to twenty-nine in four-bit W four A eight, while protecting all attention layers and the last twelve blocks in six-bit W six A eight."),
+    ("And for calibration, it doesn't just round weights blindly: it runs seven fixed prompts — scenes and quoted text — through your exact model using GPTQ in the ConvRot basis, adapting the quantization to how that model actually behaves.",
+     "Y en calibración, no redondea pesos a ciegas: pasa siete prompts fijos — escenas y texto entrecomillado — por tu modelo exacto usando GPTQ en la base ConvRot, adaptando la cuantización a cómo se comporta realmente ese modelo."),
+    ("Everything uses ComfyUI's native kernels, so you don't need any custom loader to run the resulting file.",
+     "Todo usa los kernels nativos de ComfyUI, así que no necesitas ningún cargador especial para ejecutar el archivo resultante."),
+    ("Let's build the converter workflow from zero. It only needs three nodes.",
+     "Montemos el workflow conversor desde cero. Solo necesita tres nodos."),
+    ("First, MOSS Loader with the BF16 model you want to compress — or you can plug in a merge straight from MOSS Model Block Merger.",
+     "Primero, MOSS Loader con el modelo BF16 que quieres comprimir — o puedes conectar un merge directamente desde el MOSS Model Block Merger.",
+     "First, MOSS Loader with the BF sixteen model you want to compress — or you can plug in a merge straight from MOSS Model Block Merger."),
+    ("Next, MOSS Model Saver. Set precision to \"HMS v1 (W4A8 / W6A8, calibrated)\".",
+     "Después, MOSS Model Saver. Pon la precisión en \"HMS v1 (W4A8 / W6A8, calibrated)\".",
+     "Next, MOSS Model Saver. Set precision to HMS version one calibrated."),
+    ("Because HMS v1 calibrates on the model itself, you must connect CLIP from the loader to the saver's clip input.",
+     "Como HMS v1 calibra sobre el propio modelo, es obligatorio conectar CLIP del loader a la entrada clip del saver.",
+     "Because HMS version one calibrates on the model itself, you must connect CLIP from the loader to the saver's clip input."),
+    ("You can also plug the loader's info into recipe so the saved file remembers how it was made.",
+     "También puedes conectar el info del loader a recipe para que el archivo guardado recuerde cómo se fabricó."),
+    ("Down here, match the calibration settings to your model: twenty-five steps at CFG two point five with er_sde for Base or SFT, eight steps at CFG one with euler for a Turbo model, or fifteen steps for Bulle d'Encre.",
+     "Aquí abajo, ajusta la calibración a tu modelo: veinticinco pasos a CFG dos coma cinco con er_sde para Base o SFT, ocho pasos a CFG uno con euler para un modelo Turbo, o quince pasos para Bulle d'Encre."),
+    ("Connect a Preview Any to info, press Run, and it saves a three point nine six gigabyte safetensors file in your output diffusion models folder.",
+     "Conecta un Preview Any a info, pulsa Run, y guardará un safetensors de tres coma noventa y seis gigas en tu carpeta de salida diffusion_models."),
+    ("Converting takes eight to ten minutes, so instead of watching a progress bar, let's compare my converted Base HMS v1 file live against the original BF16.",
+     "Convertir tarda entre ocho y diez minutos, así que en lugar de mirar una barra de progreso, vamos a comparar en directo mi Base HMS v1 convertido frente al BF16 original.",
+     "Converting takes eight to ten minutes, so instead of watching a progress bar, let's compare my converted Base HMS version one file live against the original BF sixteen."),
+    ("I load both files with ComfyUI's stock Load Diffusion Model node: ten point two gigabytes on the left, three point nine six gigabytes on the right.",
+     "Cargo ambos archivos con el nodo estándar Load Diffusion Model de ComfyUI: diez coma dos gigas a la izquierda, tres coma noventa y seis gigas a la derecha."),
+    ("I wire both into MOSS Compare Sampler with a harbor sign prompt containing quoted text: \"HARBOR COFFEE\" and \"OPEN DAILY\".",
+     "Conecto ambos al MOSS Compare Sampler con un prompt de cartel con texto entrecomillado: \"HARBOR COFFEE\" y \"OPEN DAILY\"."),
+    ("Let's run it at twenty-five steps.",
+     "Vamos a lanzarlo a veinticinco pasos."),
+    ("Look at that sheet: every single letter is spelled right in both, and the lighting, brick texture and wood grain match.",
+     "Mira esa hoja: todas las letras están bien escritas en ambos, y la iluminación, la textura del ladrillo y la veta de la madera encajan."),
+    ("In single-model runs here on my RTX 5090, BF16 takes thirteen point eight seconds, while HMS v1 finishes in six point two seconds — over twice as fast.",
+     "En ejecuciones individuales aquí en mi RTX 5090, BF16 tarda trece coma ocho segundos, mientras que HMS v1 termina en seis coma dos segundos — más del doble de rápido.",
+     "In single-model runs here on my RTX fifty ninety, BF sixteen takes thirteen point eight seconds, while HMS version one finishes in six point two seconds — over twice as fast."),
+    ("And on our fisherman, both versions look practically identical, with a mean pixel difference of only eight to nine out of two hundred fifty-five.",
+     "Y en nuestro pescador, ambas versiones se ven prácticamente idénticas, con una diferencia media de solo ocho o nueve sobre doscientos cincuenta y cinco."),
+    ("So what are the pros and cons of HMS v1?",
+     "Entonces, ¿cuáles son los pros y los contras de HMS v1?",
+     "So what are the pros and cons of HMS version one?"),
+    ("Pros: sixty-one percent smaller on disk, eleven point six gigabytes of peak VRAM instead of seventeen point eight, more than twice as fast, native ComfyUI support, and text accuracy that matches BF16.",
+     "Pros: un sesenta y uno por ciento menos en disco, once coma seis gigas de pico de VRAM en lugar de diecisiete coma ocho, más del doble de rápido, soporte nativo en ComfyUI y precisión de texto a la altura de BF16.",
+     "Pros: sixty-one percent smaller on disk, eleven point six gigabytes of peak VRAM instead of seventeen point eight, more than twice as fast, native ComfyUI support, and text accuracy that matches BF sixteen."),
+    ("Cons: converting takes eight to ten minutes and peaks around twenty-five gigabytes of VRAM during calibration, it only accepts BF16 or FP16 inputs, and on complex merges you should always compare the HMS file against its BF16 original for slight brightness shifts.",
+     "Contras: convertir tarda de ocho a diez minutos y alcanza unos veinticinco gigas de pico de VRAM durante la calibración, solo acepta entradas en BF16 o FP16, y en merges complejos conviene comparar siempre el archivo HMS frente a su original en BF16 por si hay ligeros cambios de brillo.",
+     "Cons: converting takes eight to ten minutes and peaks around twenty-five gigabytes of VRAM during calibration, it only accepts BF sixteen or FP sixteen inputs, and on complex merges you should always compare the HMS file against its BF sixteen original for slight brightness shifts."),
+    ("Think of HMS v1 as a practical alternative if you want to save VRAM or just try MOSS-Image on smaller hardware — it's never going to beat the full BF16 models if you have the memory for them.",
+     "Piensa en HMS v1 como una alternativa práctica si quieres ahorrar VRAM o simplemente probar MOSS-Image en equipos más modestos — nunca va a rivalizar con los modelos completos en BF16 si tienes memoria para ellos.",
+     "Think of HMS version one as a practical alternative if you want to save VRAM or just try MOSS-Image on smaller hardware — it's never going to beat the full BF sixteen models if you have the memory for them."),
+    ("And if you don't want to convert them yourself, Base and SFT are already published in HMS v1 on my Hugging Face and on Civitai.",
+     "Y si no quieres convertirlos tú mismo, Base y SFT ya están publicados en HMS v1 en mi Hugging Face y en Civitai.",
+     "And if you don't want to convert them yourself, Base and SFT are already published in HMS version one on my Hugging Face and on Civitai."),
+    ("You can download this HMS v1 converter workflow for free from the description.",
+     "Puedes descargar gratis este workflow conversor a HMS v1 desde la descripción.",
+     "You can download this HMS version one converter workflow for free from the description."),
+    ("If you've made it to the end and enjoyed the video, and you'd like to see more content like this, leave a like and subscribe. It's free!",
+     "Si has llegado hasta el final del vídeo, te ha gustado y quieres ver más contenido de este tipo, dale un buen like y suscríbete. ¡Es gratis!"),
+    ("Thanks for watching, and see you in the next one.",
+     "Gracias por verlo, y nos vemos en el próximo."),
+]
+
+HMS_BF16 = "mossImage_base_bf16.safetensors"
+HMS_FILE = "MOSS-Image_Base_HMS_v1.safetensors"
+HMS_SIGN_PROMPT = (
+    "Photograph of a rustic wooden harbor café sign reading \"HARBOR COFFEE\" and \"OPEN DAILY\", "
+    "hanging beside a weathered brick wall in warm morning sunlight."
+)
+HMS_POS = {
+    "loader": (0, 0),
+    "saver": (460, 0),
+    "info_prev": (940, 0),
+    "unet_a": (0, 620),
+    "unet_b": (0, 800),
+    "clip": (0, 980),
+    "vae": (0, 1140),
+    "enhancer": (460, 620),
+    "latent": (940, 620),
+    "cmp": (1400, 620),
+}
+HMS_BOX = [-60, -60, 1980, 1300]
+
+
+def hms_arch_card():
+    return (
+        '<div style="background:#14151a;border:2px solid #2b2d38;border-radius:16px;padding:38px 46px;max-width:1160px;color:#fff;font-family:Segoe UI,sans-serif">'
+        '<div style="font:900 44px Segoe UI Black,sans-serif;margin-bottom:22px">How <span style="color:#ffcc33">HMS v1</span> works (3.96 GB)</div>'
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:28px">'
+        '<div style="background:#1c1e26;border-radius:12px;padding:24px;border-left:6px solid #ffcc33">'
+        '<div style="font:800 26px Segoe UI,sans-serif;color:#ffcc33;margin-bottom:10px">1. Mixed Precision (ffn30)</div>'
+        '<div style="font:400 21px Segoe UI,sans-serif;line-height:1.45;color:#d8dae2">'
+        '• Blocks 0–29 FFN → <b>W4A8</b> (4-bit)<br>'
+        '• Blocks 30–41 FFN → <b>W6A8</b> (6-bit, detail &amp; text)<br>'
+        '• All 42 Attention layers → <b>W6A8</b> (6-bit)<br>'
+        '• Native ComfyUI / comfy-kitchen kernels</div></div>'
+        '<div style="background:#1c1e26;border-radius:12px;padding:24px;border-left:6px solid #7ee787">'
+        '<div style="font:800 26px Segoe UI,sans-serif;color:#7ee787;margin-bottom:10px">2. Calibrated (C1 + GPTQ)</div>'
+        '<div style="font:400 21px Segoe UI,sans-serif;line-height:1.45;color:#d8dae2">'
+        '• Runs <b>7 fixed prompts</b> (4 scenes + 3 quoted texts)<br>'
+        '• Adapts quantization in the <b>ConvRot</b> basis<br>'
+        '• Uses the model\'s own activations<br>'
+        '• Stock <b>Load Diffusion Model</b> (no custom loader)</div></div>'
+        '</div></div>'
+    )
+
+
+def hms_pros_cons_card():
+    return (
+        '<div style="background:#14151a;border:2px solid #2b2d38;border-radius:16px;padding:36px 44px;max-width:1200px;color:#fff;font-family:Segoe UI,sans-serif">'
+        '<div style="font:900 44px Segoe UI Black,sans-serif;margin-bottom:22px"><span style="color:#ffcc33">HMS v1</span>: Honest Pros &amp; Cons</div>'
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:28px">'
+        '<div style="background:#17221b;border-radius:12px;padding:24px;border-left:6px solid #7ee787">'
+        '<div style="font:800 26px Segoe UI,sans-serif;color:#7ee787;margin-bottom:10px">Pros</div>'
+        '<div style="font:400 21px Segoe UI,sans-serif;line-height:1.5;color:#d8dae2">'
+        '• <b>3.96 GB</b> on disk (vs 10.2 GB BF16, −61%)<br>'
+        '• <b>11.6 GB</b> peak VRAM (vs 17.8 GB BF16)<br>'
+        '• <b>2.2× faster</b> (6.2 s vs 13.8 s at 25 steps)<br>'
+        '• Text &amp; quality match BF16 closely<br>'
+        '• Native ComfyUI loader</div></div>'
+        '<div style="background:#24191b;border-radius:12px;padding:24px;border-left:6px solid #ff7b72">'
+        '<div style="font:800 26px Segoe UI,sans-serif;color:#ff7b72;margin-bottom:10px">Cons &amp; Limits</div>'
+        '<div style="font:400 21px Segoe UI,sans-serif;line-height:1.5;color:#d8dae2">'
+        '• Conversion takes <b>8–10 min</b> (RTX 5090)<br>'
+        '• Needs <b>~25 GB VRAM</b> during calibration<br>'
+        '• BF16 / FP16 source models only<br>'
+        '• Check complex merges vs BF16 for luma drift<br>'
+        '• Alternative for VRAM savings — never replaces BF16</div></div>'
+        '</div></div>'
+    )
+
+
+async def hms_prepare(page):
+    """Off camera: load BF16, HMS v1, CLIP and VAE so the live Compare Sampler run is warm."""
+    g = {
+        "1": {"class_type": "UNETLoader", "inputs": {"unet_name": HMS_BF16, "weight_dtype": "default"}},
+        "2": {"class_type": "UNETLoader", "inputs": {"unet_name": HMS_FILE, "weight_dtype": "default"}},
+        "3": {"class_type": "CLIPLoader", "inputs": {"clip_name": BASIC_LOADER["clip_name"], "type": "moss_image", "device": "default"}},
+        "4": {"class_type": "VAELoader", "inputs": {"vae_name": BASIC_LOADER["vae_name"]}},
+        "5": {"class_type": "HaDeSMossPromptEnhancer", "inputs": {
+            "clip": ["3", 0], "idea": "a harbor", "mode": "as written", "width": 1024, "height": 1024,
+            "temperature": 0.7, "seed": 1, "max_tokens": 1024, "negative": "worst quality, low quality"}},
+        "6": {"class_type": "HaDeSMossLatent", "inputs": {
+            "aspect_ratio": "1:1", "megapixels": 1.0, "custom_width": 1024, "custom_height": 1024, "batch_size": 1, "seed": 7}},
+        "7": {"class_type": "HaDeSMossCompareSampler", "inputs": {
+            "model_A": ["1", 0], "model_B": ["2", 0], "positive": ["5", 0], "negative": ["5", 1],
+            "latent_image": ["6", 0], "vae": ["4", 0], "seed": 7, "steps": 4, "cfg": 2.5,
+            "sampler_name": "er_sde", "scheduler": "simple", "flow_shift": 0.0, "slg": "off",
+            "label_A": "BF16", "label_B": "HMS", "blind": False, "blind_seed": 0, "footer": False,
+            "save": False, "embed_workflow": False, "filename_prefix": "MOSS/warmup_hms"}},
+    }
+    print("warm-up run:", await page.evaluate(UP_WARM_JS, g), flush=True)
+
+
+async def hms_v1_video(d: Director):
+    """Tutorial #11: HMS v1 conversion from scratch, live BF16 vs HMS v1 comparison, and honest pros & cons."""
+    P = HMS_POS
+    await d.camera({"box": HMS_BOX}, 10, pad=60, top=60)
+    await d.move(W * 0.62, H * 0.55)
+
+    # 1. introduction
+    d.title("HaDeS MOSS Suite", "HMS v1: 10 GB to 4 GB in ComfyUI", 7.0)
+    for i in range(4):
+        await d.say(i)
+
+    # 2. how HMS v1 works
+    await d.js("(h) => window.__hv.show(h)", hms_arch_card())
+    for i in range(4, 9):
+        await d.say(i)
+    await d.js("() => window.__hv.hide()")
+
+    # 3. converter workflow from scratch
+    await d.camera({"box": [-60, -60, 1460, 560]}, 900, pad=60, top=60)
+    await d.say(9)
+    loader = await basic_add(d, "HaDeSMossLoader", "MOSS Loader", P["loader"])
+    await up_set(d, loader, BASIC_LOADER)
+    await d.say(10)
+
+    saver_m = await basic_add(d, "HaDeSMossModelSaver", "MOSS Model Saver", P["saver"])
+    await up_set(d, saver_m, {"precision": "HMS v1 (W4A8 / W6A8, calibrated)", "filename_prefix": "diffusion_models/MOSS_Base_HMS_v1"})
+    await basic_link(d, loader, "MODEL", saver_m, "model", 700)
+    await d.camera([saver_m], 900, pad=180, top=60)
+    await d.say(11)
+
+    await d.camera([loader, saver_m], 900, pad=80, top=60)
+    await d.say(12)
+    await basic_link(d, loader, "CLIP", saver_m, "clip", 700)
+    await d.say(13)
+    await basic_link(d, loader, "info", saver_m, "recipe", 700)
+
+    await d.camera([saver_m], 900, pad=160, top=60)
+    await d.say(14)
+    await basic_point(d, saver_m, "hms_steps")
+    await d.hold(0.4)
+    await basic_point(d, saver_m, "hms_cfg")
+
+    await d.camera({"box": [-60, -60, 1460, 560]}, 900, pad=60, top=60)
+    await d.say(15)
+    info_prev = await basic_add(d, "PreviewAny", "Preview as Text", P["info_prev"])
+    await d.js("(id) => { const n = window.__hv.node(id); n.setSize([380, 320]); n.setDirtyCanvas(true, true); }", info_prev)
+    await basic_link(d, saver_m, "info", info_prev, "source", 700)
+
+    # 4. live comparison: BF16 vs HMS v1
+    await d.camera({"box": [-60, 560, 1980, 1300]}, 900, pad=60, top=60)
+    await d.say(16)
+    async with d.fast(5.0):
+        unet_a = await basic_add(d, "UNETLoader", "Load Diffusion Model", P["unet_a"])
+        await up_set(d, unet_a, {"unet_name": HMS_BF16, "weight_dtype": "default"})
+        unet_b = await basic_add(d, "UNETLoader", "Load Diffusion Model", P["unet_b"])
+        await up_set(d, unet_b, {"unet_name": HMS_FILE, "weight_dtype": "default"})
+        clip_n = await basic_add(d, "CLIPLoader", "Load CLIP", P["clip"])
+        await up_set(d, clip_n, {"clip_name": BASIC_LOADER["clip_name"], "type": "moss_image", "device": "default"})
+        vae_n = await basic_add(d, "VAELoader", "Load VAE", P["vae"])
+        await up_set(d, vae_n, {"vae_name": BASIC_LOADER["vae_name"]})
+    await d.say(17)
+
+    enh = await basic_add(d, "HaDeSMossPromptEnhancer", "MOSS Prompt Enhancer", P["enhancer"])
+    await basic_link(d, clip_n, "CLIP", enh, "clip", 650)
+    await basic_point(d, enh, "mode", {"mode": "as written"})
+    box = await d.js("""(id) => { const w = window.__hv.widget(id, 'idea'); w.value = ''; if (w.element) w.element.value = '';
+        const r = w.element.getBoundingClientRect(); return [r.left, r.top]; }""", enh)
+    await d.click(box[0] + 40, box[1] + 30)
+    if not await d.js("() => document.activeElement?.tagName === 'TEXTAREA'"):
+        raise SystemExit("the prompt box is not focused; nothing typed")
+    async with d.fast(2.0):
+        await d.page.keyboard.type(HMS_SIGN_PROMPT, delay=10)
+
+    latent = await basic_add(d, "HaDeSMossLatent", "MOSS Latent", P["latent"])
+    await up_set(d, latent, {"aspect_ratio": "1:1", "megapixels": 1.0, "seed": BASIC_SEED, "control_after_generate": "fixed"})
+
+    cmp = await basic_add(d, "HaDeSMossCompareSampler", "MOSS Compare Sampler", P["cmp"])
+    await up_set(d, cmp, {"steps": 25, "cfg": 2.5, "sampler_name": "er_sde", "scheduler": "simple",
+                           "label_A": "BF16 (10.2 GB)", "label_B": "HMS v1 (3.96 GB)", "save": True, "embed_workflow": False})
+    await d.say(18)
+    async with d.fast(5.0):
+        for a, out, inp in ((unet_a, "MODEL", "model_A"), (unet_b, "MODEL", "model_B"), (enh, "positive", "positive"),
+                            (enh, "negative", "negative"), (latent, "latent", "latent_image"), (latent, "seed", "seed"), (vae_n, "VAE", "vae")):
+            await basic_link(d, a, out, cmp, inp, 600)
+
+    await d.say(19)
+    await d.js("(id) => { const n = window.__hv.node(id); n.mode = 2; window.__hv.app().graph.setDirtyCanvas(true, true); }", saver_m)
+    url_cmp, _ = await basic_run(d, cmp)
+    await d.camera([cmp], 900, pad=120, top=60)
+    await d.say(20)
+    await d.js("(h) => window.__hv.show(h)", f'<div style="text-align:center"><img src="{url_cmp}" style="height:780px;border-radius:8px"></div>')
+    await d.say(21)
+    fish_cmp = Path(r"I:\HaDeS_MOSS\videos\comfy_output\hms_measure\cmp_fish_00001_.png")
+    if fish_cmp.exists():
+        fu = "data:image/png;base64," + base64.b64encode(fish_cmp.read_bytes()).decode()
+        await d.js("(h) => window.__hv.show(h)", f'<div style="text-align:center"><img src="{fu}" style="height:780px;border-radius:8px"></div>')
+    await d.say(22)
+    await d.js("() => window.__hv.hide()")
+
+    # 5. pros & cons
+    await d.js("(h) => window.__hv.show(h)", hms_pros_cons_card())
+    for i in range(23, 28):
+        await d.say(i)
+    await d.js("() => window.__hv.hide()")
+
+    # 6. closing
+    await d.camera({"box": HMS_BOX}, 1200, pad=60, top=60)
+    await d.js("(h) => window.__hv.show(h)",
+               '<div style="color:#fff;text-align:center;max-width:1200px">'
+               '<div style="font:600 30px Segoe UI,sans-serif;color:#c9c9d1">Free download (link in the description)</div>'
+               '<div style="font:700 44px Segoe UI,sans-serif;margin-top:22px">HaDeS MOSS Suite - HMS v1 Converter.json</div></div>')
+    await d.say(28)
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }",
+               f'<div style="display:flex;align-items:center;gap:80px;margin-top:40px"><img src="{url_cmp}" style="height:720px;border-radius:6px">'
+               '<div style="color:#fff;max-width:600px"><div style="font:900 72px Segoe UI Black,sans-serif;line-height:1.05">HaDeS MOSS Suite</div>'
+               '<div style="font:600 34px Segoe UI,sans-serif;color:#ffcc33;margin-top:22px">HMS v1: 10 GB to 4 GB in ComfyUI</div>'
+               '<div style="font:400 26px Segoe UI,sans-serif;color:#c9c9d1;margin-top:44px">Workflow, Suite and models: links in the description</div></div></div>')
+    await d.say(29)
+    await d.say(30)
+    await d.end(1.5)
+
+
+hms_v1_video.prepare = hms_prepare
+
+
 SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "layout_test": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_test, LAYOUT_TEST_LINES),
           "layout_sentence": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_sentence, LAYOUT_SENTENCE_LINES),
@@ -4841,7 +5140,8 @@ SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "compare": (None, compare_video, CM_LINES),
           "layout_text": (None, layout_text, L8_LINES),
           "controlnet": (None, controlnet_video, CN_LINES),
-          "img2img": (None, img2img_video, I2I_LINES)}
+          "img2img": (None, img2img_video, I2I_LINES),
+          "hms_v1": (None, hms_v1_video, HMS_LINES)}
 
 # spoken forms where the written caption reads badly aloud
 SPOKEN = {"DRAFT LAYOUT": "Draft layout"}

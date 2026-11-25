@@ -8,6 +8,9 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **HMS v1 Converter example**, for the eleventh video tutorial: `MOSS Loader` → `MOSS Model Saver` (`HMS v1 (W4A8 / W6A8, calibrated)` with `clip` and `recipe` wired) and `PreviewAny`. Live comparison measured on RTX 5090 (`tools/RESULTS.md`, "HMS v1 vs BF16 live comparison on Base"): 25 steps `er_sde / simple`, `BF16` 13.83 s vs `HMS v1` 6.23 s (2.22× faster), fisherman MAE 8–9 / 255, `"HARBOR COFFEE"` / `"OPEN DAILY"` spelled right in both.
+
+### Added
 - **Img2Img example**, for the tenth video tutorial: `Load Image` → `VAE Encode` → `MOSS KSampler` (Base + Turbo 8-steps v1.0, 8 steps, CFG 1) with `denoise_mode: exact` at `denoise 0.9` (`start_sigma 0.978`), `Suite Telemetry` and `MOSS Image Saver`. Measured on the tutorial fisherman (`tools/RESULTS.md`, "Img2Img: `denoise_mode` `core` vs `exact` on the tutorial fisherman"): `core` at `0.9` starts at `1.0000` (pure noise, MAE 78.3–87.0) and replaces the composition, whereas `exact` starts at `0.9783` (MAE 59.3–72.1, 3.18 s) and keeps the centered subject.
 
 ### Changed

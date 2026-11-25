@@ -2983,3 +2983,11 @@ Clean ComfyUI on port 8189 (`--use-sage-attention`, RTX 5090), `mossImage_base_b
 | 0.9 | **1.0000** | 3.13 | 78.32 / 85.75 / 87.03 (ignores input) | **0.9783** | 3.18 | 59.33 / 72.05 / 62.48 (keeps centered subject) |
 
 - Consistent with `MOSS KSampler denoise_mode: core against exact on img2img` (2026-11-12): up to `0.8`, both modes preserve the fisherman in the foreground (adding the glowing lantern and storm clouds at `0.8`). At `0.9`, `core` starts at `1.0000` (pure noise, MAE 78.3–87.0) and replaces the composition with a distant figure, whereas `exact` starts at `0.9783` and keeps the centered fisherman on the dock with the lantern and night sky.
+
+## HMS v1 vs BF16 live comparison on Base (2026-11-25, for the eleventh video tutorial)
+
+Clean ComfyUI on port 8189 (`--use-sage-attention`, RTX 5090), `qwen3.5_9b_int8_convrot`, `flux2-vae`, 1024 x 1024, 25 steps, CFG 2.5, `er_sde / simple`, seed 1013–1014. Compared `mossImage_base_bf16.safetensors` (`10.2 GB`) against `MOSS-Image_Base_HMS_v1.safetensors` (`3.96 GB`, `3,955,670,084 B`) through `UNETLoader` and `MOSS Compare Sampler`. Scripts and sheets in `I:/HaDeS_MOSS/videos/hms_v1/measure`.
+
+- **Single-model sampling times** (warm runs, seeds 1013 / 1014): `BF16` **13.83 s / 13.83 s**; `HMS v1` **6.22 s / 6.24 s** (**2.22× faster**).
+- **Fisherman similarity** (`MAE / 255` at 512 x 512 between BF16 and HMS v1): **9.0** (seed 1013) and **8.0** (seed 1014).
+- **Compare Sampler sheets** (both models in one node, seed 1013): fisherman `21.00 s`; harbor sign (`"HARBOR COFFEE"` / `"OPEN DAILY"`) `21.64 s`, every word spelled right in both `BF16` and `HMS v1`.

@@ -590,6 +590,28 @@ EXAMPLES["HaDeS MOSS Suite - Img2Img"] = {
                 "load": (0, 500), "turbo": (1400, 540), "tel": (1860, 520), "report": (2300, 520)},
 }
 
+EXAMPLES["HaDeS MOSS Suite - HMS v1 Converter"] = {
+    # the eleventh video tutorial (tools/moss_video.py hms_v1): convert any BF16 MOSS-Image model or merge to ~3.96 GB HMS v1
+    **loader(BASE),
+    "saver": ("HaDeSMossModelSaver", {"model": ("load", 0), "clip": ("load", 1), "recipe": ("load", 3),
+                                      "filename_prefix": "diffusion_models/MOSS_Base_HMS_v1",
+                                      "precision": "HMS v1 (W4A8 / W6A8, calibrated)", "include_metadata": True,
+                                      "hms_steps": 25, "hms_cfg": 2.5, "hms_sampler": "er_sde", "hms_scheduler": "simple"}),
+    "info_prev": ("PreviewAny", {"source": ("saver", 2)}),
+    "note": ("Note", {"text": "HaDeS MOSS Suite - HMS v1 Converter (the eleventh video tutorial)\n\n"
+                              "1. Load any BF16 / FP16 MOSS-Image model in MOSS Loader (or connect a merge from Block Merger).\n"
+                              "2. Connect clip (mandatory: HMS v1 calibrates C1 + GPTQ on 7 fixed prompts through your model)\n"
+                              "   and optionally info -> recipe.\n"
+                              "3. Match hms_steps / hms_cfg / hms_sampler to your model:\n"
+                              "   - Base / SFT: 25 steps, CFG 2.5, er_sde / simple\n"
+                              "   - Turbo models: 8 steps, CFG 1.0, euler / simple\n"
+                              "   - Bulle d'Encre: 15 steps, CFG 2.5, euler / simple\n"
+                              "4. Output: ~3.96 GB safetensors in ComfyUI/output/diffusion_models, loadable with stock Load Diffusion Model.\n"
+                              "   On RTX 5090: conversion takes 8-10 min (~25 GB VRAM peak); inference uses ~11.6 GB VRAM and is ~2x faster.\n"
+                              "   Note: HMS v1 is a practical alternative to save VRAM; it never replaces full BF16 if you have the memory."}),
+    "_layout": {"note": (0, -480), "load": (0, 0), "saver": (460, 0), "info_prev": (940, 0)},
+}
+
 DEV_EXAMPLE_TITLES = {"HaDeS MOSS Suite - Dev Tools", "HaDeS MOSS Suite - Stage Metadata (Dev)"}
 
 
