@@ -669,16 +669,36 @@ export function applyNodeFrameStyle(node) {
     if (isNodeClassicUI(node)) {
         setTimeout(() => {
             setNodeClassicUI(node, true);
+            keepLoadedSize(node); // the node came from a workflow: its saved size wins over the minimum
         }, 1);
     }
 
+    // which view the node was saved in, so a reload can tell a size the user chose in the standard view from the taller
+    // size of the HaDeS style
+    const origOnSerialize = node.onSerialize;
+    node.onSerialize = function (o) {
+        if (typeof origOnSerialize === "function") origOnSerialize.apply(this, arguments);
+        if (o) o.hades_view = isNodeClassicUI(this) ? "standard" : "hades";
+    };
     const origOnConfigure = node.onConfigure;
-    node.onConfigure = function () {
+    node.onConfigure = function (info) {
         if (typeof origOnConfigure === "function") origOnConfigure.apply(this, arguments);
         if (isNodeClassicUI(this)) {
+            // a reload in the standard-widgets view shrank every node to its minimum, losing the size the user gave it
+            this._hadesLoadedSize = info?.hades_view === "standard" && this.size ? [this.size[0], this.size[1]] : null;
             setNodeClassicUI(this, true);
+            keepLoadedSize(this);
         }
     };
+}
+
+// The size saved in the workflow by the standard-widgets view, kept when it is larger than what the widgets need. A node saved in
+// the HaDeS style (taller) that is reloaded in the standard view still shrinks to fit, as a style switch does.
+export function keepLoadedSize(node) {
+    const saved = node?._hadesLoadedSize;
+    if (!saved || !node.size) return;
+    const [w, h] = node.size;
+    if (saved[0] > w || saved[1] > h) node.setSize([Math.max(saved[0], w), Math.max(saved[1], h)]);
 }
 
 // =============================================================================

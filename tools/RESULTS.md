@@ -3087,7 +3087,19 @@ Follow-up the same day (clean 8189, frontend 1.57.4), `write_metadata` on MOSS I
 | Classic, standard widgets | toggles off | drawn | (see below) | value kept | on |
 | Nodes 2.0 / Vue | toggles off | row drawn, OFF readable | corner drag resizes, rows stretch | value kept | on |
 
-Found on the way, not caused by this change: in the classic canvas with the standard-widgets option a node's manual size is not kept
-on reload (Image Saver 500 x 400 came back 380 x 216, the untouched MOSS Latent 500 x 400 came back 380 x 288); the HaDeS and Vue views
-keep it. Queued as a separate fix.
+Found on the way, not caused by this change: in the standard-widgets view a node's manual size was not kept on reload (Image Saver
+500 x 400 came back 380 x 216, the untouched MOSS Latent 500 x 400 came back 380 x 288): loading re-applied the standard style, which
+shrinks a node to its minimum. Fixed in 0.9.7: each Suite node records in the workflow the view it was saved in (`hades_view`), and a
+node saved in the standard view keeps its saved size when it is larger than the minimum. Save and reload of Image Saver and MOSS Latent
+at 500 x 520 (clean 8189, frontend 1.57.4):
+
+| Saved in -> loaded in | Size after reload |
+|---|---|
+| standard -> standard (classic canvas) | 500 x 520 (was 380 x 216 / 380 x 288) |
+| standard -> standard (Nodes 2.0) | 500 x 520 |
+| HaDeS -> HaDeS, Vue -> Vue | 500 x 520 (unchanged) |
+| HaDeS, taller -> standard | shrinks to fit, 380 x 216 / 380 x 288 (as before: no empty space) |
+| standard -> HaDeS | 500 x 520 |
+
+Workflows saved before 0.9.7 carry no `hades_view` and load as before.
 

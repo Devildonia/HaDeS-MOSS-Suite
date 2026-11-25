@@ -146,3 +146,17 @@ test("Nodes 2.0: a styled row carries its backing input's slot key, so a dropped
     context.markVueDropTarget(canvasEl, node, { name: "gone" }); // no input behind the row: no marker
     assert.equal(row.children.length, 0);
 });
+
+test("a size saved in the standard view survives a reload; a taller HaDeS size does not grow a standard node", () => {
+    const { context } = setup();
+    const node = (size, loaded) => ({ size: [...size], _hadesLoadedSize: loaded, setSize(s) { this.size = [...s]; } });
+    const big = node([380, 216], [500, 400]);
+    context.keepLoadedSize(big);
+    assert.deepEqual(big.size, [500, 400]);
+    const small = node([380, 216], [300, 100]);  // smaller than the widgets need: the minimum wins
+    context.keepLoadedSize(small);
+    assert.deepEqual(small.size, [380, 216]);
+    const hadesSaved = node([380, 216], null);  // saved in the HaDeS style: no size to keep
+    context.keepLoadedSize(hadesSaved);
+    assert.deepEqual(hadesSaved.size, [380, 216]);
+});
