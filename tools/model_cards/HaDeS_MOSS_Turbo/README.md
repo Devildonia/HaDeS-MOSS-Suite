@@ -17,6 +17,7 @@ tags:
 # HaDeS MOSS Turbo
 
 Few-step LoRAs for MOSS-Image, all at CFG 1 instead of 25 steps at CFG 2.5:
+- **Turbo 8-steps v2.0**, the newest, for **MOSS-Image Base** at 8 steps;
 - **Turbo 8-steps v1.0** for **MOSS-Image Base** at 8 steps;
 - **Turbo 8-steps SFT v1.0** for **MOSS-Image SFT** at 8 steps;
 - three earlier LoRAs for **MOSS-Image SFT**, two at 4 steps and one at 8 steps.
@@ -27,14 +28,18 @@ Each file is about **3.5 MB** (rank 2, layers 24–41 only), trained from zero o
 
 | File | What it is for |
 |---|---|
+| `HaDeS-MOSS-Turbo-8steps-v2.0.safetensors` | **New.** For MOSS-Image Base at 8 steps. Trained on twice the prompts of v1.0. In a blind review it beat v1.0 with fewer errors, and on two neutral prompts it showed about half the East Asian faces of v1.0 (10–12 of 48 against 19–22) |
 | `HaDeS-MOSS-Turbo-8steps-v1.0.safetensors` | For MOSS-Image Base at 8 steps. Trained against the appearance bias of the earlier turbos: on a neutral prompt about 8 of 16 East Asian faces, against about 11-12 for our previous 8-step turbo on Base. Lighter and less saturated at CFG 1; CFG 1.5 gives more contrast and colour |
-| `HaDeS-MOSS-Turbo-8steps-sft-v1.0.safetensors` | **New.** For MOSS-Image SFT at 8 steps. Trained from scratch on SFT with the v1.0 recipe. In matched tests on SFT it gives deeper shadows and more saturated colour than the LoRA trained on Base |
+| `HaDeS-MOSS-Turbo-8steps-sft-v1.0.safetensors` | For MOSS-Image SFT at 8 steps. Trained from scratch on SFT with the v1.0 recipe. In matched tests on SFT it gives deeper shadows and more saturated colour than the LoRA trained on Base |
 | `HaDeS-MOSS-Turbo-v0.6.safetensors` | The most robust on text: layout JSON 6 / 6, a 16:9 three-line poster 3 / 3 |
 | `HaDeS-MOSS-Turbo-Diverse-v0.6.safetensors` | Keeps more of SFT's own spread on open prompts (faces, poses, props) |
 | `HaDeS-MOSS-Turbo-8steps-v0.7.safetensors` | For 8 steps: in blind pairs it beat akhaliq's 4-step LoRA 18 to 5 and matched lodestones' Base / Kromoss 8-step LoRA (run on SFT) up to 1024 |
 
 ## Use
 
+- **Turbo 8-steps v2.0:**
+  - **Model:** MOSS-Image Base (`moss_image_base_bf16` from Comfy-Org/MOSS-Image).
+  - **Settings:** 8 steps, euler / simple, shift 5.0, LoRA strength 1.0, CFG 1 (CFG 1.5 stays clean with a little more contrast).
 - **Turbo 8-steps v1.0:**
   - **Model:** MOSS-Image Base (`moss_image_base_bf16` from Comfy-Org/MOSS-Image).
   - **Settings:** 8 steps, euler / simple, shift 5.0, LoRA strength 1.0.
@@ -81,6 +86,29 @@ version tried: [`tools/RESULTS.md`](https://github.com/Devildonia/HaDeS-MOSS-Sui
   not repeated.
 - Not measured: other base models (Base, finetunes, merges), strengths other than 1.0, step counts other than those above, img2img / denoise
   below 1.0, editing. They run (checked: an int8 finetune as the base, img2img at denoise 0.6), but their quality is untested.
+
+### Turbo 8-steps v2.0, on MOSS-Image Base
+
+Same recipe as v1.0 with 2,048 training prompts (the 1,024 of v1.0 plus 1,024 new ones, 592 of them neutral people prompts with no
+ethnicity named) and 2,048 regression pairs; 4,000 updates, released at update 2,800 after comparing checkpoints. Clean ComfyUI,
+1024 x 1024, 8 steps, CFG 1, euler / simple, strength 1.0, RTX 5090.
+
+- **Blind review** (12 prompts against v1.0, sides random, key opened after the vote): v2.0 judged clearly better, with fewer errors.
+- **Appearance bias** (counted by eye, seeds 0–23 on each prompt):
+
+| Prompt | v1.0 | **v2.0** |
+|---|---:|---:|
+| "natural light portrait photograph of a young adult smiling in a public park" | 10–11 / 24 | **3–4 / 24** |
+| "photograph of a woman sitting in a café" | 9–11 / 24 | **7–8 / 24** |
+| Both | 19–22 / 48 | **10–12 / 48** |
+
+  Lower, not gone: name the appearance in the prompt for anything specific. Two other prompts (a man in the street, a person in a
+  library) showed almost no faces with either LoRA, so they say nothing about the bias.
+- **Text:** 19 of 20 exact over five seeds on four text prompts (one faint extra letter), 4 / 4 for v1.0 on the same first seed.
+- **Look:** on ten scenes slightly darker and more saturated than v1.0 (median luma 102 against 110, saturation 71 against 64).
+- **Steps:** 8 is the sharpest; 6 is usable; at 4 one title had a typo.
+- **Speed:** about 3.9 s per 1024 x 1024 image at 8 steps.
+- **Not tested:** int8 Base weights, MOSS Control and img2img with v2.0.
 
 ### Turbo 8-steps v1.0, on MOSS-Image Base
 
@@ -173,6 +201,7 @@ DMD (distribution matching distillation) with a regression term, `tools/moss_dmd
   (3.4 s each); it is update 3,000.
 - Turbo 8-steps v1.0: as v0.7, with MOSS-Image Base as teacher and student, 1,024 regression images instead of 256, and new
   prompts (`tools/moss_turbo_v10_prompts.py`); it is update 3,000.
+- Turbo 8-steps v2.0: as v1.0 on Base, with 2,048 prompts and 2,048 regression pairs, 4,000 updates; the release is update 2,800, LoRA matrices in fp16 (its renders matched fp32 within the run-to-run variance between ComfyUI sessions).
 - Turbo 8-steps SFT v1.0: same v1.0 prompts and training settings, with MOSS-Image SFT BF16 as teacher and student. All 1,024
   regression targets were generated with SFT. The release file is the EMA at update 3,000, with LoRA matrices in BF16 and alpha values in FP32.
 
