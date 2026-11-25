@@ -2991,3 +2991,48 @@ Clean ComfyUI on port 8189 (`--use-sage-attention`, RTX 5090), `qwen3.5_9b_int8_
 - **Single-model sampling times** (warm runs, seeds 1013 / 1014): `BF16` **13.83 s / 13.83 s**; `HMS v1` **6.22 s / 6.24 s** (**2.22× faster**).
 - **Fisherman similarity** (`MAE / 255` at 512 x 512 between BF16 and HMS v1): **9.0** (seed 1013) and **8.0** (seed 1014).
 - **Compare Sampler sheets** (both models in one node, seed 1013): fisherman `21.00 s`; harbor sign (`"HARBOR COFFEE"` / `"OPEN DAILY"`) `21.64 s`, every word spelled right in both `BF16` and `HMS v1`.
+
+## Turbo v2.0 (Base, 2048 prompts and 2048 regression pairs, 2026-11-25)
+
+**Recipe.** `tools/moss_dmd_train.py` with Base (`mossImage_base_bf16`) as teacher and student, `qwen3.5_9b_int8_convrot`, 512 px, 4 steps, rank 2 on layers 24–41, `--updates 4000`, `--reg-weight 0.05`, `--fake-updates 5`. Prompts (`I:/HaDeS_MOSS/dmd_prompts/turbo_v20_prompts.json`): the 1,024 prompts of `v1.0` plus 1,024 new distinct prompts (592 neutral people prompts in total, no ethnicity specified) and `--reg-pairs 2048`. Run folder: `I:/HaDeS_MOSS/moss_turbo_runs/dmd512_base_v20` (4,000 updates, 0 skipped, 2.8 s/update, 23.8 GB peak VRAM).
+
+**Café bias** (clean 8189, Base + LoRA at 1.0, 8 steps, `euler / simple`, CFG 1, 1024 × 1024, seeds 0–15, counted by eye):
+- `v2.0_u2600`: **5–6** clearly East Asian faces out of 16 (s5, s6, s8, s9, s10; s14 side profile; all 16 have a person; minor bottle-in-glass artifact at s2).
+- `v2.0_u2800`: **7–8** clearly East Asian faces out of 16 (s4 borderline; all 16 have a person).
+- `v2.0_u3000`: **5–6** clearly East Asian faces out of 16 (1 image with no person, s8).
+- `v2.0_u3200`: **8–10** clearly East Asian faces out of 16 (s8 cup partially obscures face; all 16 have a person).
+- `v2.0_u3400`: **7–8** clearly East Asian faces out of 16 (1 image with no person, s8 cup only).
+- `v2.0_u3600`: **8–9** clearly East Asian faces out of 16 (minor odd croissant/pastry in hand at s10).
+- `v2.0_u3800`: **8** clearly East Asian faces out of 16 (all 16 have a person).
+- `v2.0_u4000`: **6–7** clearly East Asian faces out of 16 (1 double-face artifact at s10).
+- Reference `v1.0`: ~8 / 16.
+
+**Quality and text** (clean 8189, 10 scenes/text prompts, seed 1001, 1024 × 1024, 8 steps, CFG 1, `euler / simple`; medians across the 10 images; sheets in `I:/HaDeS_MOSS/moss_turbo_runs/dmd512_base_v20/eval`):
+
+| LoRA | Mean luma / 255 | Mean HSV sat / 255 | Near-clip pixels | Laplacian std | Text (`CAFE 24`, `OBSERVATORY 7`, bakery, poster) |
+|---|---:|---:|---:|---:|---|
+| `v1.0` (u3000) | 110.39 | 64.22 | 1.66% | 12.02 | 4 / 4 exact |
+| `v2.0_u2600` | 104.82 | 68.82 | 1.25% | 10.90 | 4 / 4 exact |
+| `v2.0_u2800` | 102.36 | 70.51 | 1.01% | 12.02 | 4 / 4 exact |
+| `v2.0_u3000` | 102.53 | 68.33 | 1.04% | 10.68 | 4 / 4 exact |
+| `v2.0_u3200` | 100.03 | 73.52 | 1.31% | 11.07 | 4 / 4 exact |
+| `v2.0_u3400` | 101.58 | 75.45 | 1.50% | 11.45 | 4 / 4 exact |
+| `v2.0_u3600` | 103.07 | 76.20 | 1.48% | 10.36 | 4 / 4 exact |
+| `v2.0_u3800` | 102.92 | 77.12 | 1.58% | 10.69 | 4 / 4 exact |
+| `v2.0_u4000` | 101.73 | 81.06 | 1.24% | 10.44 | 4 / 4 exact |
+
+- Blind pairs (`v1.0` vs `v2.0_u4000`, 12 prompts, seed 1001, random left/right): `blind_pairs_v10_vs_v20.jpg` generated; key `blind_key.json` kept unopened pending maintainer vote.
+- **Selected release (`v2.0_u2800`, `fp16`):** maintainer chose `u2800` over `u3000` after inspecting the 3-way comparison sheets (`compare_quality_v10_u2800_u3000_part1.jpg`, `part2.jpg`, `compare_cafe_u2800_vs_u3000_s0_7.jpg`, `s8_15.jpg`). Converted `lora_u02800.safetensors` to `float16` weights (`float32` scalar `.alpha`, 3,564,200 bytes) as `HaDeS-MOSS-Turbo-8steps-v2.0.safetensors` (`H:/Comfy_UI_V61/ComfyUI/models/loras/MOSS/Turbo Base v2.0/HaDeS-MOSS-Turbo-8steps-v2.0.safetensors`, SHA-256 `915f15f9720849ec8bc63f314eec9cc822dd6009db7d67d1fe8abb91fac51a59`).
+- **`fp16` vs `fp32` (`u2800`, 10 scenes, 1024 × 1024, 8 steps, CFG 1, `euler / simple`, seed 1001, clean 8189, RTX 5090):** `fp16` medians: `luma 100.95`, `sat 74.82`, `near_clip 1.17%`, `lap_std 11.55`, warm time `3.87 s` (pixel MAE / 255 vs `fp32`: mean `8.64`, max `16.73`; compositions and 4/4 exact text preserved).
+- **Steps sweep (`fp16`, 4 scenes: `watchmaker`, `trumpeter`, `observatory`, `poster`, 1024 × 1024, CFG 1, `euler / simple`, seed 1001; `final_steps_4_6_8.jpg`):**
+  - `4 steps` (`2.72 s` median): `luma 67.49`, `sat 84.33`, `near_clip 0.15%`, `lap_std 8.36`; `poster` exact, `observatory` has typo (`OSSERVATORY 7`).
+  - `6 steps` (`3.39 s` median): `luma 74.20`, `sat 83.24`, `near_clip 0.67%`, `lap_std 9.76`; `OBSERVATORY 7` and `poster` exact.
+  - `8 steps` (`3.87 s` median): `luma 78.91`, `sat 77.95`, `near_clip 0.37%`, `lap_std 11.15`; sharpest and exact text.
+- **CFG 1.0 vs 1.5 and non-square aspect ratios (`fp16`, 8 steps, `euler / simple`, `final_cfg_10_vs_15.jpg`, `final_aspect_ratios.jpg`):** CFG 1.5 (`watchmaker`, `poster`, `cafe_s0`) stays clean with slightly higher contrast. `1280 × 720` and `720 × 1280` (`4.23 s` median) render `CAFE 24` cleanly in both orientations; `climber` at `720 × 1280` showed a spurious `H'CC COCEY` text artifact on the rock. Not tested here: `int8` Base weights and MOSS Control / img2img passes with `v2.0`.
+
+**Read before a card or release (review 2026-11-25).**
+- **Bias:** the released checkpoint `u2800` counts 7–8 / 16 East Asian faces on the café prompt, about the same as `v1.0` (~8 / 16). The lower counts (5–6) were at `u2600` and `u3000`. On this test `v2.0` does not reduce the bias; the counts are by eye on one prompt and 16 seeds.
+- **Blind review:** the pairs compare `v1.0` with `u4000`, not the released `u2800`, and the key is unopened. No blind result exists yet for the released file.
+- **Text:** 4 / 4 exact is one seed (1001) per prompt.
+- **`fp16` vs `fp32`:** a pixel MAE of 8.64 / 255 (max 16.73) between the two exports is large for a precision change. Before quoting it, check what two `fp32` runs of the same seed give (sage attention is not bit-deterministic), so the precision difference can be told apart from run-to-run noise.
+- **Precision:** earlier releases ship LoRA matrices in `bf16`; this one is `fp16`.
