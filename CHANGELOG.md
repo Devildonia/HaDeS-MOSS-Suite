@@ -7,6 +7,9 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **MOSS Text Check reads a whole batch.** It read only the first image, so a batch of seeds could not keep the one with the text right (found while building the advanced poster workflow). Every image is now read; a new `best_image` output gives the one with the most texts exact (ties: the closest reading, then the first), and `report`, `passed` and `failed_mask` describe that image. With a batch the report starts with a line per image saying which texts were not exact, and `info` carries `best_image` and the per-image results. One image works as before; the new output is the last one, so saved workflows keep their links. About 0.5 s per image with one text and 0.9 s with two on an RTX 5090 (`tools/RESULTS.md`).
+
 ## [0.9.7] - 2026-11-26
 
 ### Fixed

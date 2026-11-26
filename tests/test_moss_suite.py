@@ -1568,6 +1568,38 @@ class TestTextCheck(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cannot generate text"):
             tc.HaDeSMossTextCheck().run(torch.rand(1, 64, 64, 3), object(), expected_text="X")
 
+    def test_a_batch_is_read_image_by_image_and_the_best_passed_on(self):
+        """Advanced poster workflow (2026-11-26): only the first image of a batch was checked, so a seed batch could not keep
+        the image with the text right. Each image is a constant colour; the reader answers by colour."""
+        tc = self.tc
+        answers = {1: "NORTH SEE\nHaDeS", 2: "NORTH SEA\nHaDeS", 3: "NORTH SEA\nHaDeS", 4: "NORTH\nHaDe"}
+        batch = torch.stack([torch.full((64, 64, 3), k / 10) for k in (1, 2, 3, 4)])
+        reader = lambda clip, image, question, max_tokens: answers[round(float(image[0, 0, 0, 0]) * 10)]
+        clip = type("C", (), {"generate": None})()
+        check = tc.check
+        with patch.object(tc, "check", lambda c, image, layout, expected, mt: check(c, image, layout, expected, mt, reader)):
+            report, mask, passed, info, best = tc.HaDeSMossTextCheck().run(batch, clip, expected_text="NORTH SEA\nHaDeS")["result"]
+        self.assertEqual(tuple(best.shape), (1, 64, 64, 3))
+        self.assertAlmostEqual(float(best[0, 0, 0, 0]), 0.2)  # images 2 and 3 tie at 2/2 exact: the first of them
+        self.assertTrue(passed)
+        meta = common.parse_info_meta(info)
+        self.assertEqual(meta["best_image"], 2)
+        self.assertEqual([b["exact"] for b in meta["batch"]], [1, 2, 2, 0])
+        self.assertIn("image 2: 2/2 exact <- best", report)
+        self.assertIn("image 1: 1/2 exact; 'NORTH SEA' close", report)  # which text failed, per image
+        self.assertEqual(meta["batch"][3]["not_exact"], [{"text": "NORTH SEA", "verdict": "close"}, {"text": "HaDeS", "verdict": "close"}])
+        # with no image exact, the closest reading wins: NORTH SEE (0.89) beats NORTH (0.56)
+        answers.update({2: "NORTH\nHaDe", 3: "NONE"})
+        with patch.object(tc, "check", lambda c, image, layout, expected, mt: check(c, image, layout, expected, mt, reader)):
+            _, _, passed, info, best = tc.HaDeSMossTextCheck().run(batch, clip, expected_text="NORTH SEA\nHaDeS")["result"]
+        self.assertFalse(passed)
+        self.assertEqual(common.parse_info_meta(info)["best_image"], 1)
+        # one image: the same report as before, and that image passed on
+        with patch.object(tc, "check", lambda c, image, layout, expected, mt: check(c, image, layout, expected, mt, reader)):
+            report, _, _, info, best = tc.HaDeSMossTextCheck().run(batch[1:2], clip, expected_text="NORTH SEA")["result"]
+        self.assertNotIn("image 1", report)
+        self.assertTrue(torch.equal(best, batch[1:2]))
+
 
 class TestAuditFixes(unittest.TestCase):
     def test_png_saves_never_overwrite_and_never_leave_partial_files(self):

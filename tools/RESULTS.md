@@ -997,6 +997,31 @@ right corner." Scripts, drafts and sheets in `I:/HaDeS_MOSS/videos/layout_text/m
 - **Times:** 4.2 s per image without Text Check; Text Check alone 0.7-1.0 s on this image. A one-letter typo in `expected_text` ("NORTH
   SEE") gives `close`, read 'NORTH SEA' (0.89).
 
+## MOSS Text Check on a batch (2026-11-26, Suite 0.9.8)
+
+`MOSS Text Check` read only the first image of a batch; it now reads each one and passes the best on (`best_image`: most texts exact,
+then the highest summed similarity, then the first). HaDeS MOSS v1.0 Turbo (8 steps, CFG 1, euler / simple), 1024 x 1536, image seed
+1013 with the batch from the Layout Compiler, `MOSS Prompt Enhancer` layout mode (seed 2, temperature 0.7) feeding the compiler and Text
+Check directly, clean ComfyUI on port 8189, `--use-sage-attention`, RTX 5090. Text Check timed alone by queueing again with only its
+`max_tokens` changed (everything above it cached). Scripts, drafts, sheets and reports in `I:/HaDeS_MOSS/advanced_workflows/poster`.
+
+- **Time, two texts** (the "NORTH SEA" / "HaDeS" poster of the eighth tutorial): batch 1, 0.97-1.06 s; batch 4, 3.65-3.76 s. Both texts
+  `exact` on all 4. One text (the Layout Editor's default "NORTHERN LIGHTS" draft): batch 1, 0.48-0.50 s; batch 4, 1.77-1.82 s.
+- **Jazz poster, two texts, batch 8** ("MIDNIGHT HARBOUR JAZZ", "Saturday 14 June, Pier 9"): 7.4 s; `exact` 2 / 2 on all 8, which
+  matches the images (both texts spelled right and in place on all 8, by eye).
+- **Folk poster, three texts, batch 8** ("VLEUTERWEIDE FOLK NIGHTS" title, the "Zwanenburg" badge, the line "Tickets at the door, 12 euros,
+  doors open at 8 pm"): 11.8-15.1 s (texts not exact are read twice, in their box and in the whole image). Two runs with the same draft:
+  images 2, 3 and 7 `exact` 3 / 3; images 1, 4, 5, 6 and 8 2 / 3, the title `outside its box`. Boxes drawn on the images
+  (`hard3_boxes_sheet.jpg`): on those five the title breaks into two lines and "FOLK NIGHTS" falls below its box; on 2, 3 and 7 it fits
+  on one line inside it. 8 / 8 verdicts right; `best_image` is image 2. Every text was spelled right on all 8: here the pick is about
+  the layout, not spelling.
+- **Frontend** (ComfyUI on 8189, the three views: classic with HaDeS widgets, classic with standard widgets, Nodes 2.0 / Vue): the
+  regenerated "Layout from a Sentence" example and the 0.9.7 one both load with Text Check's five outputs and the old links (23);
+  `best_image` connected to a Preview Image survives serialize / reload in each view (24 links). Queued from the Vue view with a
+  batch of 2: the Preview got 1 image, the report `best of 2: image 1` with a line per image.
+- The Prompt Enhancer's draft at the same seed differed between two restarts of the same clean ComfyUI (another run gave other boxes for
+  the same sentence); the two runs above used one draft (checked against the saved draft JSON).
+
 ## Compare models and LoRAs (2026-11-21, for the seventh video tutorial)
 
 Clean ComfyUI on port 8189, `--use-sage-attention`, RTX 5090, the tutorials' fisherman (seed 1013). Scripts and sheets in

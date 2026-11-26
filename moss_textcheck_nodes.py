@@ -175,12 +175,23 @@ def check(clip, image, layout="", expected_text="", max_tokens=96, reader=read):
     return rows, mask, lines
 
 
+def score(rows):
+    """(texts read exactly, summed similarity): how a batch's images are ranked; the higher the better."""
+    return sum(r["verdict"] == "exact" for r in rows), sum(r["similarity"] for r in rows)
+
+
+def pick_best(results):
+    """Index of the best of a batch's check() results: most exact texts, then the highest summed similarity, then the first."""
+    return max(range(len(results)), key=lambda i: score(results[i][0]))
+
+
 class HaDeSMossTextCheck:
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "image": ("IMAGE", {"tooltip": "The generated image (the first of a batch is checked)."}),
+                "image": ("IMAGE", {"tooltip": "The generated image, or a batch (e.g. several seeds): every image is read, and "
+                                                 "best_image is the one with the most texts read exactly."}),
                 "clip": ("CLIP", {"tooltip": "MOSS-Image's text encoder (CLIPLoader, type moss_image): its file holds the vision tower "
                                              "that reads the image. The same CLIP that encodes the prompt; no other model is loaded."}),
             },
@@ -195,38 +206,56 @@ class HaDeSMossTextCheck:
             },
         }
 
-    RETURN_TYPES = ("STRING", "MASK", "BOOLEAN", "STRING")
-    RETURN_NAMES = ("report", "failed_mask", "passed", "info")
-    OUTPUT_TOOLTIPS = ("One line per text: what was asked, what was read, the verdict.",
-                       "The layout boxes whose text is not exact (white), for a retry of those areas only.",
-                       "True when every text is read exactly.",
-                       "The same results for Suite Telemetry.")
+    RETURN_TYPES = ("STRING", "MASK", "BOOLEAN", "STRING", "IMAGE")
+    RETURN_NAMES = ("report", "failed_mask", "passed", "info", "best_image")
+    OUTPUT_TOOLTIPS = ("One line per text: what was asked, what was read, the verdict (for a batch, a line per image first, "
+                       "then the best image's texts).",
+                       "The layout boxes of the best image whose text is not exact (white), for a retry of those areas only.",
+                       "True when every text of the best image is read exactly.",
+                       "The same results for Suite Telemetry.",
+                       "The image of the batch with the most texts read exactly (ties: the closest reading, then the first); "
+                       "with one image, that image.")
     FUNCTION = "run"
     OUTPUT_NODE = True
     CATEGORY = "HaDeS/MOSS Pipeline"
     DESCRIPTION = ("Reads the text in the image with MOSS-Image's own text encoder and compares it with the text asked for: each "
-                   "layout text item inside its box, or expected texts anywhere. Verdicts: exact (letters and digits, case and punctuation "
+                   "layout text item inside its box, or expected texts anywhere. With a batch, every image is read and best_image is "
+                   "the one with the most texts exact. Verdicts: exact (letters and digits, case and punctuation "
                    "folded; the report says when the literal text differs), close (some letters differ), missing, or outside its box. Measured: 75 of 75 right verdicts on text drawn in common fonts (28-110 px), 19 of 20 on "
                    "text MOSS painted itself; a word cut by the image edge can be read as whole (tools/RESULTS.md).")
 
     def run(self, image, clip, layout="", expected_text="", max_tokens=96):
         if not hasattr(clip, "generate"):
             raise ValueError("MOSS Text Check: this CLIP cannot generate text; use MOSS-Image's text encoder (type moss_image)")
-        rows, mask, lines = check(clip, image, layout or "", expected_text or "", max_tokens)
-        passed = all(r["verdict"] == "exact" for r in rows)
-        if not rows:
+        layout, expected_text = layout or "", expected_text or ""
+        first = check(clip, image[:1], layout, expected_text, max_tokens)
+        if not first[0]:
             text = ("HaDeS MOSS Text Check | nothing to check: no text item in the layout, no quoted text in the caption draft, "
                     "no expected_text")
             info = format_info(text, "text_check", passed=True, items=[], read_whole=[], nothing_to_check=True)
-            return {"ui": {"text": [text]}, "result": (text, mask, True, info)}
+            return {"ui": {"text": [text]}, "result": (text, first[1], True, info, image[:1])}
+        # every image of a batch is read (one reading costs about as much as a single image's); the best one is passed on
+        results = [first] + [check(clip, image[i:i + 1], layout, expected_text, max_tokens) for i in range(1, int(image.shape[0]))]
+        best = pick_best(results)
+        rows, mask, lines = results[best]
+        passed = all(r["verdict"] == "exact" for r in rows)
         # exact compares letters and digits with case and punctuation folded; the report says when the literal text differs
         report = "\n".join(f"[{r['verdict']}] {r['text']!r} -> read {r['read']!r} ({r['similarity']:.2f})"
                            + ("; case or punctuation differ" if r["verdict"] == "exact" and not r.get("literal", True) else "")
                            + (f"; found elsewhere: {r['read_elsewhere']!r}" if "read_elsewhere" in r else "") for r in rows)
         n_ok = sum(r["verdict"] == "exact" for r in rows)
-        text = f"HaDeS MOSS Text Check | {n_ok}/{len(rows)} exact | " + ("passed" if passed else "not passed") + "\n" + report
-        info = format_info(text, "text_check", passed=passed, items=rows, read_whole=lines)
-        return {"ui": {"text": [text]}, "result": (report, mask, passed, info)}
+        text = f"HaDeS MOSS Text Check | {n_ok}/{len(rows)} exact | " + ("passed" if passed else "not passed")
+        batch = [{"image": i + 1, "exact": score(r[0])[0], "texts": len(r[0]),
+                  "not_exact": [{"text": x["text"], "verdict": x["verdict"]} for x in r[0] if x["verdict"] != "exact"]}
+                 for i, r in enumerate(results)]
+        if len(results) > 1:
+            text += f" | best of {len(results)}: image {best + 1}"
+            report = "\n".join(f"image {b['image']}: {b['exact']}/{b['texts']} exact"
+                               + "".join(f"; {x['text']!r} {x['verdict']}" for x in b["not_exact"])
+                               + (" <- best" if b["image"] == best + 1 else "") for b in batch) + "\n\n" + report
+        text += "\n" + report
+        info = format_info(text, "text_check", passed=passed, items=rows, read_whole=lines, best_image=best + 1, batch=batch)
+        return {"ui": {"text": [text]}, "result": (report, mask, passed, info, image[best:best + 1])}
 
 
 NODE_CLASS_MAPPINGS = {"HaDeSMossTextCheck": HaDeSMossTextCheck}
