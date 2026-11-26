@@ -7,7 +7,7 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.9.8] - 2026-11-27
+## [0.9.8] - 2026-11-26
 
 ### Added
 - **Advanced example workflows** in `examples/advanced/`, starting with **Production Poster**: a poster with three texts on HaDeS MOSS v1.0 Turbo from the Layout Editor's boxes to a checked 2048 x 3072 PNG: four seeds from the Layout Compiler's batch, MOSS Text Check passes on the candidate with the most texts exact (`best_image`), RealESRGAN x2 and a MOSS pass at denoise 0.25, a second Text Check on the final image, Suite Telemetry and the Image Saver. Measured on three seeds (`tools/RESULTS.md`); the package check covers the new folder.
@@ -24,7 +24,7 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 - The Control (color, depth) example's note says to look at the depth map before using it: Depth Anything V2 from `comfyui_controlnet_aux` 1.1.6 as installed here gave a blurred map with no silhouette (`tools/RESULTS.md`, Fixed pose).
 - **MOSS Text Check reads a whole batch.** It read only the first image, so a batch of seeds could not keep the one with the text right (found while building the advanced poster workflow). Every image is now read; a new `best_image` output gives the one with the most texts exact (ties: the closest reading, then the first), and `report`, `passed` and `failed_mask` describe that image. With a batch the report starts with a line per image saying which texts were not exact, and `info` carries `best_image` and the per-image results. One image works as before; the new output is the last one, so saved workflows keep their links. About 0.5 s per image with one text and 0.9 s with two on an RTX 5090 (`tools/RESULTS.md`).
 
-## [0.9.7] - 2026-11-26
+## [0.9.7] - 2026-11-25
 
 ### Fixed
 The 16 findings of the 0.9.6 audit (`docs/AUDIT_0.9.6.md`), each with a regression test:
