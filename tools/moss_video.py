@@ -5415,6 +5415,479 @@ async def adv_poster(d: Director):
 adv_poster.prepare = ap_prepare
 
 
+# ---- advanced workflow 2: Merge Lab, as a lesson: built from an empty canvas (guion v2) ----
+
+ML_FILE = None  # built on camera; the finished example is the download
+ML_SEEDS = (1013, 1014)  # measured: key 1 = Block Merger, 2 = SFT, 3 = Base, 4 = SLERP on both (blind_seed 0); sheet ~61 s warm
+ML_KEY = {"1": "C: merge (blocks 18-35 x0.5)", "2": "A: mossImage_sft_bf16", "3": "B: mossImage_base_bf16", "4": "D: merge (SLERP)"}
+ML_NAMES = {"1": "Block Merger (18-35 ×0.5)", "2": "SFT", "3": "Base", "4": "SLERP"}
+ML_PROMPT = ("Photograph of an old fisherman with a grey beard mending a net on a wooden dock at sunrise, his face and weathered hands "
+             "in view, thick wool sweater, seagulls in the background.")
+ML_POS = {"load": (0, 0), "base": (0, 420), "merge": (480, 0), "slerp": (480, 700), "enh": (960, 0), "latent": (1460, 0),
+          "cmp": (1960, 0), "tel": (2460, 0), "saver": (1960, 1150), "meta": (2460, 1150)}
+ML_BOX = [-60, -80, 2900, 1500]
+
+ML_LINES = [
+    ("Hi, I'm HaDeS, and welcome to advanced workflow number two: Merge Lab.",
+     "Hola, soy HaDeS, y bienvenido al workflow avanzado número dos: Merge Lab."),
+    ("Today you'll learn three things: how to mix two models in two different ways, how to judge the result without fooling yourself, and how to keep the winner as a small file.",
+     "Hoy vas a aprender tres cosas: cómo mezclar dos modelos de dos formas distintas, cómo juzgar el resultado sin engañarte, y cómo quedarte con el ganador en un archivo pequeño."),
+    ("We'll build the whole workflow together, from an empty canvas, one node at a time.",
+     "Vamos a montar el workflow entero juntos, desde el lienzo vacío, nodo a nodo."),
+    ("As always, everything is free, and all the links are in the description.",
+     "Como siempre, todo es gratis y tienes todos los enlaces en la descripción."),
+    ("First, what is a merge? A model is millions of numbers, its weights. A merge takes the weights of two models and mixes them into a new one.",
+     "Primero, ¿qué es un merge? Un modelo son millones de números, sus pesos. Un merge toma los pesos de dos modelos y los mezcla en uno nuevo."),
+    ("That only works when both models have the same shape. Here we use the two official MOSS-Image models: Base, and SFT, which is Base trained further. Same shape, so we can mix them.",
+     "Eso solo funciona si los dos modelos tienen la misma forma. Aquí usamos los dos modelos oficiales de MOSS-Image: Base, y SFT, que es Base entrenado un poco más. La misma forma, así que se pueden mezclar.",
+     "That only works when both models have the same shape. Here we use the two official MOSS Image models: Base, and S F T, which is Base trained further. Same shape, so we can mix them."),
+    ("And one more idea: MOSS-Image is built as a stack of forty-two layers. We can mix every layer the same way, or decide layer by layer. Today we'll do both.",
+     "Y una idea más: MOSS-Image está hecho como una pila de cuarenta y dos capas. Podemos mezclar todas las capas igual, o decidir capa a capa. Hoy hacemos las dos cosas.",
+     "And one more idea: MOSS Image is built as a stack of forty-two layers. We can mix every layer the same way, or decide layer by layer. Today we'll do both."),
+    ("Let's start. The MOSS Loader loads SFT, together with the text encoder, which reads the prompt, and the VAE, which turns the result into pixels.",
+     "Empezamos. El MOSS Loader carga SFT, junto con el text encoder, que lee el prompt, y el VAE, que convierte el resultado en píxeles.",
+     "Let's start. The MOSS Loader loads S F T, together with the text encoder, which reads the prompt, and the V A E, which turns the result into pixels."),
+    ("For Base we only need the model itself, because the text encoder and the VAE are shared. So a plain Load Diffusion Model is enough.",
+     "Para Base solo necesitamos el modelo, porque el text encoder y el VAE son compartidos. Así que basta con un Load Diffusion Model normal.",
+     "For Base we only need the model itself, because the text encoder and the V A E are shared. So a plain Load Diffusion Model is enough."),
+    ("The first way to mix them is the MOSS Model Block Merger. Model one is SFT, model two is Base.",
+     "La primera forma de mezclarlos es el MOSS Model Block Merger. El modelo uno es SFT, el modelo dos es Base.",
+     "The first way to mix them is the MOSS Model Block Merger. Model one is S F T, model two is Base."),
+    ("Each slider is a group of six layers. What does the number mean? Zero keeps model one, SFT. One takes model two, Base. And zero point five is half and half.",
+     "Cada deslizador es un grupo de seis capas. ¿Qué significa el número? Cero se queda con el modelo uno, SFT. Uno toma el modelo dos, Base. Y cero coma cinco es mitad y mitad.",
+     "Each slider is a group of six layers. What does the number mean? Zero keeps model one, S F T. One takes model two, Base. And zero point five is half and half."),
+    ("Here I set the middle groups, layers eighteen to thirty-five, to zero point five, and leave everything else at zero.",
+     "Aquí pongo los grupos del medio, las capas dieciocho a treinta y cinco, a cero coma cinco, y dejo todo lo demás a cero."),
+    ("So this merge is SFT, with half of Base only in the middle of the stack. It's the test recipe from my sixth video. Not a recommendation: just a starting point to experiment with.",
+     "Así que este merge es SFT, con la mitad de Base solo en el medio de la pila. Es la receta de prueba de mi sexto vídeo. No es una recomendación: solo un punto de partida para experimentar.",
+     "So this merge is S F T, with half of Base only in the middle of the stack. It's the test recipe from my sixth video. Not a recommendation: just a starting point to experiment with."),
+    ("The second way is the MOSS Multi-Model Merger. It mixes every layer at once, with a method you choose.",
+     "La segunda forma es el MOSS Multi-Model Merger. Mezcla todas las capas a la vez, con el método que elijas."),
+    ("This time we use SLERP. What is it? It blends the two models along a curve instead of a straight line, a common way to mix exactly two models.",
+     "Esta vez usamos SLERP. ¿Qué es? Mezcla los dos modelos siguiendo una curva en lugar de una línea recta, una forma habitual de mezclar exactamente dos modelos.",
+     "This time we use S lerp. What is it? It blends the two models along a curve instead of a straight line, a common way to mix exactly two models."),
+    ("With both weights at one, it goes halfway between SFT and Base.",
+     "Con los dos pesos a uno, se queda a medio camino entre SFT y Base.",
+     "With both weights at one, it goes halfway between S F T and Base."),
+    ("Now the prompt: our fisherman from the earlier videos, in the Prompt Enhancer, written as is.",
+     "Ahora el prompt: nuestro pescador de los vídeos anteriores, en el Prompt Enhancer, tal cual está escrito."),
+    ("And the MOSS Latent: a square image, and a fixed seed, one zero one three, so every model starts from exactly the same noise.",
+     "Y el MOSS Latent: una imagen cuadrada y una semilla fija, mil trece, para que todos los modelos partan exactamente del mismo ruido.",
+     "And the MOSS Latent: a square image, and a fixed seed, ten thirteen, so every model starts from exactly the same noise."),
+    ("Now the heart of this workflow: the MOSS Compare Sampler. It runs up to four models with the same prompt, the same seed and the same settings, and puts the images side by side on one sheet.",
+     "Ahora el corazón del workflow: el MOSS Compare Sampler. Ejecuta hasta cuatro modelos con el mismo prompt, la misma semilla y los mismos ajustes, y pone las imágenes una al lado de otra en una hoja."),
+    ("A is SFT, B is Base, C is our Block Merger, and D is SLERP. The only difference between the four images will be the model.",
+     "La A es SFT, la B es Base, la C nuestro Block Merger y la D el SLERP. Lo único que cambiará entre las cuatro imágenes es el modelo.",
+     "A is S F T, B is Base, C is our Block Merger, and D is S lerp. The only difference between the four images will be the model."),
+    ("And this time we turn on blind mode. What is it for?",
+     "Y esta vez activamos el modo blind, a ciegas. ¿Para qué sirve?"),
+    ("When you've built a merge yourself, you want it to win. If you see its name, you'll find reasons to like it. That's not a judgement, that's hope.",
+     "Cuando has hecho un merge tú mismo, quieres que gane. Si ves su nombre, encontrarás motivos para que te guste. Eso no es juzgar, es tener esperanza."),
+    ("In blind mode, the Compare Sampler shuffles the four images and numbers them from one to four. No names on the sheet, and none hidden inside the image file either.",
+     "En modo blind, el Compare Sampler baraja las cuatro imágenes y las numera del uno al cuatro. Sin nombres en la hoja, y tampoco escondidos dentro del archivo de imagen."),
+    ("The answer, which number is which model, goes to a separate file next to the sheet: the key. You open it only after you've chosen.",
+     "La respuesta, qué número es cada modelo, va a un archivo aparte, al lado de la hoja: la clave. Solo la abres después de haber elegido."),
+    ("Blind seed decides the order of the shuffle. Keep it, and the order stays the same; change it, and you get a new order.",
+     "Blind seed decide el orden de la mezcla. Si lo dejas igual, el orden se mantiene; si lo cambias, tienes un orden nuevo."),
+    ("And the file name says where it's saved: in ComfyUI's output folder, under MOSS, merge lab.",
+     "Y el nombre de archivo dice dónde se guarda: en la carpeta output de ComfyUI, dentro de MOSS, merge lab."),
+    ("One more detail. Suite Telemetry reads the loader, the prompt and both mergers, but not the Compare Sampler. That way, it can't give the key away.",
+     "Un detalle más. Suite Telemetry lee el loader, el prompt y los dos mergers, pero no el Compare Sampler. Así no puede delatar la clave."),
+    ("Let's run it.",
+     "Vamos a ejecutarlo."),
+    ("Here are the four fishermen, numbered one to four. Take your time. Pause the video, and pick your favourite.",
+     "Aquí están los cuatro pescadores, numerados del uno al cuatro. Tómate tu tiempo. Pausa el vídeo y elige tu favorito."),
+    ("Got one? Now let's open the key. It's this file, next to the sheet, with the same name and key at the end.",
+     "¿Ya lo tienes? Ahora abrimos la clave. Es este archivo, al lado de la hoja, con el mismo nombre y key al final."),
+    ("Inside, blind key says: one is C, two is A, three is B, four is D. The letters are the Compare Sampler's inputs.",
+     "Dentro, blind key dice: el uno es la C, el dos la A, el tres la B, el cuatro la D. Las letras son las entradas del Compare Sampler."),
+    ("So one is the Block Merger, two is SFT, three is Base, and four is SLERP. Did you pick a merge, or one of the parents?",
+     "Así que el uno es el Block Merger, el dos es SFT, el tres es Base y el cuatro es SLERP. ¿Elegiste un merge, o a uno de los padres?",
+     "So one is the Block Merger, two is S F T, three is Base, and four is S lerp. Did you pick a merge, or one of the parents?"),
+    ("By the way, the sheet took about a minute on my RTX 5090: four models, twenty-five steps each.",
+     "Por cierto, la hoja tardó como un minuto en mi RTX 5090: cuatro modelos, veinticinco pasos cada uno.",
+     "By the way, the sheet took about a minute on my R T X fifty ninety: four models, twenty-five steps each."),
+    ("Look at one and four: with this seed, the two merges are nearly the same picture. Does that mean the two recipes are equal? Let's change the seed and see.",
+     "Mira el uno y el cuatro: con esta semilla, los dos merges son casi la misma imagen. ¿Quiere decir que las dos recetas son iguales? Cambiemos la semilla y veamos."),
+    ("With seed one zero one four, they're clearly different: the SLERP fisherman even has glasses. The order is the same as before, because blind seed didn't change.",
+     "Con la semilla mil catorce son claramente distintos: el pescador de SLERP hasta lleva gafas. El orden es el mismo que antes, porque blind seed no ha cambiado.",
+     "With seed ten fourteen, they're clearly different: the S lerp fisherman even has glasses. The order is the same as before, because blind seed didn't change."),
+    ("So here's the lesson: never judge a merge on one seed. Try a few before you choose.",
+     "Así que la lección es: nunca juzgues un merge con una sola semilla. Prueba unas cuantas antes de elegir."),
+    ("Once you have a winner, you can keep it. Add a MOSS Model Saver, and connect the winning merger to model and to recipe.",
+     "Cuando tengas un ganador, puedes quedártelo. Añade un MOSS Model Saver y conecta el merger ganador a model y a recipe."),
+    ("As precision, choose HMS v1: the Suite's own compressed format. It calibrates on the merge itself, and writes the recipe into the file.",
+     "Como precisión, elige HMS v1: el formato comprimido de la propia Suite. Se calibra con el propio merge y escribe la receta en el archivo.",
+     "As precision, choose H M S version one: the Suite's own compressed format. It calibrates on the merge itself, and writes the recipe into the file."),
+    ("For our test recipe it took under eight minutes, and gave a 3.96 gigabyte file that makes an image in 6.1 seconds, instead of 13.3 for the live merge.",
+     "Con nuestra receta de prueba tardó menos de ocho minutos, y dio un archivo de 3,96 gigas que hace una imagen en 6,1 segundos, en vez de 13,3 con el merge en vivo.",
+     "For our test recipe it took under eight minutes, and gave a three point nine six gigabyte file that makes an image in six point one seconds, instead of thirteen point three for the live merge."),
+    ("But check it before you trust it: against the live merge it kept the scene, and on one seed the fisherman himself changed. Compare them with a Compare Sampler, just like today.",
+     "Pero compruébalo antes de fiarte: frente al merge en vivo mantuvo la escena, y en una semilla cambió el propio pescador. Compáralos con un Compare Sampler, igual que hoy."),
+    ("I leave the saver muted in the workflow, so it only runs when you decide. And the Metadata Reader can read the recipe back from the file.",
+     "En el workflow dejo el saver desactivado, para que solo se ejecute cuando tú lo decidas. Y el Metadata Reader puede volver a leer la receta desde el archivo."),
+    ("Let's recap. One: two ways to mix, layer by layer with the Block Merger, or all at once with SLERP.",
+     "Repasemos. Uno: dos formas de mezclar, capa a capa con el Block Merger, o todo a la vez con SLERP.",
+     "Let's recap. One: two ways to mix, layer by layer with the Block Merger, or all at once with S lerp."),
+    ("Two: judge them blind, against their parents, on more than one seed.",
+     "Dos: júzgalos a ciegas, frente a sus padres, con más de una semilla."),
+    ("Three: keep the winner as an HMS v1 file, and compare it with the live merge.",
+     "Tres: guarda al ganador en un archivo HMS v1, y compáralo con el merge en vivo.",
+     "Three: keep the winner as an H M S version one file, and compare it with the live merge."),
+    ("You can download this workflow for free from GitHub. The link is in the description.",
+     "Puedes descargar este workflow gratis desde GitHub. El enlace está en la descripción."),
+    ("If you've made it to the end and enjoyed the video, and you'd like to see more content like this, leave a like and subscribe. It's free!",
+     "Si has llegado hasta el final del vídeo, te ha gustado y quieres ver más contenido de este tipo, dale un buen like y suscríbete. ¡Es gratis!"),
+    ("Thanks for watching, and see you in the next one.",
+     "Gracias por verlo, y nos vemos en el próximo."),
+]
+
+
+def ml_sheet_html(url, labels=None, frames=(), width=1800, caption=None, top=60):
+    """A Compare Sampler sheet (4144 x 1115: four 1024 panels 1040 apart under a 44 px number row); labels under each panel;
+    yellow frames on the panels named in frames."""
+    sx = width / 4144
+    h = 1115 * sx
+    boxes = "".join(f'<div style="position:absolute;left:{(int(i) - 1) * 1040 * sx - 4}px;top:{44 * sx - 4}px;width:{1024 * sx + 8}px;'
+                    f'height:{1024 * sx + 8}px;border:5px solid #ffcc33;border-radius:4px;box-sizing:border-box"></div>' for i in frames)
+    under = ""
+    if labels:
+        under = '<div style="display:flex;margin-top:14px">' + "".join(
+            f'<div style="width:{1040 * sx}px;text-align:center;font:700 30px Segoe UI,sans-serif;color:{c}">{t}</div>' for t, c in labels) + "</div>"
+    cap = f'<div style="font:600 30px Segoe UI,sans-serif;color:#ffcc33;margin-bottom:12px">{caption}</div>' if caption else ""
+    return (f'<div style="margin-top:{top}px;color:#fff;text-align:center">{cap}<div style="position:relative;width:{width}px;height:{h}px;margin:auto">'
+            f'<img src="{url}" style="width:{width}px;height:{h}px;border-radius:6px">{boxes}</div>{under}</div>')
+
+
+def ml_merge_card(stage, es):
+    """Stage 0: two models mixed into one; stage 1: the 42 layers in 7 groups of 6, the middle three (18-35) marked."""
+    if stage == 0:
+        box = lambda t, c: (f'<div style="width:300px;height:170px;border-radius:16px;background:{c};display:flex;align-items:center;'
+                            f'justify-content:center;font:800 52px Segoe UI,sans-serif">{t}</div>')
+        arrow = '<div style="font:800 70px Segoe UI,sans-serif;color:#c9c9d1">+</div>'
+        return (f'<div style="color:#fff;text-align:center;margin-top:230px"><div style="display:flex;gap:40px;align-items:center;justify-content:center">'
+                f'{box("SFT", "#2e4a7a")}{arrow}{box("Base", "#5a3a6e")}<div style="font:800 70px Segoe UI,sans-serif;color:#ffcc33">→</div>'
+                f'{box("merge", "#6b5a1e")}</div><div style="font:600 34px Segoe UI,sans-serif;color:#c9c9d1;margin-top:50px">'
+                f'{"millones de pesos, mezclados" if es else "millions of weights, mixed"}</div></div>')
+    rows = "".join(f'<div style="width:520px;height:62px;margin:8px auto;border-radius:10px;display:flex;align-items:center;justify-content:center;'
+                   f'font:700 28px Segoe UI,sans-serif;background:{"#6b5a1e" if 3 <= g <= 5 else "#2a2a33"}">'
+                   f'{"capas" if es else "layers"} {g * 6}-{g * 6 + 5}</div>' for g in range(6, -1, -1))
+    return (f'<div style="color:#fff;text-align:center;margin-top:60px"><div style="font:600 34px Segoe UI,sans-serif;color:#ffcc33;margin-bottom:20px">'
+            f'MOSS-Image: {"42 capas" if es else "42 layers"}</div>{rows}</div>')
+
+
+def ml_key_html(key_json, sheet_name, es, step):
+    """The output folder (step 0) and the key file's content with blind_key marked (step 1)."""
+    if step == 0:
+        files = (sheet_name, sheet_name.replace(".png", "_key.json"))
+        rows = "".join(f'<div style="font:600 34px Consolas,monospace;padding:14px 22px;border-radius:8px;margin:8px 0;'
+                       f'background:{"#3a3214" if f.endswith(".json") else "#1d1d24"};color:{"#ffcc33" if f.endswith(".json") else "#e6e6ea"}">{f}</div>' for f in files)
+        return (f'<div style="color:#fff;margin-top:220px;width:1100px"><div style="font:600 30px Segoe UI,sans-serif;color:#c9c9d1;margin-bottom:16px">'
+                f'ComfyUI / output / MOSS / merge_lab</div>{rows}</div>')
+    k = key_json.get("blind_key", {})
+    lines = ['{', '  "labels": [ ... ],', '  "footer": "seed ... | 25 steps | CFG 2.5 ...",', '  "blind_key": {']
+    lines += [f'    "{n}": "{v}"{"," if i < len(k) - 1 else ""}' for i, (n, v) in enumerate(k.items())]
+    lines += ['  },', '  ...', '}']
+    esc = lambda t: t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    body = "".join(f'<div style="white-space:pre;color:{"#ffcc33" if (2 < i < 5 + len(k)) else "#c9c9d1"}">{esc(l)}</div>'
+                   for i, l in enumerate(lines))
+    return (f'<div style="margin-top:160px;width:1500px;text-align:left;background:#15151b;border-radius:12px;padding:30px 40px;'
+            f'font:500 30px Consolas,monospace;line-height:1.5">{body}</div>')
+
+
+async def ml_zoom(d, node, names, ms=900, pad=40):
+    """Camera on some widgets of a node (their rows, the node's width)."""
+    box = await d.js("""([id, names]) => { const n = window.__hv.node(id);
+        const ws = n.widgets.filter(w => names.some(m => w.name === m || w.name.endsWith('_' + m)));
+        if (!ws.length) return null;
+        const ys = ws.map(w => w.last_y ?? w.y ?? 0), y1 = Math.min(...ys) - 12, y2 = Math.max(...ys) + 40;
+        return [n.pos[0] - 10, n.pos[1] + y1, n.pos[0] + n.size[0] + 10, n.pos[1] + y2]; }""", [node, names])
+    if box:
+        await d.camera({"box": box}, ms, pad=pad, top=60)
+
+
+async def ml_prepare(page):
+    """Off camera: the finished example once with another seed, so the models are loaded and the on-camera sheets are warm."""
+    import copy
+    import urllib.parse
+    import make_examples as mx
+    base = urllib.parse.urlsplit(page.url)
+    info = mx.fetch(f"{base.scheme}://{base.netloc}", "/object_info")
+    g = {k: v for k, v in copy.deepcopy(mx.EXAMPLES["HaDeS MOSS Suite - Merge Lab"]).items() if k != "note"}
+    g["latent"][1]["seed"] = 1015
+    g["cmp"][1]["filename_prefix"] = "MOSS/warmup_merge_lab"
+    local = {mx.SFT: "mossImage_sft_bf16.safetensors", mx.BASE: "mossImage_base_bf16.safetensors"}
+    print("warm-up run:", await page.evaluate(UP_WARM_JS, mx.to_api(g, info, local)), flush=True)
+
+
+async def merge_lab(d: Director):
+    """Advanced workflow #2 as a lesson (guion v2): concepts, the workflow built node by node with zooms, a blind sheet with a pause,
+    the key opened from its file, a second seed on camera, the winner kept, a recap."""
+    P = ML_POS
+    es = d.language == "es"
+    await d.camera({"box": ML_BOX}, 10, pad=60, top=60)
+    await d.move(W * 0.97, H * 0.55, 10)
+    measured = "/view?filename=blind_s1013_00001_.png&subfolder=adv_merge_lab&type=output"
+
+    # 1. what we'll learn
+    await d.js("(h) => window.__hv.show(h, 10)",
+               ml_sheet_html(measured, width=1700, top=80) +
+               '<div style="position:fixed;left:0;right:0;bottom:120px;text-align:center;color:#fff">'
+               '<div style="font:900 72px Segoe UI Black,sans-serif">HaDeS MOSS Suite</div>'
+               f'<div style="font:600 36px Segoe UI,sans-serif;color:#ffcc33;margin-top:14px">{"Workflow avanzado n.º 2" if es else "Advanced workflow #2"}'
+               ' · Merge Lab</div></div>')
+    await d.hold(0.8)
+    for i in range(4):
+        await d.say(i)
+
+    # 2. what a merge is
+    await d._after_voice(0.25)
+    await d.js("(h) => window.__hv.show(h)", ml_merge_card(0, es))
+    await d.say(4)
+    await d.say(5)
+    await d._after_voice(0.25)
+    await d.js("(h) => window.__hv.show(h)", ml_merge_card(1, es))
+    await d.say(6)
+    await d._after_voice(1.0)
+    await d.js("() => window.__hv.hide()")
+
+    # 3. the two models
+    await d.camera({"box": [-60, -80, 900, 900]}, 1000, pad=60, top=60)
+    load = await basic_add(d, "HaDeSMossLoader", "MOSS Loader", P["load"])
+    await up_set(d, load, dict(BASIC_LOADER, unet_name="mossImage_sft_bf16.safetensors"))
+    await d.camera([load], 900, pad=140, top=60)
+    await d.say(7)
+    await basic_point(d, load, "unet_name")
+    await d.hold(1.2)
+    await basic_point(d, load, "clip_name")
+    await d.hold(1.2)
+    await basic_point(d, load, "vae_name")
+    base = await basic_add(d, "UNETLoader", "Load Diffusion Model", P["base"])
+    await up_set(d, base, {"unet_name": "mossImage_base_bf16.safetensors", "weight_dtype": "default"})
+    await d.camera([load, base], 900, pad=100, top=60)
+    await d.say(8)
+    await basic_point(d, base, "unet_name")
+
+    # 4. the Block Merger
+    await d._after_voice(0.25)
+    await d.camera({"box": [-60, -80, 1400, 1000]}, 1000, pad=60, top=60)
+    merge = await basic_add(d, "HaDeSMossModelBlockMerger", "MOSS Model Block Merger", P["merge"])
+    zero = {g: 0.0 for g in ("layers_00_05", "layers_06_11", "layers_12_17", "layers_18_23", "layers_24_29", "layers_30_35", "layers_36_41",
+                             "text_embedder", "time_modulation", "io")}
+    await up_set(d, merge, zero)
+    await d.say(9)
+    async with d.fast(1.6):
+        await basic_link(d, load, "MODEL", merge, "model1", 700)
+        await basic_link(d, base, "MODEL", merge, "model2", 700)
+    await d._after_voice(0.25)
+    await ml_zoom(d, merge, ["layers_00_05", "layers_36_41"])
+    await d.say(10)
+    await d._after_voice(0.3)
+    await d.say(11)
+    for g in ("layers_18_23", "layers_24_29", "layers_30_35"):
+        await basic_point(d, merge, g)
+        await d.hold(0.5)
+        await up_set(d, merge, {g: 0.5})
+        await d.hold(0.6)
+    await d._after_voice(0.25)
+    await d.camera([merge], 900, pad=60, top=60)
+    await d.say(12)
+    await d._after_voice(1.0)
+
+    # 5. the Multi-Model Merger
+    await d.camera({"box": [380, 500, 1400, 1500]}, 1000, pad=60, top=60)
+    slerp = await basic_add(d, "HaDeSMossMultiModelMerger", "MOSS Multi-Model Merger", P["slerp"])
+    await up_set(d, slerp, {"method": "SLERP", "weight_1": 1.0, "weight_2": 1.0})
+    async with d.fast(1.6):
+        await d.camera({"box": [-60, -80, 1400, 1500]}, 600, pad=60, top=60)
+        await basic_link(d, load, "MODEL", slerp, "model_1", 700)
+        await basic_link(d, base, "MODEL", slerp, "model_2", 700)
+    await d.camera([slerp], 900, pad=60, top=60)
+    await d.say(13)
+    await d._after_voice(0.25)
+    await ml_zoom(d, slerp, ["method"])
+    await basic_point(d, slerp, "method")
+    await d.say(14)
+    await d._after_voice(0.25)
+    await ml_zoom(d, slerp, ["weight_1", "weight_2"])
+    await basic_point(d, slerp, "weight_1")
+    await d.say(15)
+
+    # 6. the prompt and the seed
+    await d._after_voice(0.25)
+    await d.camera({"box": [880, -80, 1960, 1000]}, 1000, pad=60, top=60)
+    enh = await basic_add(d, "HaDeSMossPromptEnhancer", "MOSS Prompt Enhancer", P["enh"])
+    await up_set(d, enh, {"mode": "as written", "width": 1024, "height": 1024, "seed": 1, "negative": ""})
+    await d.say(16)
+    async with d.fast(2.0):
+        await basic_link(d, load, "CLIP", enh, "clip", 700)
+        await pe_type(d, enh, "idea", ML_PROMPT, paste=True)
+    latent = await basic_add(d, "HaDeSMossLatent", "MOSS Latent", P["latent"])
+    await up_set(d, latent, {"aspect_ratio": "1:1", "megapixels": 1.0, "seed": ML_SEEDS[0], "control_after_generate": "fixed"})
+    await d._after_voice(0.25)
+    await ml_zoom(d, latent, ["seed"])
+    await basic_point(d, latent, "seed")
+    await d.say(17)
+
+    # 7. the blind comparison
+    await d._after_voice(0.25)
+    await d.camera({"box": [1880, -80, 2500, 1050]}, 1000, pad=60, top=60)
+    cmp = await basic_add(d, "HaDeSMossCompareSampler", "MOSS Compare Sampler", P["cmp"])
+    await up_set(d, cmp, {"steps": 25, "cfg": 2.5, "sampler_name": "er_sde", "scheduler": "simple", "save": True, "embed_workflow": True,
+                          "filename_prefix": "MOSS/merge_lab/HaDeS_MOSS_blind", "blind": False, "blind_seed": 0})
+    await d.say(18)
+    await d._after_voice(0.25)
+    await d.camera({"box": ML_BOX}, 900, pad=60, top=60)
+    await d.say(19)
+    async with d.fast(4.0):
+        for a, out, inp in ((load, "MODEL", "model_A"), (base, "MODEL", "model_B"), (merge, "MODEL", "model_C"), (slerp, "MODEL", "model_D"),
+                            (load, "VAE", "vae")):
+            await basic_link(d, a, out, cmp, inp, 600)
+        await d.camera({"box": [880, -80, 2500, 1100]}, 500, pad=60, top=60)  # closer: the small slots need it
+        for a, out, inp in ((enh, "positive", "positive"), (enh, "negative", "negative"), (latent, "latent", "latent_image"),
+                            (latent, "seed", "seed"), (enh, "info", "prompt_info")):
+            await basic_link(d, a, out, cmp, inp, 600)
+    await d._after_voice(0.25)
+    await ml_zoom(d, cmp, ["blind"])
+    await basic_point(d, cmp, "blind")
+    await d.say(20)
+    await d.hold(0.6)
+    await up_set(d, cmp, {"blind": True})
+    await d.say(21)
+    await d.say(22)
+    await d.say(23)
+    await d._after_voice(0.25)
+    await ml_zoom(d, cmp, ["blind_seed"])
+    await basic_point(d, cmp, "blind_seed")
+    await d.say(24)
+    await d._after_voice(0.25)
+    await ml_zoom(d, cmp, ["filename_prefix"])
+    await basic_point(d, cmp, "filename_prefix")
+    await d.say(25)
+    await d._after_voice(0.25)
+    await d.camera({"box": ML_BOX}, 900, pad=60, top=60)
+    tel = await basic_add(d, "HaDeSMossSuiteTelemetry", "MOSS Suite Telemetry", P["tel"])
+    await d.say(26)
+    async with d.fast(2.0):
+        for a, i in ((load, 1), (enh, 2), (merge, 3), (slerp, 4), (latent, 5)):
+            await basic_link(d, a, "info", tel, f"info_{i}", 600)
+
+    # 8. blind
+    await d._after_voice(0.25)
+    await d.camera({"box": ML_BOX}, 900, pad=60, top=60)
+    await d.say(27)
+    sheet, secs = await basic_run(d, cmp)
+    key_url = sheet.replace(".png&", "_key.json&", 1)
+    key = await d.js("(u) => fetch(u).then(r => r.json())", key_url)
+    if any(not key.get("blind_key", {}).get(k, "").startswith(v) for k, v in ML_KEY.items()):
+        raise SystemExit(f"the take's key is not the measured one: {key.get('blind_key')}")
+    sheet_name = sheet.split("filename=")[1].split("&")[0]
+    await d.move(W * 0.97, H * 0.55)
+    await d.js("(h) => window.__hv.show(h)", ml_sheet_html(sheet, top=180))
+    await d.say(28)
+    await d._after_voice(0.1)
+    await d.js("(h) => window.__hv.show(h)", ml_sheet_html(sheet, top=180) +
+               f'<div style="position:fixed;left:0;right:0;bottom:150px;text-align:center;font:700 44px Segoe UI,sans-serif;color:#ffcc33">'
+               f'⏸ {"Pausa y elige" if es else "Pause and pick"}</div>')
+    await d.hold(4.0)
+    await d.js("(h) => window.__hv.show(h)", ml_key_html(key, sheet_name, es, 0))
+    await d.say(29)
+    await d._after_voice(0.25)
+    await d.js("(h) => window.__hv.show(h)", ml_key_html(key, sheet_name, es, 1))
+    await d.say(30)
+    await d._after_voice(0.25)
+    names = [(f'{k} · {ML_NAMES[k]}', "#ffcc33" if k in ("1", "4") else "#ffffff") for k in ("1", "2", "3", "4")]
+    await d.js("(h) => window.__hv.show(h)", ml_sheet_html(sheet, labels=names, top=180))
+    await d.say(31)
+    await d._after_voice(1.5)
+    await d.js("(h) => window.__hv.show(h)", ap_card([f'{secs:.1f} s · RTX 5090', "4 × 25 steps"], top=360))
+    await d.say(32)
+
+    # 9. one seed is not enough
+    await d._after_voice(0.25)
+    await d.js("(h) => window.__hv.show(h)", ml_sheet_html(sheet, frames=("1", "4"), top=180))
+    await d.say(33)
+    await d._after_voice(0.25)
+    await d.js("() => window.__hv.hide()")
+    await ml_zoom(d, latent, ["seed"])
+    await basic_point(d, latent, "seed")
+    await d.hold(0.5)
+    await up_set(d, latent, {"seed": ML_SEEDS[1]})
+    await d.hold(0.8)
+    await d.camera({"box": ML_BOX}, 900, pad=60, top=60)
+    sheet2, secs2 = await basic_run(d, cmp)
+    key2 = await d.js("(u) => fetch(u).then(r => r.json())", sheet2.replace(".png&", "_key.json&", 1))
+    if key2.get("blind_key") != key.get("blind_key"):
+        raise SystemExit(f"the second sheet's order changed: {key2.get('blind_key')}")
+    await d.move(W * 0.97, H * 0.55)
+    await d.js("(h) => window.__hv.show(h)", '<div style="display:flex;flex-direction:column;gap:18px">' +
+               ml_sheet_html(sheet, frames=("1", "4"), width=1500, top=10, caption=("Semilla 1013" if es else "Seed 1013")) +
+               ml_sheet_html(sheet2, frames=("1", "4"), width=1500, top=10, caption=("Semilla 1014" if es else "Seed 1014")) + "</div>")
+    await d.say(34)
+    await d.say(35)
+    await d._after_voice(1.0)
+
+    # 10. keep the winner
+    await d.js("() => window.__hv.hide()")
+    await d.camera({"box": [1880, 1050, 2900, 1900]}, 1000, pad=60, top=60)
+    saver = await basic_add(d, "HaDeSMossModelSaver", "MOSS Model Saver", P["saver"])
+    await up_set(d, saver, {"precision": "HMS v1 (W4A8 / W6A8, calibrated)", "filename_prefix": "diffusion_models/MOSS_merge_HMS_v1",
+                            "include_metadata": True, "custom_author": "HaDeS"})
+    await d.say(36)
+    async with d.fast(2.0):
+        await d.camera({"box": [-60, -80, 2900, 1900]}, 600, pad=60, top=60)
+        await basic_link(d, merge, "MODEL", saver, "model", 700)
+        await basic_link(d, merge, "info", saver, "recipe", 700)
+        await basic_link(d, load, "CLIP", saver, "clip", 700)
+    await d._after_voice(0.25)
+    await ml_zoom(d, saver, ["precision"])
+    await basic_point(d, saver, "precision")
+    await d.say(37)
+    await d._after_voice(0.25)
+    await d.js("(h) => window.__hv.show(h)", ap_card(["HMS v1 · 7.6 min · 3.96 GB", "6.1 s / image (13.3 s live)"]))
+    await d.say(38)
+    await d.say(39)
+    await d._after_voice(0.25)
+    await d.js("() => window.__hv.hide()")
+    await d.camera({"box": [1880, 1050, 2900, 1900]}, 900, pad=60, top=60)
+    meta = await basic_add(d, "HaDeSMossMetadataReader", "MOSS Metadata Reader", P["meta"])
+    await d.js("(ids) => { for (const id of ids) window.__hv.node(id).mode = 2; window.__hv.app().graph.setDirtyCanvas(true, true); }", [saver, meta])
+    await d.say(40)
+
+    # 11. recap and closing
+    await d._after_voice(0.25)
+    recap = (["1 · capa a capa, o todo a la vez", "2 · a ciegas, con varias semillas", "3 · HMS v1, y compáralo"] if es else
+             ["1 · layer by layer, or all at once", "2 · blind, on several seeds", "3 · HMS v1, and compare it"])
+    await d.js("(h) => window.__hv.show(h)", ap_card(recap[:1]))
+    await d.say(41)
+    await d._after_voice(0.25)
+    await d.js("(h) => window.__hv.show(h)", ap_card(recap[:2]))
+    await d.say(42)
+    await d._after_voice(0.25)
+    await d.js("(h) => window.__hv.show(h)", ap_card(recap))
+    await d.say(43)
+    await d._after_voice(0.25)
+    await d.js("() => window.__hv.hide()")
+    await d.camera({"box": [-60, -80, 2900, 1900]}, 1200, pad=60, top=60)
+    await d.js("(h) => window.__hv.show(h)",
+               '<div style="color:#fff;text-align:center;max-width:1300px;margin-top:300px">'
+               f'<div style="font:600 30px Segoe UI,sans-serif;color:#c9c9d1">{"Descarga gratis (enlace en la descripción)" if es else "Free download (link in the description)"}</div>'
+               '<div style="font:700 44px Segoe UI,sans-serif;margin-top:22px">examples/advanced/HaDeS MOSS Suite - Merge Lab.json</div></div>')
+    await d.say(44)
+    await d._after_voice(0.25)
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }",
+               ml_sheet_html(sheet, labels=names, width=1700, top=80) +
+               '<div style="position:fixed;left:0;right:0;bottom:120px;text-align:center;color:#fff">'
+               '<div style="font:900 72px Segoe UI Black,sans-serif">HaDeS MOSS Suite</div>'
+               f'<div style="font:400 28px Segoe UI,sans-serif;color:#c9c9d1;margin-top:18px">{"Workflow, Suite y modelos: enlaces en la descripción" if es else "Workflow, Suite and models: links in the description"}</div></div>')
+    await d.say(45)
+    await d.say(46)
+    await d.end(1.5)
+
+
+merge_lab.prepare = ml_prepare
+
+
 SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "layout_test": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_test, LAYOUT_TEST_LINES),
           "layout_sentence": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_sentence, LAYOUT_SENTENCE_LINES),
@@ -5430,7 +5903,8 @@ SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "controlnet": (None, controlnet_video, CN_LINES),
           "img2img": (None, img2img_video, I2I_LINES),
           "hms_v1": (None, hms_v1_video, HMS_LINES),
-          "adv_poster": (AP_FILE, adv_poster, AP_LINES)}
+          "adv_poster": (AP_FILE, adv_poster, AP_LINES),
+          "adv_merge_lab": (ML_FILE, merge_lab, ML_LINES)}
 
 # spoken forms where the written caption reads badly aloud
 SPOKEN = {"DRAFT LAYOUT": "Draft layout"}
@@ -5577,6 +6051,9 @@ async def record(scene, url, folder, unet, voice_lens, lora=None, language="en")
             n["widgets_values"][0] = unet
         if lora and n["type"] == "HaDeSMossTurbo":
             n["widgets_values"][0] = lora
+        local = getattr(play, "local_names", {})
+        if local and isinstance(n.get("widgets_values"), list):
+            n["widgets_values"] = [local.get(v, v) if isinstance(v, str) else v for v in n["widgets_values"]]
     frames = folder / "frames"
     shutil.rmtree(frames, ignore_errors=True)
     frames.mkdir(parents=True)
