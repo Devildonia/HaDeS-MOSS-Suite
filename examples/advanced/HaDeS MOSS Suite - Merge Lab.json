@@ -1,0 +1,1123 @@
+{
+ "id": "0cac1f97-4784-5f2d-9cb1-9d6a173188b6",
+ "revision": 0,
+ "last_node_id": 14,
+ "last_link_id": 26,
+ "nodes": [
+  {
+   "id": 1,
+   "type": "HaDeSMossLoader",
+   "pos": [
+    0,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "moss_image_sft_bf16.safetensors",
+    "qwen3.5_9b_int8_convrot.safetensors",
+    "flux2-vae.safetensors",
+    "default",
+    "default"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossLoader",
+    "models": [
+     {
+      "name": "moss_image_sft_bf16.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_sft_bf16.safetensors",
+      "directory": "diffusion_models"
+     },
+     {
+      "name": "qwen3.5_9b_int8_convrot.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_int8_convrot.safetensors",
+      "directory": "text_encoders"
+     },
+     {
+      "name": "flux2-vae.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae.safetensors",
+      "directory": "vae"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      1,
+      3,
+      6
+     ]
+    },
+    {
+     "name": "CLIP",
+     "type": "CLIP",
+     "links": [
+      5,
+      24
+     ]
+    },
+    {
+     "name": "VAE",
+     "type": "VAE",
+     "links": [
+      10
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      16
+     ]
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "type": "UNETLoader",
+   "pos": [
+    0,
+    380
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 1,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "moss_image_base_bf16.safetensors",
+    "default"
+   ],
+   "properties": {
+    "Node name for S&R": "UNETLoader",
+    "models": [
+     {
+      "name": "moss_image_base_bf16.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_base_bf16.safetensors",
+      "directory": "diffusion_models"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      2,
+      4,
+      12
+     ]
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "type": "HaDeSMossModelBlockMerger",
+   "pos": [
+    450,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 4,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "model1",
+     "type": "MODEL",
+     "link": 1
+    },
+    {
+     "name": "model2",
+     "type": "MODEL",
+     "link": 2
+    }
+   ],
+   "widgets_values": [
+    0.0,
+    0.0,
+    0.0,
+    0.5,
+    0.5,
+    0.5,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    ""
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossModelBlockMerger"
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      13,
+      22
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      18,
+      23
+     ]
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "type": "HaDeSMossMultiModelMerger",
+   "pos": [
+    450,
+    620
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 5,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "model_1",
+     "type": "MODEL",
+     "link": 3
+    },
+    {
+     "name": "model_2",
+     "type": "MODEL",
+     "link": 4
+    },
+    {
+     "name": "base_model",
+     "type": "MODEL",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "model_3",
+     "type": "MODEL",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "model_4",
+     "type": "MODEL",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "SLERP",
+    0.5,
+    1.0,
+    0,
+    "fixed",
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossMultiModelMerger"
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      14
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      19
+     ]
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "type": "HaDeSMossPromptEnhancer",
+   "pos": [
+    900,
+    0
+   ],
+   "size": [
+    440,
+    100
+   ],
+   "flags": {},
+   "order": 6,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "clip",
+     "type": "CLIP",
+     "link": 5
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "Photograph of an old fisherman with a grey beard mending a net on a wooden dock at sunrise, his face and weathered hands in view, thick wool sweater, seagulls in the background.",
+    "as written",
+    1024,
+    1024,
+    0.7,
+    1,
+    "fixed",
+    1024,
+    "",
+    "off",
+    1.0
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossPromptEnhancer"
+   },
+   "outputs": [
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "links": [
+      7
+     ]
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "links": [
+      8
+     ]
+    },
+    {
+     "name": "prompt",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "draft",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "width",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "height",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      15,
+      17
+     ]
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "type": "HaDeSMossLatent",
+   "pos": [
+    1400,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 2,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "1:1",
+    1.0,
+    1024,
+    1024,
+    1,
+    1013,
+    "fixed"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossLatent"
+   },
+   "outputs": [
+    {
+     "name": "latent",
+     "type": "LATENT",
+     "links": [
+      9
+     ]
+    },
+    {
+     "name": "width",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "height",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      20
+     ]
+    },
+    {
+     "name": "seed",
+     "type": "INT",
+     "links": [
+      11
+     ]
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "type": "HaDeSMossCompareSampler",
+   "pos": [
+    1850,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 8,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "model_A",
+     "type": "MODEL",
+     "link": 6
+    },
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "link": 7
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "link": 8
+    },
+    {
+     "name": "latent_image",
+     "type": "LATENT",
+     "link": 9
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": 10
+    },
+    {
+     "name": "seed",
+     "type": "INT",
+     "link": 11,
+     "widget": {
+      "name": "seed"
+     }
+    },
+    {
+     "name": "model_B",
+     "type": "MODEL",
+     "link": 12,
+     "shape": 7
+    },
+    {
+     "name": "model_C",
+     "type": "MODEL",
+     "link": 13,
+     "shape": 7
+    },
+    {
+     "name": "model_D",
+     "type": "MODEL",
+     "link": 14,
+     "shape": 7
+    },
+    {
+     "name": "turbo",
+     "type": "MOSS_TURBO",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "prompt_info",
+     "type": "STRING",
+     "link": 15,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    0,
+    "fixed",
+    25,
+    2.5,
+    "er_sde",
+    "simple",
+    "MOSS/merge_lab/HaDeS_MOSS_blind",
+    true,
+    true,
+    0.0,
+    "off",
+    "",
+    "",
+    "",
+    "",
+    true,
+    0,
+    "",
+    true
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossCompareSampler"
+   },
+   "outputs": [
+    {
+     "name": "sheet",
+     "type": "IMAGE",
+     "links": []
+    },
+    {
+     "name": "images",
+     "type": "IMAGE",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "type": "HaDeSMossSuiteTelemetry",
+   "pos": [
+    2300,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 9,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "info_1",
+     "type": "STRING",
+     "link": 16,
+     "shape": 7
+    },
+    {
+     "name": "info_2",
+     "type": "STRING",
+     "link": 17,
+     "shape": 7
+    },
+    {
+     "name": "info_3",
+     "type": "STRING",
+     "link": 18,
+     "shape": 7
+    },
+    {
+     "name": "info_4",
+     "type": "STRING",
+     "link": 19,
+     "shape": 7
+    },
+    {
+     "name": "info_5",
+     "type": "STRING",
+     "link": 20,
+     "shape": 7
+    },
+    {
+     "name": "info_6",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "info_7",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "info_8",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "HaDeS MOSS Suite Telemetry"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossSuiteTelemetry"
+   },
+   "outputs": [
+    {
+     "name": "report",
+     "type": "STRING",
+     "links": [
+      21
+     ]
+    },
+    {
+     "name": "json",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "summary",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "type": "PreviewAny",
+   "pos": [
+    2750,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 11,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "source",
+     "type": "*",
+     "link": 21
+    }
+   ],
+   "widgets_values": [],
+   "properties": {
+    "Node name for S&R": "PreviewAny"
+   },
+   "outputs": [
+    {
+     "name": "STRING",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "type": "HaDeSMossModelSaver",
+   "pos": [
+    1850,
+    1050
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 10,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 22
+    },
+    {
+     "name": "recipe",
+     "type": "STRING",
+     "link": 23,
+     "widget": {
+      "name": "recipe"
+     },
+     "shape": 7
+    },
+    {
+     "name": "clip",
+     "type": "CLIP",
+     "link": 24,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "diffusion_models/MOSS_merge_HMS_v1",
+    "HMS v1 (W4A8 / W6A8, calibrated)",
+    true,
+    "HaDeS",
+    "",
+    "stochastic",
+    "",
+    25,
+    2.5,
+    "er_sde",
+    "simple"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossModelSaver"
+   },
+   "outputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "links": []
+    },
+    {
+     "name": "saved_path",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      25
+     ]
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "type": "PreviewAny",
+   "pos": [
+    2300,
+    1050
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 12,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "source",
+     "type": "*",
+     "link": 25
+    }
+   ],
+   "widgets_values": [],
+   "properties": {
+    "Node name for S&R": "PreviewAny"
+   },
+   "outputs": [
+    {
+     "name": "STRING",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "type": "HaDeSMossMetadataReader",
+   "pos": [
+    2750,
+    1050
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 3,
+   "mode": 2,
+   "inputs": [],
+   "widgets_values": [
+    "(none)",
+    "(none)",
+    false
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossMetadataReader"
+   },
+   "outputs": [
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      26
+     ]
+    },
+    {
+     "name": "metadata_json",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "type": "PreviewAny",
+   "pos": [
+    3200,
+    1050
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 7,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "source",
+     "type": "*",
+     "link": 26
+    }
+   ],
+   "widgets_values": [],
+   "properties": {
+    "Node name for S&R": "PreviewAny"
+   },
+   "outputs": [
+    {
+     "name": "STRING",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "type": "Note",
+   "pos": [
+    0,
+    -800
+   ],
+   "size": [
+    800,
+    520
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "widgets_values": [
+    "HaDeS MOSS Suite - Merge Lab (advanced)\n\nMake two merges, judge them blind against their parents, keep the winner as a 3.96 GB file.\n\n1. Merges of SFT (MOSS Loader) and Base (Load Diffusion Model):\n   - Block Merger: the sixth video's TEST recipe, not a recommendation: half of Base in layers 18-35.\n   - Multi-Model Merger: SLERP, equal weights.\n   Change the sliders or the method: that is the experiment.\n2. MOSS Compare Sampler, blind: SFT (A), Base (B), Block Merger (C), SLERP (D) shuffled and numbered on one\n   sheet with the same prompt, seed and settings. Pick your favourite before you look at the key: it is in\n   the _key.json next to the sheet (output/MOSS/merge_lab), never on the sheet. The key names each merge\n   by how it was made: 'merge (blocks 18-35 x0.5): ...' and 'merge (SLERP): ...'.\n   Suite Telemetry reads the loader, the enhancer and both mergers, not the sheet, so it does not reveal the key.\n3. (muted) Keep the winner: MOSS Model Saver in HMS v1, calibrated on the merge itself, with the merger's\n   recipe in the file; connect the winning merger to model and recipe. Then the Metadata Reader reads it back.\n\nMeasured (RTX 5090, tools/RESULTS.md): the blind sheet about 61 s (87 s with the first load).\nSeed 1013, distance at 512 px (0-255): SFT - Base 48.2; the test recipe 34.3 from SFT, 41.2 from Base;\nSLERP 35.1 from SFT, 40.6 from Base; the two merges 9.6 apart (seed 1014: 32.2).\nHMS v1 of the test recipe: 7.6 min, 3.96 GB, 6.1 s an image against 13.3 s live. Against the live merge it kept\nthe scene on both seeds tried; on one the fisherman himself changed (glasses, a longer beard). Put the file in\nmodels/diffusion_models and compare it with the live merge in a Compare Sampler before you keep it."
+   ],
+   "properties": {}
+  }
+ ],
+ "links": [
+  [
+   1,
+   1,
+   0,
+   3,
+   0,
+   "MODEL"
+  ],
+  [
+   2,
+   2,
+   0,
+   3,
+   1,
+   "MODEL"
+  ],
+  [
+   3,
+   1,
+   0,
+   4,
+   0,
+   "MODEL"
+  ],
+  [
+   4,
+   2,
+   0,
+   4,
+   1,
+   "MODEL"
+  ],
+  [
+   5,
+   1,
+   1,
+   5,
+   0,
+   "CLIP"
+  ],
+  [
+   6,
+   1,
+   0,
+   7,
+   0,
+   "MODEL"
+  ],
+  [
+   7,
+   5,
+   0,
+   7,
+   1,
+   "CONDITIONING"
+  ],
+  [
+   8,
+   5,
+   1,
+   7,
+   2,
+   "CONDITIONING"
+  ],
+  [
+   9,
+   6,
+   0,
+   7,
+   3,
+   "LATENT"
+  ],
+  [
+   10,
+   1,
+   2,
+   7,
+   4,
+   "VAE"
+  ],
+  [
+   11,
+   6,
+   4,
+   7,
+   5,
+   "INT"
+  ],
+  [
+   12,
+   2,
+   0,
+   7,
+   6,
+   "MODEL"
+  ],
+  [
+   13,
+   3,
+   0,
+   7,
+   7,
+   "MODEL"
+  ],
+  [
+   14,
+   4,
+   0,
+   7,
+   8,
+   "MODEL"
+  ],
+  [
+   15,
+   5,
+   6,
+   7,
+   10,
+   "STRING"
+  ],
+  [
+   16,
+   1,
+   3,
+   8,
+   0,
+   "STRING"
+  ],
+  [
+   17,
+   5,
+   6,
+   8,
+   1,
+   "STRING"
+  ],
+  [
+   18,
+   3,
+   1,
+   8,
+   2,
+   "STRING"
+  ],
+  [
+   19,
+   4,
+   1,
+   8,
+   3,
+   "STRING"
+  ],
+  [
+   20,
+   6,
+   3,
+   8,
+   4,
+   "STRING"
+  ],
+  [
+   21,
+   8,
+   0,
+   9,
+   0,
+   "STRING"
+  ],
+  [
+   22,
+   3,
+   0,
+   10,
+   0,
+   "MODEL"
+  ],
+  [
+   23,
+   3,
+   1,
+   10,
+   1,
+   "STRING"
+  ],
+  [
+   24,
+   1,
+   1,
+   10,
+   2,
+   "CLIP"
+  ],
+  [
+   25,
+   10,
+   2,
+   11,
+   0,
+   "STRING"
+  ],
+  [
+   26,
+   12,
+   0,
+   13,
+   0,
+   "STRING"
+  ]
+ ],
+ "groups": [
+  {
+   "id": 1,
+   "title": "1. Merges",
+   "bounding": [
+    -30,
+    -80,
+    890,
+    1340
+   ],
+   "color": "#335533",
+   "font_size": 24,
+   "flags": {}
+  },
+  {
+   "id": 2,
+   "title": "2. Blind comparison",
+   "bounding": [
+    870,
+    -80,
+    2290,
+    1200
+   ],
+   "color": "#334466",
+   "font_size": 24,
+   "flags": {}
+  },
+  {
+   "id": 3,
+   "title": "3. Keep the winner: HMS v1 (muted)",
+   "bounding": [
+    1820,
+    970,
+    1790,
+    720
+   ],
+   "color": "#553355",
+   "font_size": 24,
+   "flags": {}
+  }
+ ],
+ "config": {},
+ "extra": {},
+ "version": 0.4
+}

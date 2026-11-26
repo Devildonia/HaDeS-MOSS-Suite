@@ -706,8 +706,62 @@ EXAMPLES["HaDeS MOSS Suite - Production Poster"] = {
                 ("3. x2 and final check", ["upmodel", "up", "enc", "ks2", "check2", "check2_report", "save"], "#553355")],
 }
 
+EXAMPLES["HaDeS MOSS Suite - Merge Lab"] = {
+    **loader(),  # SFT, its text encoder and VAE
+    "base": ("UNETLoader", {"unet_name": BASE, "weight_dtype": "default"}),
+    # 1. two ways to mix SFT and Base: the sixth video's TEST recipe (not a recommendation) and SLERP at equal weights
+    "merge": ("HaDeSMossModelBlockMerger", {"model1": ("load", 0), "model2": ("base", 0), "layers_00_05": 0.0, "layers_06_11": 0.0,
+                                            "layers_12_17": 0.0, "layers_18_23": 0.5, "layers_24_29": 0.5, "layers_30_35": 0.5,
+                                            "layers_36_41": 0.0, "text_embedder": 0.0, "time_modulation": 0.0, "io": 0.0, "recipe_override": ""}),
+    "slerp": ("HaDeSMossMultiModelMerger", {"model_1": ("load", 0), "model_2": ("base", 0), "method": "SLERP", "density": 0.5, "scale": 1.0,
+                                            "seed": 0, "weight_1": 1.0, "weight_2": 1.0}),
+    "enh": prompt("Photograph of an old fisherman with a grey beard mending a net on a wooden dock at sunrise, his face and weathered "
+                  "hands in view, thick wool sweater, seagulls in the background."),
+    "latent": latent(seed=1013),
+    # 2. blind: the four models shuffled and numbered on one sheet; the key goes to a separate _key.json next to it
+    "cmp": ("HaDeSMossCompareSampler", {"model_A": ("load", 0), "model_B": ("base", 0), "model_C": ("merge", 0), "model_D": ("slerp", 0),
+                                        "positive": ("enh", 0), "negative": ("enh", 1), "latent_image": ("latent", 0), "vae": ("load", 2),
+                                        "seed": ("latent", 4), "steps": 25, "cfg": 2.5, "sampler_name": "er_sde", "scheduler": "simple",
+                                        "filename_prefix": "MOSS/merge_lab/HaDeS_MOSS_blind", "save": True, "embed_workflow": True,
+                                        "prompt_info": ("enh", 6), "blind": True, "blind_seed": 0}),
+    **telemetry(("load", 3), ("enh", 6), ("merge", 1), ("slerp", 1), ("latent", 3)),
+    # 3. (muted) keep the winner: HMS v1 calibrated on the merge itself, then its recipe read back from the file
+    "saver": ("HaDeSMossModelSaver", {"model": ("merge", 0), "clip": ("load", 1), "recipe": ("merge", 1),
+                                      "filename_prefix": "diffusion_models/MOSS_merge_HMS_v1", "precision": "HMS v1 (W4A8 / W6A8, calibrated)",
+                                      "include_metadata": True, "custom_author": "HaDeS", "custom_model_title": "", "rounding": "stochastic",
+                                      "hms_steps": 25, "hms_cfg": 2.5, "hms_sampler": "er_sde", "hms_scheduler": "simple"}, MUTED),
+    "saver_info": ("PreviewAny", {"source": ("saver", 2)}, MUTED),
+    "meta": ("HaDeSMossMetadataReader", {"lora_name": "(none)", "model_name": "(none)", "sha256": False}, MUTED),
+    "meta_text": ("PreviewAny", {"source": ("meta", 0)}, MUTED),
+    "note": ("Note", {"text": "HaDeS MOSS Suite - Merge Lab (advanced)\n\n"
+                              "Make two merges, judge them blind against their parents, keep the winner as a 3.96 GB file.\n\n"
+                              "1. Merges of SFT (MOSS Loader) and Base (Load Diffusion Model):\n"
+                              "   - Block Merger: the sixth video's TEST recipe, not a recommendation: half of Base in layers 18-35.\n"
+                              "   - Multi-Model Merger: SLERP, equal weights.\n"
+                              "   Change the sliders or the method: that is the experiment.\n"
+                              "2. MOSS Compare Sampler, blind: SFT (A), Base (B), Block Merger (C), SLERP (D) shuffled and numbered on one\n"
+                              "   sheet with the same prompt, seed and settings. Pick your favourite before you look at the key: it is in\n"
+                              "   the _key.json next to the sheet (output/MOSS/merge_lab), never on the sheet. The key names each merge\n"
+                              "   by how it was made: 'merge (blocks 18-35 x0.5): ...' and 'merge (SLERP): ...'.\n"
+                              "   Suite Telemetry reads the loader, the enhancer and both mergers, not the sheet, so it does not reveal the key.\n"
+                              "3. (muted) Keep the winner: MOSS Model Saver in HMS v1, calibrated on the merge itself, with the merger's\n"
+                              "   recipe in the file; connect the winning merger to model and recipe. Then the Metadata Reader reads it back.\n\n"
+                              "Measured (RTX 5090, tools/RESULTS.md): the blind sheet about 61 s (87 s with the first load).\n"
+                              "Seed 1013, distance at 512 px (0-255): SFT - Base 48.2; the test recipe 34.3 from SFT, 41.2 from Base;\n"
+                              "SLERP 35.1 from SFT, 40.6 from Base; the two merges 9.6 apart (seed 1014: 32.2).\n"
+                              "HMS v1 of the test recipe: 7.6 min, 3.96 GB, 6.1 s an image against 13.3 s live. Against the live merge it kept\n"
+                              "the scene on both seeds tried; on one the fisherman himself changed (glasses, a longer beard). Put the file in\n"
+                              "models/diffusion_models and compare it with the live merge in a Compare Sampler before you keep it."}),
+    "_layout": {"note": (0, -800), "load": (0, 0), "base": (0, 380), "merge": (450, 0), "slerp": (450, 620), "enh": (900, 0),
+                "latent": (1400, 0), "cmp": (1850, 0), "tel": (2300, 0), "report": (2750, 0),
+                "saver": (1850, 1050), "saver_info": (2300, 1050), "meta": (2750, 1050), "meta_text": (3200, 1050)},
+    "_groups": [("1. Merges", ["load", "base", "merge", "slerp"], "#335533"),
+                ("2. Blind comparison", ["enh", "latent", "cmp", "tel", "report"], "#334466"),
+                ("3. Keep the winner: HMS v1 (muted)", ["saver", "saver_info", "meta", "meta_text"], "#553355")],
+}
+
 DEV_EXAMPLE_TITLES = {"HaDeS MOSS Suite - Dev Tools", "HaDeS MOSS Suite - Stage Metadata (Dev)"}
-ADVANCED_EXAMPLE_TITLES = {"HaDeS MOSS Suite - Production Poster"}
+ADVANCED_EXAMPLE_TITLES = {"HaDeS MOSS Suite - Production Poster", "HaDeS MOSS Suite - Merge Lab"}
 
 
 def fetch(server, path, data=None):

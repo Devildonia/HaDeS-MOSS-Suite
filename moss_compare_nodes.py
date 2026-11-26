@@ -40,6 +40,16 @@ def stem(name):
     return os.path.splitext(os.path.basename(str(name).replace("\\", "/")))[0]
 
 
+MODEL_EXTENSIONS = (".safetensors", ".sft", ".ckpt", ".pt", ".pth", ".bin", ".gguf")
+
+
+def name_stem(name):
+    """A model's display name: the file name without its folder and model extension; a name that is no file (a merge's
+    'merge (blocks 18-35 x0.5): a + b') keeps its dots."""
+    base = os.path.basename(str(name).replace("\\", "/"))
+    return os.path.splitext(base)[0] if os.path.splitext(base)[1].lower() in MODEL_EXTENSIONS else base
+
+
 def strength_text(s):
     return "" if abs(float(s) - 1.0) < 1e-6 else f" x{float(s):g}"
 
@@ -68,7 +78,7 @@ def files_label(files):
 def model_of(metas):
     loader = next((m for m in metas if m.get("node") == "loader"), None)
     if loader:
-        return stem(loader.get("model_file") or loader.get("model", ""))
+        return name_stem(loader.get("model_file") or loader.get("model", ""))
     # no MOSS Loader in the branch (a core loader): the files the KSampler traced its model to (0.9.3)
     ks = next((m for m in metas if m.get("node") == "ksampler" and m.get("model_files")), None)
     return files_label(ks["model_files"]) if ks else ""
@@ -334,6 +344,28 @@ MERGERS = ("model_block_merger", "multi_model_merger")
 LORA_NODES = ("multi_lora", "lora_block_weight")
 
 
+def merge_kind(recipe):
+    """How a merger mixed its inputs, for a label: the Multi-Model Merger's method, or the Block Merger's layers taken from model2
+    ('blocks 18-35 x0.5'); '' when the recipe does not say. Two merges of the same models are told apart on a sheet and in a
+    blind key (Merge Lab, 2026-11-26: both were 'merge: sft + base')."""
+    if recipe.get("node") == "multi_model_merger":
+        return str(recipe.get("method") or "")
+    ratios = recipe.get("layer_ratios")
+    if not isinstance(ratios, list):
+        return ""
+    runs, start = [], 0
+    for i in range(1, len(ratios) + 1):
+        if i == len(ratios) or ratios[i] != ratios[start]:
+            if ratios[start]:
+                span = f"{start}-{i - 1}" if i - 1 > start else f"{start}"
+                runs.append(f"{span} x{float(ratios[start]):g}")
+            start = i
+    runs += [f"{k} x{float(v):g}" for k, v in (recipe.get("part_ratios") or {}).items() if v]
+    if not runs:
+        return "blocks x0"
+    return "blocks " + (", ".join(runs) if len(runs) <= 3 else "custom")
+
+
 def recipe_chain(recipe):
     """(LoRA-node metas along the model's own line, model name, the Loader or merger meta it starts from) from a model's
     hades_moss_recipe attachment. The LoRA nodes are those on the path to the model file; a merge is named after its inputs."""
@@ -344,7 +376,8 @@ def recipe_chain(recipe):
             return loras, stem(recipe.get("model_file") or recipe.get("model", "")), recipe
         if node in MERGERS:
             names = [recipe_chain(v)[1] or "?" for k, v in (recipe.get("sources") or {}).items() if k != "base_model"]
-            return loras, "merge: " + " + ".join(names), recipe
+            kind = merge_kind(recipe)
+            return loras, (f"merge ({kind}): " if kind else "merge: ") + " + ".join(names), recipe
         if node in LORA_NODES:
             loras.append(recipe)
         recipe = (recipe.get("sources") or {}).get("model")

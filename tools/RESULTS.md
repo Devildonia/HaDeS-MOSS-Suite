@@ -1044,6 +1044,32 @@ a MOSS KSampler at denoise 0.25 (same model, prompt and seed), a second Text Che
   39 links, the five boxes on the editor's canvas and batch 4, and is the same after save / reload in each. Queued with Run in Nodes 2.0:
   the same as the API run of seed 1013 (four candidates in the preview, image 2 picked, the final 3 / 3, one PNG saved).
 
+## Merge Lab, the second advanced workflow (2026-11-26, Suite 0.9.8)
+
+`examples/advanced/HaDeS MOSS Suite - Merge Lab.json` through the API on the clean ComfyUI (port 8189, `--use-sage-attention`, RTX 5090):
+SFT (MOSS Loader) and Base (Load Diffusion Model), the sixth video's test recipe (Block Merger, layers 18-35 at 0.5) and SLERP (Multi-Model
+Merger, weights 1 / 1), the tutorials' fisherman, 25 steps, CFG 2.5, er_sde / simple, 1024 x 1024, seeds 1013 / 1014. Distances: mean
+absolute pixel difference at 512 x 512 (0-255). Scripts `measure_merge_lab.py` and `measure_live_vs_hms.py`, reports and the HMS file's
+extra model path in `I:/HaDeS_MOSS/advanced_workflows/merge_lab`.
+
+- **Blind sheet** (Compare Sampler, four models, `blind`): 61.1 s, 86.9 s with the models' first load. Panels numbered 1-4 without names; the
+  key in `<sheet>_key.json` next to it. The key named both merges `merge: mossImage_sft_bf16 + mossImage_base_bf16` (only the slot letter
+  told the Block Merger from SLERP); fixed, a sheet label and the key now say how each merge was made: re-run on the same graph, seed 1013,
+  blind and open, the key and the labels read `C: merge (blocks 18-35 x0.5): mossImage_sft_bf16 + mossImage_base_bf16` and
+  `D: merge (SLERP): mossImage_sft_bf16 + mossImage_base_bf16`, drawn whole on the open sheet (`check_labels.py`). Suite Telemetry, wired to the loader, the enhancer and both mergers (not the sheet), shows
+  their settings and no key.
+- **Distances**, seed 1013 / 1014: SFT - Base 48.2 / 47.6; test recipe 34.3 / 30.2 from SFT and 41.2 / 48.3 from Base (the sixth video's
+  values again); SLERP 35.1 / 36.7 from SFT and 40.6 / 31.6 from Base; the two merges 9.6 / 32.2 apart. By eye on seed 1013 the two merges
+  are nearly the same picture, a closer framing than SFT's (whose fisherman wears a cap) and Base's.
+- **HMS v1 of the test recipe** (Model Saver, calibration 25 steps, CFG 2.5, er_sde / simple): 453.3 s, 3,955,671,332 B, recipe saved.
+  Loaded with Load Diffusion Model: 6.08-6.11 s an image against 13.27-13.33 s for the live merge (three warm seeds each, 2.2x).
+- **HMS v1 against the live merge** (Compare Sampler, seeds 1013 / 1014): 10.9 / 31.9. On 1013 the same image with the gaze changed; on 1014
+  the same scene (dock, seagulls, sun, horizon) with the fisherman changed (glasses, a longer beard, a lower head). Base's own HMS v1 file
+  measured 9.0 / 8.0 from Base on these seeds ("HMS v1 vs BF16 live comparison on Base"); two seeds do not say whether merges move more.
+- Frontend: the example loads in the three views (classic with HaDeS widgets, classic with standard widgets, Nodes 2.0) with 14 nodes,
+  26 links, three groups and four muted nodes, no node overlapping another, and is the same after save / reload in each. With the local
+  file names set, Run in Nodes 2.0 saved the blind sheet and its key file: 0.006 / 255 from the API sheet of seed 1013.
+
 ## Compare models and LoRAs (2026-11-21, for the seventh video tutorial)
 
 Clean ComfyUI on port 8189, `--use-sage-attention`, RTX 5090, the tutorials' fisherman (seed 1013). Scripts and sheets in

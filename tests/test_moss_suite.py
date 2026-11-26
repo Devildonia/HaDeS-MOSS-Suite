@@ -1427,6 +1427,27 @@ class TestCompareSampler(unittest.TestCase):
         self.assertEqual(tuple(out["result"][1].shape), (4, 16, 16, 3))
         self.assertEqual([m["node"] for m in meta["branches"]["A"]], ["multi_lora", "ksampler", "loader"])
 
+    def test_merge_labels_name_the_method_and_layers(self):
+        """Merge Lab (2026-11-26): a Block Merger and a SLERP of the same two models were both 'merge: a + b' in the blind key."""
+        cmp = importlib.import_module(f"{PACK}.moss_compare_nodes")
+        loader = lambda name: {"node": "loader", "model": name, "model_file": f"MOSS/{name}"}
+        src = {"model1": loader("sft.safetensors"), "model2": loader("base.safetensors")}
+        ratios = [0.0] * 18 + [0.5] * 18 + [0.0] * 6
+        block = {"node": "model_block_merger", "layer_ratios": ratios, "part_ratios": {"text_embedder": 0.0, "time_modulation": 0.0, "io": 0.0},
+                 "sources": src}
+        slerp = {"node": "multi_model_merger", "method": "SLERP", "sources": {"model_1": src["model1"], "model_2": src["model2"]}}
+        self.assertEqual(cmp.recipe_chain(block)[1], "merge (blocks 18-35 x0.5): sft + base")
+        self.assertEqual(cmp.recipe_chain(slerp)[1], "merge (SLERP): sft + base")
+        one = {**block, "layer_ratios": [0.0] * 41 + [1.0], "part_ratios": {"io": 0.3}}
+        self.assertEqual(cmp.recipe_chain(one)[1], "merge (blocks 41 x1, io x0.3): sft + base")
+        many = {**block, "layer_ratios": [0.1, 0.0, 0.2, 0.0, 0.3, 0.0, 0.4] + [0.0] * 35}
+        self.assertEqual(cmp.recipe_chain(many)[1], "merge (blocks custom): sft + base")
+        self.assertEqual(cmp.recipe_chain({**block, "layer_ratios": [0.0] * 42})[1], "merge (blocks x0): sft + base")
+        # the sheet label keeps the ratio's dot (the name went through a file-name stem and was cut at 'x0')
+        label = cmp.auto_label([{"node": "loader", "model_file": cmp.recipe_chain(block)[1]}])
+        self.assertEqual(label, "merge (blocks 18-35 x0.5): sft + base")
+        self.assertEqual(cmp.auto_label([{"node": "loader", "model_file": "MOSS/mossImage_sft_bf16.safetensors"}]), "mossImage_sft_bf16")
+
     def test_branches_keep_the_core_loader_files(self):
         """Audit 0.9.6 F02: two models from Load Diffusion Model were named on the sheet but not in the branches Telemetry reads."""
         graph = {"1": {"class_type": "UNETLoader", "inputs": {"unet_name": "sft.safetensors", "weight_dtype": "default"}},
