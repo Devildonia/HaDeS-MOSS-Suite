@@ -1,0 +1,1565 @@
+{
+ "id": "06d55eae-493a-5a58-b617-4ac69f79fc65",
+ "revision": 0,
+ "last_node_id": 19,
+ "last_link_id": 45,
+ "nodes": [
+  {
+   "id": 1,
+   "type": "HaDeSMossLoader",
+   "pos": [
+    0,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "moss_image_base_bf16.safetensors",
+    "qwen3.5_9b_int8_convrot.safetensors",
+    "flux2-vae.safetensors",
+    "default",
+    "default"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossLoader",
+    "models": [
+     {
+      "name": "moss_image_base_bf16.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_base_bf16.safetensors",
+      "directory": "diffusion_models"
+     },
+     {
+      "name": "qwen3.5_9b_int8_convrot.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_int8_convrot.safetensors",
+      "directory": "text_encoders"
+     },
+     {
+      "name": "flux2-vae.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae.safetensors",
+      "directory": "vae"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      1,
+      16,
+      28
+     ]
+    },
+    {
+     "name": "CLIP",
+     "type": "CLIP",
+     "links": [
+      2
+     ]
+    },
+    {
+     "name": "VAE",
+     "type": "VAE",
+     "links": [
+      5,
+      13,
+      21,
+      27,
+      33
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      37
+     ]
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "type": "HaDeSMossMultiLora",
+   "pos": [
+    0,
+    380
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 5,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 1
+    }
+   ],
+   "widgets_values": [
+    true,
+    "[{\"name\": \"moss-color-depth-control.safetensors\", \"on\": true, \"strength\": 1.0}]"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossMultiLora"
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      8
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      38
+     ]
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "type": "LoadImage",
+   "pos": [
+    950,
+    420
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 1,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "depth_map.png"
+   ],
+   "properties": {
+    "Node name for S&R": "LoadImage"
+   },
+   "outputs": [
+    {
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      7
+     ]
+    },
+    {
+     "name": "MASK",
+     "type": "MASK",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "type": "HaDeSMossPromptEnhancer",
+   "pos": [
+    450,
+    0
+   ],
+   "size": [
+    440,
+    100
+   ],
+   "flags": {},
+   "order": 6,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "clip",
+     "type": "CLIP",
+     "link": 2
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "Oil painting of a medieval knight in weathered steel armor mending a chainmail cloak on a stone castle parapet at sunset, warm torches, sea in the background.",
+    "as written",
+    1024,
+    1024,
+    0.7,
+    1,
+    "fixed",
+    1024,
+    "worst quality, low quality",
+    "off",
+    1.0
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossPromptEnhancer"
+   },
+   "outputs": [
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "links": [
+      3,
+      17,
+      29
+     ]
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "links": [
+      4,
+      18,
+      30
+     ]
+    },
+    {
+     "name": "prompt",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "draft",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "width",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "height",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      39
+     ]
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "type": "HaDeSMossLatent",
+   "pos": [
+    950,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 2,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "1:1",
+    1.0,
+    1024,
+    1024,
+    1,
+    1013,
+    "fixed"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossLatent"
+   },
+   "outputs": [
+    {
+     "name": "latent",
+     "type": "LATENT",
+     "links": [
+      6,
+      11
+     ]
+    },
+    {
+     "name": "width",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "height",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      40
+     ]
+    },
+    {
+     "name": "seed",
+     "type": "INT",
+     "links": [
+      12,
+      20,
+      32
+     ]
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "type": "HaDeSMossControl",
+   "pos": [
+    1400,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 7,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "link": 3
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "link": 4
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": 5
+    },
+    {
+     "name": "latent",
+     "type": "LATENT",
+     "link": 6
+    },
+    {
+     "name": "depth_map",
+     "type": "IMAGE",
+     "link": 7,
+     "shape": 7
+    },
+    {
+     "name": "color_map",
+     "type": "IMAGE",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "off (depth only)",
+    8,
+    4.0,
+    1.0,
+    0.0,
+    1.0
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossControl"
+   },
+   "outputs": [
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "links": [
+      9
+     ]
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "links": [
+      10
+     ]
+    },
+    {
+     "name": "maps",
+     "type": "IMAGE",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      41
+     ]
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "type": "HaDeSMossTurbo",
+   "pos": [
+    1400,
+    620
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 3,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "HaDeS-MOSS-Turbo-8steps-v1.0.safetensors",
+    1.0,
+    8,
+    1.0,
+    "euler",
+    "simple",
+    true
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossTurbo",
+    "models": [
+     {
+      "name": "HaDeS-MOSS-Turbo-8steps-v1.0.safetensors",
+      "url": "https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo/resolve/main/HaDeS-MOSS-Turbo-8steps-v1.0.safetensors",
+      "directory": "loras"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "turbo",
+     "type": "MOSS_TURBO",
+     "links": [
+      14,
+      22,
+      34
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "type": "HaDeSMossKSampler",
+   "pos": [
+    1850,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 8,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 8
+    },
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "link": 9
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "link": 10
+    },
+    {
+     "name": "latent_image",
+     "type": "LATENT",
+     "link": 11
+    },
+    {
+     "name": "seed",
+     "type": "INT",
+     "link": 12,
+     "widget": {
+      "name": "seed"
+     }
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": 13,
+     "shape": 7
+    },
+    {
+     "name": "turbo",
+     "type": "MOSS_TURBO",
+     "link": 14,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    0,
+    "fixed",
+    25,
+    2.5,
+    "euler",
+    "simple",
+    1.0,
+    0.0,
+    "off",
+    "steps / denoise (core)"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossKSampler"
+   },
+   "outputs": [
+    {
+     "name": "latent",
+     "type": "LATENT",
+     "links": [
+      19
+     ]
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "links": [
+      15
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      42
+     ]
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "type": "PreviewImage",
+   "pos": [
+    1850,
+    600
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 9,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "images",
+     "type": "IMAGE",
+     "link": 15
+    }
+   ],
+   "widgets_values": [],
+   "properties": {
+    "Node name for S&R": "PreviewImage"
+   },
+   "outputs": [
+    {
+     "name": "images",
+     "type": "IMAGE",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "type": "HaDeSMossKSampler",
+   "pos": [
+    2300,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 10,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 16
+    },
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "link": 17
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "link": 18
+    },
+    {
+     "name": "latent_image",
+     "type": "LATENT",
+     "link": 19
+    },
+    {
+     "name": "seed",
+     "type": "INT",
+     "link": 20,
+     "widget": {
+      "name": "seed"
+     }
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": 21,
+     "shape": 7
+    },
+    {
+     "name": "turbo",
+     "type": "MOSS_TURBO",
+     "link": 22,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    0,
+    "fixed",
+    25,
+    2.5,
+    "euler",
+    "simple",
+    0.3,
+    0.0,
+    "off",
+    "exact"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossKSampler"
+   },
+   "outputs": [
+    {
+     "name": "latent",
+     "type": "LATENT",
+     "links": []
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "links": [
+      23,
+      25
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "type": "PreviewImage",
+   "pos": [
+    2300,
+    600
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 11,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "images",
+     "type": "IMAGE",
+     "link": 23
+    }
+   ],
+   "widgets_values": [],
+   "properties": {
+    "Node name for S&R": "PreviewImage"
+   },
+   "outputs": [
+    {
+     "name": "images",
+     "type": "IMAGE",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "type": "UpscaleModelLoader",
+   "pos": [
+    2750,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 4,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "RealESRGAN_x2plus.pth"
+   ],
+   "properties": {
+    "Node name for S&R": "UpscaleModelLoader",
+    "models": [
+     {
+      "name": "RealESRGAN_x2plus.pth",
+      "url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth",
+      "directory": "upscale_models"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "UPSCALE_MODEL",
+     "type": "UPSCALE_MODEL",
+     "links": [
+      24
+     ]
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "type": "ImageUpscaleWithModel",
+   "pos": [
+    2750,
+    150
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 12,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "upscale_model",
+     "type": "UPSCALE_MODEL",
+     "link": 24
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "link": 25
+    }
+   ],
+   "widgets_values": [],
+   "properties": {
+    "Node name for S&R": "ImageUpscaleWithModel"
+   },
+   "outputs": [
+    {
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      26
+     ]
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "type": "VAEEncode",
+   "pos": [
+    2750,
+    300
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 13,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "pixels",
+     "type": "IMAGE",
+     "link": 26
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": 27
+    }
+   ],
+   "widgets_values": [],
+   "properties": {
+    "Node name for S&R": "VAEEncode"
+   },
+   "outputs": [
+    {
+     "name": "LATENT",
+     "type": "LATENT",
+     "links": [
+      31
+     ]
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "type": "HaDeSMossKSampler",
+   "pos": [
+    3150,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 14,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 28
+    },
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "link": 29
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "link": 30
+    },
+    {
+     "name": "latent_image",
+     "type": "LATENT",
+     "link": 31
+    },
+    {
+     "name": "seed",
+     "type": "INT",
+     "link": 32,
+     "widget": {
+      "name": "seed"
+     }
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": 33,
+     "shape": 7
+    },
+    {
+     "name": "turbo",
+     "type": "MOSS_TURBO",
+     "link": 34,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    0,
+    "fixed",
+    25,
+    2.5,
+    "euler",
+    "simple",
+    0.25,
+    0.0,
+    "off",
+    "steps / denoise (core)"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossKSampler"
+   },
+   "outputs": [
+    {
+     "name": "latent",
+     "type": "LATENT",
+     "links": []
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "links": [
+      35
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      44
+     ]
+    }
+   ]
+  },
+  {
+   "id": 16,
+   "type": "HaDeSMossImageSaver",
+   "pos": [
+    3600,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 16,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "images",
+     "type": "IMAGE",
+     "link": 35
+    },
+    {
+     "name": "metadata",
+     "type": "STRING",
+     "link": 36,
+     "shape": 7
+    },
+    {
+     "name": "primary_stage_metadata",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "positive",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "negative",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "MOSS/HaDeS_MOSS_fixed_pose_%seed%",
+    true,
+    true,
+    true
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossImageSaver"
+   },
+   "outputs": [
+    {
+     "name": "parameters",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "type": "HaDeSMossSuiteTelemetry",
+   "pos": [
+    3600,
+    480
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 15,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "info_1",
+     "type": "STRING",
+     "link": 37,
+     "shape": 7
+    },
+    {
+     "name": "info_2",
+     "type": "STRING",
+     "link": 38,
+     "shape": 7
+    },
+    {
+     "name": "info_3",
+     "type": "STRING",
+     "link": 39,
+     "shape": 7
+    },
+    {
+     "name": "info_4",
+     "type": "STRING",
+     "link": 40,
+     "shape": 7
+    },
+    {
+     "name": "info_5",
+     "type": "STRING",
+     "link": 41,
+     "shape": 7
+    },
+    {
+     "name": "info_6",
+     "type": "STRING",
+     "link": 42,
+     "shape": 7
+    },
+    {
+     "name": "info_7",
+     "type": "STRING",
+     "link": 43,
+     "shape": 7
+    },
+    {
+     "name": "info_8",
+     "type": "STRING",
+     "link": 44,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "HaDeS MOSS Suite Telemetry"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossSuiteTelemetry"
+   },
+   "outputs": [
+    {
+     "name": "report",
+     "type": "STRING",
+     "links": [
+      45
+     ]
+    },
+    {
+     "name": "json",
+     "type": "STRING",
+     "links": [
+      36
+     ]
+    },
+    {
+     "name": "summary",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 18,
+   "type": "PreviewAny",
+   "pos": [
+    4050,
+    480
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 17,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "source",
+     "type": "*",
+     "link": 45
+    }
+   ],
+   "widgets_values": [],
+   "properties": {
+    "Node name for S&R": "PreviewAny"
+   },
+   "outputs": [
+    {
+     "name": "STRING",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 19,
+   "type": "Note",
+   "pos": [
+    0,
+    -760
+   ],
+   "size": [
+    800,
+    520
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "widgets_values": [
+    "HaDeS MOSS Suite - Fixed Pose (advanced)\n\nOne depth map holds the pose; change only the prompt for another character in the same pose.\n\n1. Base + the control adapter (moss-color-depth-control, keep it at 1.0) + Turbo 8-steps v1.0, depth only,\n   8 steps, CFG 1: the pose from the map (near is white). About 3.1 s on an RTX 5090.\n2. The same latent redrawn by Base + the turbo without the adapter and without control, denoise 0.3\n   (exact): the adapter's image is soft; this pass brings back skin pores, wrinkles, veins and metal\n   detail and keeps the pose. About 3 s more.\n3. x2: RealESRGAN x2, then a MOSS pass at denoise 0.25. 18.2 s for the whole workflow, warm.\n\nMeasured (tools/RESULTS.md), three characters x 4 seeds (a knight, a potter, an astronaut), pose =\nDepth Anything V2 of the result against the map (correlation, 1 = the same depth):\n  without control 0.62, with control 0.977, after the 0.3 pass 0.976, after the x2 0.976.\n  Denoise 0.4 and 0.5 keep the pose too (0.976, 0.974) and change the picture more.\nThe map carries more than the pose: build, head and hands come from the photo (the knight got the\n  fisherman's beard; the potter, asked in her thirties, looks older in all four seeds).\n\nMaking the map: Depth Anything V2 (comfyui_controlnet_aux) or any depth tool. Look at it first:\n  it must show the silhouette. A blur with no outline is a faulty map (measured with\n  comfyui_controlnet_aux 1.1.6 on our install, see RESULTS); the control then follows only the rough layout.\nTelemetry's notes on the turbo at denoise 0.30 / 0.25 refer to its older measurements; these are in RESULTS.\n\nModels: the adapter (darask0/MOSS-Image-color-depth-control) and the turbo in models/loras,\nRealESRGAN_x2plus.pth in models/upscale_models."
+   ],
+   "properties": {}
+  }
+ ],
+ "links": [
+  [
+   1,
+   1,
+   0,
+   2,
+   0,
+   "MODEL"
+  ],
+  [
+   2,
+   1,
+   1,
+   4,
+   0,
+   "CLIP"
+  ],
+  [
+   3,
+   4,
+   0,
+   6,
+   0,
+   "CONDITIONING"
+  ],
+  [
+   4,
+   4,
+   1,
+   6,
+   1,
+   "CONDITIONING"
+  ],
+  [
+   5,
+   1,
+   2,
+   6,
+   2,
+   "VAE"
+  ],
+  [
+   6,
+   5,
+   0,
+   6,
+   3,
+   "LATENT"
+  ],
+  [
+   7,
+   3,
+   0,
+   6,
+   4,
+   "IMAGE"
+  ],
+  [
+   8,
+   2,
+   0,
+   8,
+   0,
+   "MODEL"
+  ],
+  [
+   9,
+   6,
+   0,
+   8,
+   1,
+   "CONDITIONING"
+  ],
+  [
+   10,
+   6,
+   1,
+   8,
+   2,
+   "CONDITIONING"
+  ],
+  [
+   11,
+   5,
+   0,
+   8,
+   3,
+   "LATENT"
+  ],
+  [
+   12,
+   5,
+   4,
+   8,
+   4,
+   "INT"
+  ],
+  [
+   13,
+   1,
+   2,
+   8,
+   5,
+   "VAE"
+  ],
+  [
+   14,
+   7,
+   0,
+   8,
+   6,
+   "MOSS_TURBO"
+  ],
+  [
+   15,
+   8,
+   1,
+   9,
+   0,
+   "IMAGE"
+  ],
+  [
+   16,
+   1,
+   0,
+   10,
+   0,
+   "MODEL"
+  ],
+  [
+   17,
+   4,
+   0,
+   10,
+   1,
+   "CONDITIONING"
+  ],
+  [
+   18,
+   4,
+   1,
+   10,
+   2,
+   "CONDITIONING"
+  ],
+  [
+   19,
+   8,
+   0,
+   10,
+   3,
+   "LATENT"
+  ],
+  [
+   20,
+   5,
+   4,
+   10,
+   4,
+   "INT"
+  ],
+  [
+   21,
+   1,
+   2,
+   10,
+   5,
+   "VAE"
+  ],
+  [
+   22,
+   7,
+   0,
+   10,
+   6,
+   "MOSS_TURBO"
+  ],
+  [
+   23,
+   10,
+   1,
+   11,
+   0,
+   "IMAGE"
+  ],
+  [
+   24,
+   12,
+   0,
+   13,
+   0,
+   "UPSCALE_MODEL"
+  ],
+  [
+   25,
+   10,
+   1,
+   13,
+   1,
+   "IMAGE"
+  ],
+  [
+   26,
+   13,
+   0,
+   14,
+   0,
+   "IMAGE"
+  ],
+  [
+   27,
+   1,
+   2,
+   14,
+   1,
+   "VAE"
+  ],
+  [
+   28,
+   1,
+   0,
+   15,
+   0,
+   "MODEL"
+  ],
+  [
+   29,
+   4,
+   0,
+   15,
+   1,
+   "CONDITIONING"
+  ],
+  [
+   30,
+   4,
+   1,
+   15,
+   2,
+   "CONDITIONING"
+  ],
+  [
+   31,
+   14,
+   0,
+   15,
+   3,
+   "LATENT"
+  ],
+  [
+   32,
+   5,
+   4,
+   15,
+   4,
+   "INT"
+  ],
+  [
+   33,
+   1,
+   2,
+   15,
+   5,
+   "VAE"
+  ],
+  [
+   34,
+   7,
+   0,
+   15,
+   6,
+   "MOSS_TURBO"
+  ],
+  [
+   35,
+   15,
+   1,
+   16,
+   0,
+   "IMAGE"
+  ],
+  [
+   36,
+   17,
+   1,
+   16,
+   1,
+   "STRING"
+  ],
+  [
+   37,
+   1,
+   3,
+   17,
+   0,
+   "STRING"
+  ],
+  [
+   38,
+   2,
+   1,
+   17,
+   1,
+   "STRING"
+  ],
+  [
+   39,
+   4,
+   6,
+   17,
+   2,
+   "STRING"
+  ],
+  [
+   40,
+   5,
+   3,
+   17,
+   3,
+   "STRING"
+  ],
+  [
+   41,
+   6,
+   3,
+   17,
+   4,
+   "STRING"
+  ],
+  [
+   42,
+   8,
+   2,
+   17,
+   5,
+   "STRING"
+  ],
+  [
+   43,
+   10,
+   2,
+   17,
+   6,
+   "STRING"
+  ],
+  [
+   44,
+   15,
+   2,
+   17,
+   7,
+   "STRING"
+  ],
+  [
+   45,
+   17,
+   0,
+   18,
+   0,
+   "STRING"
+  ]
+ ],
+ "groups": [
+  {
+   "id": 1,
+   "title": "1. The pose from the depth map (control, 8 steps)",
+   "bounding": [
+    -30,
+    -80,
+    2290,
+    1130
+   ],
+   "color": "#335533",
+   "font_size": 24,
+   "flags": {}
+  },
+  {
+   "id": 2,
+   "title": "2. Redraw without control at 0.3",
+   "bounding": [
+    2270,
+    -80,
+    440,
+    930
+   ],
+   "color": "#334466",
+   "font_size": 24,
+   "flags": {}
+  },
+  {
+   "id": 3,
+   "title": "3. x2",
+   "bounding": [
+    2720,
+    -80,
+    1740,
+    1050
+   ],
+   "color": "#553355",
+   "font_size": 24,
+   "flags": {}
+  }
+ ],
+ "config": {},
+ "extra": {},
+ "version": 0.4
+}

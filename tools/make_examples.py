@@ -861,9 +861,66 @@ EXAMPLES["HaDeS MOSS Suite - LoRA Surgery"] = {
                 ("4. One file (muted)", ["onefile", "resize"], "#334466")],
 }
 
+EXAMPLES["HaDeS MOSS Suite - Fixed Pose"] = {
+    **loader(BASE),
+    # 1. one depth map holds the pose; change only the prompt for another character in the same pose
+    "loras": ("HaDeSMossMultiLora", {"model": ("load", 0), "enabled": True,
+                                     "loras": json.dumps([{"name": CONTROL_ADAPTER, "on": True, "strength": 1.0}])}),
+    "depth": ("LoadImage", {"image": "depth_map.png"}),
+    "enh": prompt("Oil painting of a medieval knight in weathered steel armor mending a chainmail cloak on a stone castle parapet at "
+                  "sunset, warm torches, sea in the background.", negative="worst quality, low quality"),
+    "latent": latent(1013),
+    "ctrl": ("HaDeSMossControl", {"positive": ("enh", 0), "negative": ("enh", 1), "vae": ("load", 2), "latent": ("latent", 0),
+                                  "depth_map": ("depth", 0), "color_mode": "off (depth only)", "colors": 8, "blur": 4.0,
+                                  "strength": 1.0, "start_percent": 0.0, "end_percent": 1.0}),
+    "turbo": ("HaDeSMossTurbo", {"lora_name": TURBO_V10, "strength": 1.0, "steps": 8}),
+    "ks": with_turbo(ksampler(("loras", 0), ("latent", 0), seed=("latent", 4)), sampler_name="euler", positive=("ctrl", 0),
+                     negative=("ctrl", 1)),
+    "stage1": ("PreviewImage", {"images": ("ks", 1)}),
+    # 2. the same latent redrawn without the adapter and without control, denoise 0.3 (exact): the pose stays, the detail comes back
+    "ks2": with_turbo(ksampler(("load", 0), ("ks", 0), seed=("latent", 4)), sampler_name="euler", denoise=0.3, denoise_mode="exact"),
+    "stage2": ("PreviewImage", {"images": ("ks2", 1)}),
+    # 3. x2: RealESRGAN, then a MOSS pass at denoise 0.25 (Base + the turbo, no control)
+    "upmodel": ("UpscaleModelLoader", {"model_name": UPSCALER}),
+    "up": ("ImageUpscaleWithModel", {"upscale_model": ("upmodel", 0), "image": ("ks2", 1)}),
+    "enc": ("VAEEncode", {"pixels": ("up", 0), "vae": ("load", 2)}),
+    "ks3": with_turbo(ksampler(("load", 0), ("enc", 0), seed=("latent", 4)), sampler_name="euler", denoise=0.25),
+    "save": ("HaDeSMossImageSaver", {"images": ("ks3", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_fixed_pose_%seed%",
+                                     "hashes": True, "embed_workflow": True}),
+    **telemetry(("load", 3), ("loras", 1), ("enh", 6), ("latent", 3), ("ctrl", 3), ("ks", 2), ("ks2", 2), ("ks3", 2)),
+    "note": ("Note", {"text": "HaDeS MOSS Suite - Fixed Pose (advanced)\n\n"
+                              "One depth map holds the pose; change only the prompt for another character in the same pose.\n\n"
+                              "1. Base + the control adapter (moss-color-depth-control, keep it at 1.0) + Turbo 8-steps v1.0, depth only,\n"
+                              "   8 steps, CFG 1: the pose from the map (near is white). About 3.1 s on an RTX 5090.\n"
+                              "2. The same latent redrawn by Base + the turbo without the adapter and without control, denoise 0.3\n"
+                              "   (exact): the adapter's image is soft; this pass brings back skin pores, wrinkles, veins and metal\n"
+                              "   detail and keeps the pose. About 3 s more.\n"
+                              "3. x2: RealESRGAN x2, then a MOSS pass at denoise 0.25. 18.2 s for the whole workflow, warm.\n\n"
+                              "Measured (tools/RESULTS.md), three characters x 4 seeds (a knight, a potter, an astronaut), pose =\n"
+                              "Depth Anything V2 of the result against the map (correlation, 1 = the same depth):\n"
+                              "  without control 0.62, with control 0.977, after the 0.3 pass 0.976, after the x2 0.976.\n"
+                              "  Denoise 0.4 and 0.5 keep the pose too (0.976, 0.974) and change the picture more.\n"
+                              "The map carries more than the pose: build, head and hands come from the photo (the knight got the\n"
+                              "  fisherman's beard; the potter, asked in her thirties, looks older in all four seeds).\n\n"
+                              "Making the map: Depth Anything V2 (comfyui_controlnet_aux) or any depth tool. Look at it first:\n"
+                              "  it must show the silhouette. A blur with no outline is a faulty map (measured with\n"
+                              "  comfyui_controlnet_aux 1.1.6 on our install, see RESULTS); the control then follows only the rough layout.\n"
+                              "Telemetry's notes on the turbo at denoise 0.30 / 0.25 refer to its older measurements; these are in RESULTS.\n\n"
+                              "Models: the adapter (darask0/MOSS-Image-color-depth-control) and the turbo in models/loras,\n"
+                              "RealESRGAN_x2plus.pth in models/upscale_models."}),
+    "_layout": {"note": (0, -760), "load": (0, 0), "loras": (0, 380), "enh": (450, 0), "latent": (950, 0), "depth": (950, 420),
+                "ctrl": (1400, 0), "turbo": (1400, 620), "ks": (1850, 0), "stage1": (1850, 600), "ks2": (2300, 0), "stage2": (2300, 600),
+                "upmodel": (2750, 0), "up": (2750, 150), "enc": (2750, 300), "ks3": (3150, 0), "save": (3600, 0),
+                "tel": (3600, 480), "report": (4050, 480)},
+    "_groups": [("1. The pose from the depth map (control, 8 steps)", ["loras", "depth", "enh", "latent", "ctrl", "turbo", "ks", "stage1"],
+                 "#335533"),
+                ("2. Redraw without control at 0.3", ["ks2", "stage2"], "#334466"),
+                ("3. x2", ["upmodel", "up", "enc", "ks3", "save", "tel", "report"], "#553355")],
+}
+
 DEV_EXAMPLE_TITLES = {"HaDeS MOSS Suite - Dev Tools", "HaDeS MOSS Suite - Stage Metadata (Dev)"}
 ADVANCED_EXAMPLE_TITLES = {"HaDeS MOSS Suite - Production Poster", "HaDeS MOSS Suite - Merge Lab", "HaDeS MOSS Suite - Two Stages, Two Models",
-                           "HaDeS MOSS Suite - LoRA Surgery"}
+                           "HaDeS MOSS Suite - LoRA Surgery", "HaDeS MOSS Suite - Fixed Pose"}
 
 
 def fetch(server, path, data=None):

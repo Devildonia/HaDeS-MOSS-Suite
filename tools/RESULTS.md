@@ -1105,6 +1105,39 @@ crops and reports in `I:/HaDeS_MOSS/advanced_workflows/two_stage`.
   26 links and two groups, no node overlapping another, the second sampler at 0.3 exact, and is the same after save / reload in each.
   With the local file names set, Run in Nodes 2.0 gave the API run's image (0.0 apart) and the stage-1 preview.
 
+## Fixed pose, the fifth advanced workflow (2026-11-26, Suite 0.9.8)
+
+One depth map, three adult characters in its pose. Clean ComfyUI on port 8189 (`--use-sage-attention`, RTX 5090), `mossImage_base_bf16`,
+`qwen3.5_9b_int8_convrot`, `flux2-vae`, 1024 x 1024. Stage 1: `moss-color-depth-control` at 1.0 + `HaDeS-MOSS-Turbo-8steps-v1.0`,
+`MOSS Control` depth only, strength 1, 8 steps, CFG 1, `euler / simple`. Stage 2: stage 1's latent through Base + the turbo without the
+adapter and without control, `denoise_mode exact`, d 0.3 / 0.4 / 0.5. Stage 3: RealESRGAN x2 + VAE Encode + the same pass at denoise 0.25.
+Floor: Base + the turbo with no control. Prompts: the Control example's knight; a potter (*"a woman in her thirties ... shaping clay
+with both hands"*); an elderly astronaut repairing cables. Seeds 1013-1016 (one batch of 4). Pose = Depth Anything V2 (vitl, 1024) of each
+result against the input map, Pearson r at 256 x 256; detail = variance of the Laplacian at 1024 (a sharpness proxy, judged by eye at
+100 % as well). Scripts, sheets and crops in `I:/HaDeS_MOSS/advanced_workflows/fixed_pose`.
+
+- **The depth map first.** Depth Anything V2 from `comfyui_controlnet_aux` 1.1.6 as installed here gives a blur with no silhouette
+  (the same with and without `--use-sage-attention`). Its DINOv2 `MemEffAttention` multiplies q by the scale and then calls xFormers /
+  `scaled_dot_product_attention`, which scale again; the same weights with the plain `Attention.forward` give a clean map of the
+  fisherman (MAE 43.4 / 255 between the two maps). A first run of this test with the blurred map is kept apart (`run1_broken_depth`):
+  the control then follows only the rough layout. The map used here and in the example's check is the plain-attention one. The
+  2026-11-24 Control section below used the same installed preprocessor, so its map was the blurred one.
+- **Pose** (r mean over 3 prompts x 4 seeds, lowest image in brackets): no control 0.615 (0.303); control 0.977 (0.963); + pass d 0.3
+  0.976 (0.960), d 0.4 0.976 (0.959), d 0.5 0.974 (0.953); x2 after control 0.977, after d 0.3 0.976 (0.961). Per prompt with control:
+  knight 0.983, potter 0.977, astronaut 0.970.
+- **Detail** (Laplacian variance, mean): control 440, d 0.3 1093, d 0.4 1102, d 0.5 1043 (Base + turbo with no control: 299); at 2048 x2
+  after control 999, after d 0.3 1508. By eye at 100 %: the adapter's image is soft (smooth skin, blurred chainmail); the pass
+  without it brings back pores, wrinkles, hand veins, beard strands and sharp chainmail, the same face and pose. d 0.3 and 0.4 look
+  alike; d 0.3 changes the picture least (MAE to the control image 16.1 / 255, d 0.4 19.8, d 0.5 23.9), so the example uses 0.3.
+- **What the map carries** (by eye): build, head and hands follow the fisherman. The knight shows the fisherman's beard under the
+  visor; the potter, asked in her thirties (younger without control), looks older on all four seeds.
+- **The example as shipped** (batch 1, seed 1013): pose r 0.991; 6.30 / 255 from the batch run's same seed. Warm times, three runs each on
+  new seeds: stage 1 alone 3.1 s, stages 1-2 6.1 s, the whole workflow to 2048 18.2 s (27.9 s the first run, models loading). Suite
+  Telemetry reads all eight nodes; its two notes on the turbo at denoise 0.30 / 0.25 refer to the older img2img measurements.
+- Frontend: the example loads in the three views (classic with HaDeS widgets, classic with standard widgets, Nodes 2.0) with 19 nodes,
+  45 links and three groups, no node or group overlapping another, and is the same after save / reload in each. With the local
+  file names set, Run in Nodes 2.0 gave the measured 2048 image of seed 1013 (0.0 apart).
+
 ## LoRA surgery, the fourth advanced workflow (2026-11-26, Suite 0.9.8)
 
 Bulle d'Encre is SFT with 30 % of Base in layers 24-29 + Turbo 8-steps v1.0 x0.5 + the author's style LoRA x0.8 (its `hades/recipe`). The
