@@ -1022,6 +1022,28 @@ Check directly, clean ComfyUI on port 8189, `--use-sage-attention`, RTX 5090. Te
 - The Prompt Enhancer's draft at the same seed differed between two restarts of the same clean ComfyUI (another run gave other boxes for
   the same sentence); the two runs above used one draft (checked against the saved draft JSON).
 
+## Production Poster, the first advanced workflow (2026-11-26, Suite 0.9.8)
+
+`examples/advanced/HaDeS MOSS Suite - Production Poster.json` as shipped, through the API on the clean ComfyUI (port 8189,
+`--use-sage-attention`, RTX 5090): HaDeS MOSS v1.0 Turbo, the folk poster's layout draft above fixed in the Layout Editor (three texts,
+1024 x 1536), batch 4 from the Layout Compiler, 8 steps, CFG 1, euler / simple; Text Check `best_image` into RealESRGAN x2, VAE Encode and
+a MOSS KSampler at denoise 0.25 (same model, prompt and seed), a second Text Check on the 2048 x 3072 result. Image seeds 1013, 1014,
+1015. Script `measure_production.py`, report `results_production.txt`, sheet `production_sheet.jpg` in `I:/HaDeS_MOSS/advanced_workflows/poster`.
+
+- **Candidates:** 3 of 12 with all three texts `exact` (seed 1013: images 2 and 3, `best_image` 2; seed 1014: none; seed 1015: image 4).
+  The other 9 are 2 / 3, the title `outside its box`: on the sheet it breaks into two lines and "FOLK NIGHTS" falls below the box; the
+  three that pass set it on one line in a condensed letter. Every text was spelled right on all 12. With seed 1014 Text Check passes on
+  image 1 (all four at 2 / 3; the closest reading, else the first) and `passed` is false.
+- **The x2 pass keeps the text:** the final image's Text Check gave the same verdicts and readings as the picked candidate's on all three
+  seeds (3 / 3, 2 / 3, 3 / 3). By eye (seed 1015, 100 % crop against the 1024 candidate resized), the pass adds stone texture to the
+  lighthouse and sharpens the hand.
+- **Time:** a whole run 49.9-60.4 s (the first one loads the models). Text Check on the batch, the x2 stage and the final check again:
+  31.8-34.5 s; the final Text Check alone: 2.05-2.87 s.
+- Suite Telemetry notes the x2 sampler at 2048 x 3072 as outside its measured 768-2048 range, and the bottom line's two lines in a 3.7:1 box.
+- Frontend: the example loads in the three views (classic with HaDeS widgets, classic with standard widgets, Nodes 2.0) with 19 nodes,
+  39 links, the five boxes on the editor's canvas and batch 4, and is the same after save / reload in each. Queued with Run in Nodes 2.0:
+  the same as the API run of seed 1013 (four candidates in the preview, image 2 picked, the final 3 / 3, one PNG saved).
+
 ## Compare models and LoRAs (2026-11-21, for the seventh video tutorial)
 
 Clean ComfyUI on port 8189, `--use-sage-attention`, RTX 5090, the tutorials' fisherman (seed 1013). Scripts and sheets in

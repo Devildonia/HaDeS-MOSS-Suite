@@ -54,12 +54,17 @@ def zip_names(zip_path):
     return set(names)
 
 
+def shipped_examples():
+    return sorted((ROOT / "examples").glob("*.json")) + sorted((ROOT / "examples" / "advanced").glob("*.json"))
+
+
 def check_contents(zip_path):
     names = zip_names(zip_path)
     errors = []
     expected_py = {p.name for p in ROOT.glob("moss_*.py")} - DEV_FILES
     expected_web = {f"web/{p.name}" for p in (ROOT / "web").glob("*") if p.is_file()} - DEV_FILES
-    expected_examples = {f"examples/{p.name}" for p in (ROOT / "examples").glob("*.json")}
+    # examples/ and examples/advanced/ ship; examples/dev/ does not
+    expected_examples = {p.relative_to(ROOT).as_posix() for p in shipped_examples()}
     for need in sorted(REQUIRED | expected_py | expected_web | expected_examples):
         if need not in names:
             errors.append(f"missing from the package: {need}")
@@ -129,7 +134,7 @@ def check_server(server, log, pack_dir):
         errors += [f"ComfyUI log: {line.strip()}" for line in text.splitlines()
                    if pack_dir in line and ("IMPORT FAILED" in line or "Cannot import" in line)]
     # every example the package ships uses only known nodes, with the widget count each declares
-    examples = sorted((ROOT / "examples").glob("*.json"))
+    examples = shipped_examples()
     for path in examples:
         wf = json.loads(path.read_text(encoding="utf-8"))
         for node in wf["nodes"]:

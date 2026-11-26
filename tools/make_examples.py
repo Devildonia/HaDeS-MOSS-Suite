@@ -1,4 +1,4 @@
-"""Builds the example workflows in examples/ and examples/dev/ (ComfyUI editor format) from compact graph definitions.
+"""Builds the example workflows in examples/, examples/advanced/ and examples/dev/ (ComfyUI editor format) from compact graph definitions.
 
 Widget order, optional inputs and seed controls are read from a running ComfyUI's /object_info, so the files match the
 installed nodes. --run also queues every example (muted nodes left out) with the model names mapped to local files.
@@ -612,7 +612,102 @@ EXAMPLES["HaDeS MOSS Suite - HMS v1 Converter"] = {
     "_layout": {"note": (0, -480), "load": (0, 0), "saver": (460, 0), "info_prev": (940, 0)},
 }
 
+# Advanced workflows (examples/advanced/): several Suite nodes chained into one production pipeline; measurements in tools/RESULTS.md
+FOLK_IDEA = ("A festival poster: a woman in her forties, a fiddler, playing on the right side, a lighthouse on the left, the title "
+             "\"VLEUTERWEIDE FOLK NIGHTS\" at the top, the line \"Tickets at the door, 12 euros, doors open at 8 pm\" at the bottom, "
+             "and a small badge with the word \"Zwanenburg\" in the upper left corner.")
+# the Prompt Enhancer's layout draft of FOLK_IDEA (seed 2) that the Text Check batch measurements used, fixed in the editor
+FOLK_DRAFT = {'width': 1024,
+             'height': 1536,
+             'bbox_coord_space': 'abs',
+             'bbox_format': 'xyxy',
+             'summary': {'caption': 'A vertical festival poster featuring a woman in her forties playing the fiddle on the right against a '
+                                    'twilight backdrop with a lighthouse on the left. The design uses a warm, rustic color palette of amber, '
+                                    'deep blue, and wood tones with soft atmospheric lighting. Text elements are clearly legible in a bold '
+                                    'serif font.',
+                         'meta': ['poster', 'folk music', 'night scene', 'lighthouse', 'typography']},
+             'items': [{'label': 'text',
+                        'caption': 'Bold white serif text centered at the top reading VLEUTERWEIDE FOLK NIGHTS with a slight drop shadow for '
+                                   'contrast against the sky.',
+                        'bbox': [200, 60, 824, 140],
+                        'text': 'VLEUTERWEIDE FOLK NIGHTS'},
+                       {'label': 'text',
+                        'caption': 'Small white sans-serif badge in the upper left corner inside a dark circular shape containing the word '
+                                   'Zwanenburg.',
+                        'bbox': [40, 180, 180, 240],
+                        'text': 'Zwanenburg'},
+                       {'label': 'character',
+                        'caption': 'An adult woman in her forties with shoulder-length brown hair, wearing a traditional folk dress in '
+                                   'earthy reds and greens, standing in profile facing left while energetically playing a wooden fiddle held '
+                                   'under her chin, bow moving across strings.',
+                        'bbox': [450, 250, 850, 1100]},
+                       {'label': 'object',
+                        'caption': 'A tall stone lighthouse with a glowing lantern room situated on a rocky outcrop to the left, emitting a '
+                                   'beam of light into the night sky, surrounded by silhouetted dunes.',
+                        'bbox': [20, 250, 350, 1150]},
+                       {'label': 'text',
+                        'caption': 'White serif text centered at the bottom against a dark footer strip reading Tickets at the door, 12 '
+                                   'euros, doors open at 8 pm.',
+                        'bbox': [250, 1350, 774, 1490],
+                        'text': 'Tickets at the door, 12 euros,\ndoors open at 8 pm'}]}
+
+EXAMPLES["HaDeS MOSS Suite - Production Poster"] = {
+    **loader(HADES_V10),
+    # 1. the layout: the boxes are already on the editor's canvas; the muted Prompt Enhancer drafts new ones from an idea
+    "draft": ("HaDeSMossPromptEnhancer", {"clip": ("load", 1), "idea": FOLK_IDEA, "mode": "layout", "width": 1024, "height": 1536,
+                                          "temperature": 0.7, "seed": 2, "max_tokens": 1024, "negative": ""}, MUTED),
+    "editor": ("HaDeSMossLayoutEditor", {"draft": json.dumps(FOLK_DRAFT, indent=2, ensure_ascii=False), "draft_in": ("draft", 3)}),
+    # 2. a batch of seeds: the compiler's latent carries the batch size
+    "layout": ("HaDeSMossLayoutCompiler", {"draft": ("editor", 0), "batch_size": 4}),
+    "enh": prompt(("layout", 0)),
+    "ks": ("HaDeSMossKSampler", {"model": ("load", 0), "positive": ("enh", 0), "negative": ("enh", 1), "latent_image": ("layout", 1),
+                                 "seed": 1013, "steps": 8, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple", "denoise": 1.0,
+                                 "flow_shift": 0.0, "slg": "off", "vae": ("load", 2)}),
+    "candidates": ("PreviewImage", {"images": ("ks", 1)}),
+    # 3. Text Check reads every candidate and passes on the one with the most texts exact
+    "check": ("HaDeSMossTextCheck", {"image": ("ks", 1), "clip": ("load", 1), "layout": ("editor", 0), "expected_text": "", "max_tokens": 96}),
+    "check_report": ("PreviewAny", {"source": ("check", 0)}),
+    # 4. x2: RealESRGAN, then a MOSS pass at low denoise on the same model, prompt and seed
+    "upmodel": ("UpscaleModelLoader", {"model_name": UPSCALER}),
+    "up": ("ImageUpscaleWithModel", {"upscale_model": ("upmodel", 0), "image": ("check", 4)}),
+    "enc": ("VAEEncode", {"pixels": ("up", 0), "vae": ("load", 2)}),
+    "ks2": ("HaDeSMossKSampler", {"model": ("load", 0), "positive": ("enh", 0), "negative": ("enh", 1), "latent_image": ("enc", 0),
+                                  "seed": 1013, "steps": 8, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple", "denoise": 0.25,
+                                  "flow_shift": 0.0, "slg": "off", "vae": ("load", 2)}),
+    # 5. the texts read again on the final image, then saved with the whole pipeline in its metadata
+    "check2": ("HaDeSMossTextCheck", {"image": ("ks2", 1), "clip": ("load", 1), "layout": ("editor", 0), "expected_text": "", "max_tokens": 96}),
+    "check2_report": ("PreviewAny", {"source": ("check2", 0)}),
+    "save": ("HaDeSMossImageSaver", {"images": ("ks2", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_poster_%seed%",
+                                     "hashes": True, "embed_workflow": True}),
+    **telemetry(("load", 3), ("editor", 3), ("layout", 4), ("enh", 6), ("ks", 2), ("check", 3), ("ks2", 2), ("check2", 3)),
+    "note": ("Note", {"text": "HaDeS MOSS Suite - Production Poster (advanced)\n\n"
+                              "A poster with three texts from boxes to a checked 2048 x 3072 file, on HaDeS MOSS v1.0 Turbo (8 steps, CFG 1).\n\n"
+                              "1. Layout: the boxes are on the Layout Editor's canvas (title, badge, bottom line, the fiddler, the lighthouse).\n"
+                              "   Edit them there, or unmute the Prompt Enhancer (right-click > Mode > Always), write your idea and press\n"
+                              "   DRAFT LAYOUT for new boxes.\n"
+                              "2. Candidates: the Layout Compiler's batch_size 4 gives four seeds in one run (Preview: candidates).\n"
+                              "3. MOSS Text Check reads every candidate and best_image passes on the one with the most texts exact.\n"
+                              "   Its report has a line per candidate saying which text failed.\n"
+                              "4. x2: RealESRGAN x2, then a MOSS pass at denoise 0.25 with the same model, prompt and seed.\n"
+                              "5. A second Text Check reads the final image, and the Image Saver keeps the whole pipeline in the PNG.\n\n"
+                              "Measured (3 seeds, RTX 5090, tools/RESULTS.md): 3 of the 12 candidates had all three texts exact;\n"
+                              "seeds 1013 and 1015 gave one, seed 1014 none (then the closest is passed on and passed is false: change the seed).\n"
+                              "Every text was spelled right on all 12: the failures were the title breaking into two lines below its box.\n"
+                              "The check holds the image to your boxes; a taller title box is how you allow two lines.\n"
+                              "The x2 pass kept every verdict on all three seeds. About 50-60 s a run; the x2 stage with both checks about 33 s;\n"
+                              "the final check alone 2-3 s.\n\n"
+                              "Models: HaDeS MOSS v1.0 Turbo in models/diffusion_models, RealESRGAN_x2plus.pth in models/upscale_models."}),
+    "_layout": {"note": (0, -760), "load": (0, 0), "draft": (450, 0), "editor": (950, 0), "layout": (1550, 0), "enh": (1550, 600),
+                "ks": (2050, 0), "candidates": (2050, 560), "check": (2500, 0), "check_report": (2500, 420),
+                "upmodel": (2950, 0), "up": (2950, 150), "enc": (2950, 300), "ks2": (3350, 0), "check2": (3800, 0),
+                "check2_report": (3800, 420), "save": (4250, 0), "tel": (4250, 560), "report": (4700, 560)},
+    "_groups": [("1. Layout", ["draft", "editor", "layout", "enh"], "#335533"),
+                ("2. Candidates and Text Check", ["ks", "candidates", "check", "check_report"], "#334466"),
+                ("3. x2 and final check", ["upmodel", "up", "enc", "ks2", "check2", "check2_report", "save"], "#553355")],
+}
+
 DEV_EXAMPLE_TITLES = {"HaDeS MOSS Suite - Dev Tools", "HaDeS MOSS Suite - Stage Metadata (Dev)"}
+ADVANCED_EXAMPLE_TITLES = {"HaDeS MOSS Suite - Production Poster"}
 
 
 def fetch(server, path, data=None):
@@ -770,7 +865,8 @@ def main():
     object_info = fetch(args.server, "/object_info")
     os.makedirs(EXAMPLES_DIR, exist_ok=True)
     for title, graph in EXAMPLES.items():
-        directory = os.path.join(EXAMPLES_DIR, "dev") if title in DEV_EXAMPLE_TITLES else EXAMPLES_DIR
+        directory = (os.path.join(EXAMPLES_DIR, "dev") if title in DEV_EXAMPLE_TITLES
+                     else os.path.join(EXAMPLES_DIR, "advanced") if title in ADVANCED_EXAMPLE_TITLES else EXAMPLES_DIR)
         os.makedirs(directory, exist_ok=True)
         path = os.path.join(directory, f"{title}.json")
         with open(path, "w", encoding="utf-8") as f:
