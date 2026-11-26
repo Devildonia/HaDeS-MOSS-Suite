@@ -30,6 +30,8 @@ UPSCALER = "RealESRGAN_x2plus.pth"
 BULLE = "HaDeS_MOSS_preview_beta.safetensors"  # Bulle d'Encre, the fourth video tutorial's model
 HADES_V10 = "HaDeS_MOSS_v1.0_Turbo.safetensors"  # Base with Turbo 8-steps v1.0 and QwenLook baked in (8 steps, CFG 1)
 HF_TURBO = "https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo/resolve/main"
+TE_W4A8 = "qwen3.5_9b_w4a8_gptq.safetensors"  # the smaller text encoder (7.3 GB)
+HMS_BASE = "MOSS-Image_Base_HMS_v1.safetensors"  # Base in HMS v1 (3.96 GB), DeVilDoNia/MOSS-Image-HMS
 # file -> (models folder, download URL)
 MODEL_FILES = {SFT: ("diffusion_models", f"{HF}/diffusion_models/{SFT}"), BASE: ("diffusion_models", f"{HF}/diffusion_models/{BASE}"),
                TE: ("text_encoders", f"{HF}/text_encoders/{TE}"), VAE: ("vae", f"{HF}/vae/{VAE}"),
@@ -37,7 +39,9 @@ MODEL_FILES = {SFT: ("diffusion_models", f"{HF}/diffusion_models/{SFT}"), BASE: 
                TURBO_8STEPS: ("loras", f"{HF_TURBO}/{TURBO_8STEPS}"), TURBO_V10: ("loras", f"{HF_TURBO}/{TURBO_V10}"),
                UPSCALER: ("upscale_models", f"https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/{UPSCALER}"),
                BULLE: ("diffusion_models", f"https://huggingface.co/DeVilDoNia/Bulle-d-Encre/resolve/main/{BULLE}"),
-               HADES_V10: ("diffusion_models", f"https://huggingface.co/DeVilDoNia/HaDeS-MOSS-v1.0-Turbo/resolve/main/{HADES_V10}")}
+               HADES_V10: ("diffusion_models", f"https://huggingface.co/DeVilDoNia/HaDeS-MOSS-v1.0-Turbo/resolve/main/{HADES_V10}"),
+               TE_W4A8: ("text_encoders", f"{HF}/text_encoders/{TE_W4A8}"),
+               HMS_BASE: ("diffusion_models", f"https://huggingface.co/DeVilDoNia/MOSS-Image-HMS/resolve/main/{HMS_BASE}")}
 LORA = "moss_lora.safetensors"
 CONTROL_ADAPTER = "moss-color-depth-control.safetensors"  # darask0/MOSS-Image-color-depth-control (Hugging Face), trained on Base
 
@@ -921,9 +925,42 @@ EXAMPLES["HaDeS MOSS Suite - Fixed Pose"] = {
                 ("3. x2", ["upmodel", "up", "enc", "ks3", "save", "tel", "report"], "#553355")],
 }
 
+EXAMPLES["HaDeS MOSS Suite - Low VRAM"] = {
+    # Base in HMS v1 (3.96 GB) + the w4a8 text encoder (7.3 GB) + Turbo 8-steps v1.0: 11.3 GB of files instead of 19.9
+    "load": ("HaDeSMossLoader", {"unet_name": HMS_BASE, "clip_name": TE_W4A8, "vae_name": VAE, "weight_dtype": "default",
+                                 "clip_device": "default"}),
+    "enh": prompt("Photograph of an old fisherman with a grey beard mending a net on a wooden dock at sunrise, his face and weathered "
+                  "hands in view, thick wool sweater, seagulls in the background."),
+    "latent": latent(seed=1013),
+    "turbo": ("HaDeSMossTurbo", {"lora_name": TURBO_V10, "strength": 1.0, "steps": 8}),
+    "ks": with_turbo(ksampler(("load", 0), ("latent", 0), seed=("latent", 4)), sampler_name="euler", steps=8, cfg=1.0),
+    "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_low_vram_%seed%",
+                                     "hashes": True, "embed_workflow": True}),
+    **telemetry(("load", 3), ("enh", 6), ("latent", 3), ("turbo", 1), ("ks", 2)),
+    "note": ("Note", {"text": "HaDeS MOSS Suite - Low VRAM (advanced)\n\n"
+                              "The smallest published files: Base in HMS v1 (MOSS-Image_Base_HMS_v1, 3.96 GB) and the w4a8 text\n"
+                              "encoder (qwen3.5_9b_w4a8_gptq, 7.3 GB), with Turbo 8-steps v1.0 (8 steps, CFG 1). 11.6 GB of files with\n"
+                              "the VAE, against 20.3 GB for Base bf16 + the int8 text encoder.\n\n"
+                              "Measured on an RTX 5090 (tools/RESULTS.md), a new prompt each image, against Base bf16 + int8 + the turbo:\n"
+                              "  whole card: 2.4 s an image (3.6 s), peak VRAM 10.8 GB (19.5 GB);\n"
+                              "  ComfyUI limited to about 8 GB (--reserve-vram 24, an emulation, not a smaller card): 2.7 s (4.5 s),\n"
+                              "  peak RAM of ComfyUI 5.2 GB (8.3 GB). First image 5.7 s (8.0 s).\n"
+                              "ComfyUI moves weights between RAM and VRAM by itself, so the full files also ran in 8 GB here, 1.7x\n"
+                              "  slower; on your card and PCIe link the gap can differ.\n"
+                              "Images: 0.52 of a seed's difference from the full files (0.29 of it from the text encoder);\n"
+                              "  the harbor sign spelled right in 7 of 8 texts (the full files 8 of 8).\n\n"
+                              "Models: MOSS-Image_Base_HMS_v1 (huggingface.co/DeVilDoNia/MOSS-Image-HMS) in models/diffusion_models,\n"
+                              "qwen3.5_9b_w4a8_gptq (Comfy-Org/MOSS-Image) in models/text_encoders, the turbo LoRA in models/loras.\n"
+                              "Another model to HMS v1: the HMS v1 Converter example (it needs the bf16 model in memory once)."}),
+    "_layout": {"note": (0, -700), "load": (0, 0), "enh": (450, 0), "latent": (950, 0), "turbo": (950, 450), "ks": (1400, 0),
+                "save": (1850, 0), "tel": (1850, 480), "report": (2300, 480)},
+    "_groups": [("Base in HMS v1 + the w4a8 text encoder + Turbo 8-steps v1.0", ["load", "enh", "latent", "turbo", "ks", "save", "tel",
+                                                                                "report"], "#335533")],
+}
+
 DEV_EXAMPLE_TITLES = {"HaDeS MOSS Suite - Dev Tools", "HaDeS MOSS Suite - Stage Metadata (Dev)"}
 ADVANCED_EXAMPLE_TITLES = {"HaDeS MOSS Suite - Production Poster", "HaDeS MOSS Suite - Merge Lab", "HaDeS MOSS Suite - Two Stages, Two Models",
-                           "HaDeS MOSS Suite - LoRA Surgery", "HaDeS MOSS Suite - Fixed Pose"}
+                           "HaDeS MOSS Suite - LoRA Surgery", "HaDeS MOSS Suite - Fixed Pose", "HaDeS MOSS Suite - Low VRAM"}
 
 
 def fetch(server, path, data=None):

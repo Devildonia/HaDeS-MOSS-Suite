@@ -1105,6 +1105,38 @@ crops and reports in `I:/HaDeS_MOSS/advanced_workflows/two_stage`.
   26 links and two groups, no node overlapping another, the second sampler at 0.3 exact, and is the same after save / reload in each.
   With the local file names set, Run in Nodes 2.0 gave the API run's image (0.0 apart) and the stage-1 preview.
 
+## Low VRAM, the sixth advanced workflow (2026-11-26, Suite 0.9.8)
+
+How much do the smallest files save, and what do they cost? Clean ComfyUI on port 8189 (`--use-sage-attention`, RTX 5090 32 GB, PCIe on this
+PC), `flux2-vae`, 1024 x 1024, 8 steps, CFG 1, `euler / simple`. Files: Base bf16 10.16 GB, `MOSS-Image_Base_HMS_v1` 3.96 GB,
+`qwen3.5_9b_int8_convrot` 9.75 GB, `qwen3.5_9b_w4a8_gptq` 7.34 GB, VAE 0.34 GB: 20.3 GB for the full files, 11.6 GB for the example.
+Arms: A `HaDeS_MOSS_v1.0_Turbo` bf16 + int8; E `HMS_v1.0_Turbo` (the same model in HMS v1, not published) + int8; B `HMS_v1.0_Turbo` +
+w4a8; D Base bf16 + Turbo 8-steps v1.0 LoRA + int8; C2 Base HMS v1 + the LoRA + int8; C Base HMS v1 + the LoRA + w4a8 (the example).
+Scripts, sheets and reports in `I:/HaDeS_MOSS/advanced_workflows/low_vram`.
+
+- **Quality** (four prompts: the fisherman, the café woman, a watercolor fox, the harbor sign; seeds 1013-1016, one batch of 4; distance =
+  MAE / 255 at 512 over A's distance between neighbouring seeds of the same prompt, 1.0 = another seed): E vs A 0.33 (HMS v1 alone), B vs
+  E 0.29 (the w4a8 text encoder alone), B vs A 0.38; C2 vs D 0.51 (HMS v1 under the LoRA), C vs C2 0.29, C vs D 0.52. By eye the same
+  scenes, people and light in each pair, details and some poses moved; the LoRA works on the HMS file (sharp at 8 steps).
+- **Text** (the harbor sign, *"HARBOR COFFEE"* / *"OPEN DAILY"*, four seeds, read by MOSS Text Check with the int8 encoder for every arm):
+  A, E, B and D 8 / 8 exact; C2 and C 7 / 8 (seed 1014: *HARBOR COFFEE* close).
+- **Memory and time** (batch 1; peak VRAM = nvidia-smi memory.used minus the idle baseline before the server started, polled every
+  100 ms; `--reserve-vram 20 / 24` leaves ComfyUI about 12 / 8 GB of the 32: an emulation of a smaller card, not one). Same prompt again
+  (the text encoder's result cached), warm median of three: whole card A 2.4 s / 19.6 GB, B 1.2 s / 10.3 GB, C 1.7 s / 10.6 GB; about
+  12 GB A 2.4 s / 12.3 GB, B 1.2 s / 10.6, C 1.7 s / 10.9; about 8 GB A 2.6 s / 8.5, B 1.2 s / 8.5, C 1.7 s / 8.4. On the whole card
+  ComfyUI keeps both models in VRAM; given less, it moves weights between RAM and VRAM by itself, so the full files also ran within
+  about 8 GB here.
+- **A new prompt each image** (five prompts, median of the last four; peak RAM = the ComfyUI process's peak working set, psutil, which
+  leaves out the OS file cache): whole card D 3.6 s, 19.5 GB VRAM, 2.8 GB RAM; C 2.4 s, 10.8 GB, 4.2 GB; A 3.0 s; B 2.0 s. About 8 GB:
+  D 4.5 s, 8.6 GB, 8.3 GB RAM; C 2.7 s, 8.5 GB, 5.2 GB RAM; A 4.4 s; B 2.6 s. First image after the server starts (files in the OS
+  cache from earlier runs): D 13.1 s / 8.0 s, C 5.6 / 5.7 s.
+- **The example as shipped** (seed 1013): the same scene as C's batch image of that seed, framing moved a little (14.0 / 255; batch of 1
+  against 4). 7.9 s the first run, 1.6-1.7 s warm on the same prompt. Suite Telemetry: no findings.
+- Not measured: a real 8 or 12 GB card, a slower PCIe link, a PC with little RAM, the `flux2-vae_small` VAE (not on this disk).
+- Frontend: the example loads in the three views (classic with HaDeS widgets, classic with standard widgets, Nodes 2.0) with 9 nodes,
+  16 links and one group, no node overlapping another, and is the same after save / reload in each. Run in Nodes 2.0 gave the measured
+  image of seed 1013 (0.0 apart).
+
 ## Fixed pose, the fifth advanced workflow (2026-11-26, Suite 0.9.8)
 
 One depth map, three adult characters in its pose. Clean ComfyUI on port 8189 (`--use-sage-attention`, RTX 5090), `mossImage_base_bf16`,
