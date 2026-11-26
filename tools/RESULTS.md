@@ -1070,6 +1070,41 @@ extra model path in `I:/HaDeS_MOSS/advanced_workflows/merge_lab`.
   26 links, three groups and four muted nodes, no node overlapping another, and is the same after save / reload in each. With the local
   file names set, Run in Nodes 2.0 saved the blind sheet and its key file: 0.006 / 255 from the API sheet of seed 1013.
 
+## Two stages, two models, the third advanced workflow (2026-11-26, Suite 0.9.8)
+
+Base + Turbo 8-steps v1.0 (8 steps, CFG 1, euler / simple, 1024 x 1024) makes the image; SFT + Turbo 8-steps v0.7 (8 steps, CFG 1)
+redraws its latent as img2img in the MOSS KSampler with `denoise_mode` exact at denoise d. Baselines: each model alone with its turbo.
+The two neutral prompts of "Bias by merge" (`photograph of a woman sitting in a café`; the studio fisherman portrait `photo_portrait`),
+16 seeds each (batches of 8 from seeds 1000 and 1008), clean ComfyUI on port 8189, `--use-sage-attention`, RTX 5090. Scripts, sheets,
+crops and reports in `I:/HaDeS_MOSS/advanced_workflows/two_stage`.
+
+- **Distance** (MAE at 512 x 512, 0-255, mean over 16): Base - SFT 61.3 (café) / 42.2 (portrait). Two stages to Base: d 0.3 7.9 / 5.4,
+  0.4 9.3 / 6.8, 0.5 11.0 / 8.4, 0.6 13.2 / 10.1, 0.7 16.0 / 12.2; to SFT 61.9-64.7 / 43.6-45.9 at every d. The composition is Base's
+  at every d tried.
+- **Identity** (ArcFace buffalo_l, cosine of the largest face against the same seed's Base image; faces found in all 224 images):
+
+| d | Café: mean / min, below 0.6 | Portrait: mean / min, below 0.6 |
+|---|---|---|
+| 0.3 | 0.80 / 0.62, 0 of 16 | 0.90 / 0.86, 0 |
+| 0.4 | 0.74 / 0.56, 2 | 0.88 / 0.84, 0 |
+| 0.5 | 0.66 / 0.39, 3 | 0.85 / 0.80, 0 |
+| 0.6 | 0.59 / 0.40, 8 | 0.82 / 0.73, 0 |
+| 0.7 | 0.51 / 0.30, 11 | 0.73 / 0.57, 2 |
+
+  Base against SFT, same seed: 0.10 / 0.24 (different people). Against SFT's image the two-stage faces stay at 0.20-0.31 / 0.31-0.43.
+- **By eye** (sheets of all 16 per prompt and 100 % crops): from 0.3 the SFT pass adds skin texture (pores, wrinkles) and a
+  little warmth and contrast to Base's soft faces; black-and-white Base images stay black and white. At 0.7 faces start to change toward
+  SFT's: on one portrait blue eyes turn brown and the face shape changes. The example uses 0.3: the person kept on all 32 (lowest 0.62).
+- **Appearance bias**, East Asian faces counted by eye (approximate): café SFT about 14 / 16, Base about 4 / 16; portrait SFT 16 / 16,
+  Base about 4 / 16. At 0.3 every face is Base's person (identity above), so the counts are Base's. The SFT finish here comes without
+  SFT's default faces on these two prompts; naming who you want in the prompt stays the reliable fix.
+- **Example as shipped** (the portrait, seed 1000, batch 1): 23.2 s with the first load of both models, then 6.2 s an image (seeds
+  1001-1003), both stages and the model swap included. Its stage 1 is 7.8 from the batch-of-8 sweep's first image (the same image;
+  other seeds are 39-50 away). Telemetry notes the turbo at denoise 0.30 as outside its older measurements.
+- Frontend: the example loads in the three views (classic with HaDeS widgets, classic with standard widgets, Nodes 2.0) with 13 nodes,
+  26 links and two groups, no node overlapping another, the second sampler at 0.3 exact, and is the same after save / reload in each.
+  With the local file names set, Run in Nodes 2.0 gave the API run's image (0.0 apart) and the stage-1 preview.
+
 ## Compare models and LoRAs (2026-11-21, for the seventh video tutorial)
 
 Clean ComfyUI on port 8189, `--use-sage-attention`, RTX 5090, the tutorials' fisherman (seed 1013). Scripts and sheets in

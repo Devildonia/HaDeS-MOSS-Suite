@@ -9,6 +9,7 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 - **Advanced example workflows** in `examples/advanced/`, starting with **Production Poster**: a poster with three texts on HaDeS MOSS v1.0 Turbo from the Layout Editor's boxes to a checked 2048 x 3072 PNG: four seeds from the Layout Compiler's batch, MOSS Text Check passes on the candidate with the most texts exact (`best_image`), RealESRGAN x2 and a MOSS pass at denoise 0.25, a second Text Check on the final image, Suite Telemetry and the Image Saver. Measured on three seeds (`tools/RESULTS.md`); the package check covers the new folder.
+- **Two Stages, Two Models** (`examples/advanced/`): Base + Turbo 8-steps v1.0 makes the picture, SFT + Turbo 8-steps v0.7 redraws its latent at denoise 0.3 (`denoise_mode` exact), with Telemetry and the Image Saver. The denoise comes from a sweep (0.3-0.7, two neutral prompts x 16 seeds) scored with ArcFace identity against Base's image and by eye; the people stay Base's (`tools/RESULTS.md`).
 - **Merge Lab** (`examples/advanced/`): SFT and Base mixed two ways (the sixth video's test recipe in the Block Merger, SLERP in the Multi-Model Merger), judged blind against both parents on one Compare Sampler sheet (the key in a file apart, Telemetry kept off the sheet), and a muted HMS v1 Model Saver to keep the winner with its recipe, plus the Metadata Reader. Measured: the blind sheet, the HMS v1 of the test recipe and that file against the live merge (`tools/RESULTS.md`).
 
 ### Fixed

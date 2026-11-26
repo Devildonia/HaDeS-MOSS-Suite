@@ -760,8 +760,46 @@ EXAMPLES["HaDeS MOSS Suite - Merge Lab"] = {
                 ("3. Keep the winner: HMS v1 (muted)", ["saver", "saver_info", "meta", "meta_text"], "#553355")],
 }
 
+EXAMPLES["HaDeS MOSS Suite - Two Stages, Two Models"] = {
+    **loader(BASE),  # Base, the text encoder and the VAE
+    "sft": ("UNETLoader", {"unet_name": SFT, "weight_dtype": "default"}),
+    "enh": prompt("Studio photograph of an elderly fisherman with a weathered face and a grey knitted cap, soft window light from the "
+                  "left, shallow depth of field, 85mm lens, muted colors."),
+    "latent": latent(seed=1000),
+    # 1. Base + Turbo 8-steps v1.0 composes: the scene and the person
+    "t1": ("HaDeSMossTurbo", {"lora_name": TURBO_V10, "strength": 1.0, "steps": 8}),
+    "ks": with_turbo(ksampler(("load", 0), ("latent", 0), seed=("latent", 4)), sampler_name="euler", turbo=("t1", 0)),
+    "stage1": ("PreviewImage", {"images": ("ks", 1)}),
+    # 2. SFT + Turbo 8-steps v0.7 redraws Base's latent at denoise 0.3 (exact): SFT's skin and detail on Base's person
+    "t2": ("HaDeSMossTurbo", {"lora_name": TURBO_8STEPS, "strength": 1.0, "steps": 8}),
+    "ks2": with_turbo(ksampler(("sft", 0), ("ks", 0), seed=("latent", 4)), sampler_name="euler", denoise=0.3,
+                      denoise_mode="exact", turbo=("t2", 0)),
+    "save": ("HaDeSMossImageSaver", {"images": ("ks2", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_two_stage_%seed%",
+                                     "hashes": True, "embed_workflow": True}),
+    **telemetry(("load", 3), ("enh", 6), ("latent", 3), ("t1", 1), ("ks", 2), ("t2", 1), ("ks2", 2)),
+    "note": ("Note", {"text": "HaDeS MOSS Suite - Two Stages, Two Models (advanced)\n\n"
+                              "1. Base + Turbo 8-steps v1.0 (8 steps, CFG 1) makes the picture: the scene and the person.\n"
+                              "2. SFT + Turbo 8-steps v0.7 redraws Base's latent at denoise 0.3, denoise_mode exact: the same\n"
+                              "   person, with SFT's skin texture, pores and wrinkles, a little warmer (stage 1 shows in the Preview).\n\n"
+                              "Measured (tools/RESULTS.md), two neutral prompts x 16 seeds, ArcFace identity against Base's image:\n"
+                              "  denoise 0.3: 0.80 (cafe woman) / 0.90 (fisherman portrait), every one of the 32 the same person;\n"
+                              "  0.5: 0.66 / 0.85; 0.7: 0.51 / 0.73, faces start to turn into SFT's (eye colour, face shape).\n"
+                              "So the people are Base's. East Asian faces, counted by eye on these two prompts (no ethnicity named):\n"
+                              "  SFT alone about 14 / 16 and 16 / 16, Base alone and this workflow at 0.3 about 4 / 16 and 4 / 16.\n"
+                              "Naming who you want in the prompt stays the reliable way.\n"
+                              "Raise denoise for more of SFT, lower it to keep more of Base. About 6 s an image warm on an RTX 5090\n"
+                              "(23 s the first time, both models loading). Telemetry's note on the turbo at denoise 0.30 refers to\n"
+                              "its older measurements; this one is in RESULTS.\n\n"
+                              "Models: SFT and Base in models/diffusion_models, both turbo LoRAs in models/loras (download links in the nodes)."}),
+    "_layout": {"note": (0, -760), "load": (0, 0), "sft": (0, 380), "enh": (450, 0), "latent": (950, 0), "t1": (950, 450),
+                "ks": (1400, 0), "stage1": (1400, 560), "t2": (1850, 450), "ks2": (2300, 0), "save": (2750, 0),
+                "tel": (2750, 480), "report": (3200, 480)},
+    "_groups": [("1. Base composes", ["load", "enh", "latent", "t1", "ks", "stage1"], "#335533"),
+                ("2. SFT redraws at 0.3", ["sft", "t2", "ks2", "save", "tel", "report"], "#334466")],
+}
+
 DEV_EXAMPLE_TITLES = {"HaDeS MOSS Suite - Dev Tools", "HaDeS MOSS Suite - Stage Metadata (Dev)"}
-ADVANCED_EXAMPLE_TITLES = {"HaDeS MOSS Suite - Production Poster", "HaDeS MOSS Suite - Merge Lab"}
+ADVANCED_EXAMPLE_TITLES = {"HaDeS MOSS Suite - Production Poster", "HaDeS MOSS Suite - Merge Lab", "HaDeS MOSS Suite - Two Stages, Two Models"}
 
 
 def fetch(server, path, data=None):
