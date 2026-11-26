@@ -5127,6 +5127,294 @@ async def hms_v1_video(d: Director):
 hms_v1_video.prepare = hms_prepare
 
 
+# ---- advanced workflow 1: Production Poster (examples/advanced) ----
+
+AP_TITLE = "HaDeS MOSS Suite - Production Poster"
+AP_FILE = "advanced/HaDeS MOSS Suite - Production Poster.json"
+AP_SEED = 1013  # the example's seed; measured warm 42.7 s, images 2 and 3 exact, picks 2 (videos/advanced/adv_poster/MEDIDAS.md)
+AP_SHOTS = "adv_poster"  # the measured run of the same seed in comfy_output, for the overlays (the failing candidate, the crops)
+AP_IDS = {"loader": 1, "draft": 2, "editor": 3, "compiler": 4, "enh": 5, "ks": 6, "candidates": 7, "check": 8, "check_report": 9,
+          "upmodel": 10, "up": 11, "enc": 12, "ks2": 13, "check2": 14, "check2_report": 15, "save": 16, "tel": 17, "report": 18}
+
+AP_LINES = [
+    ("Hi, I'm HaDeS, and welcome to the first of six advanced workflows: several Suite nodes chained together, one run, a finished result.",
+     "Hola, soy HaDeS, y bienvenido al primero de seis workflows avanzados: varios nodos de la Suite encadenados, una ejecución, un resultado terminado."),
+    ("Today, a festival poster with three texts, made and checked in a single run.",
+     "Hoy, un póster de festival con tres textos, hecho y revisado en una sola ejecución."),
+    ("MOSS-Image spells letters well, but it doesn't always put them where you asked.",
+     "MOSS-Image escribe bien las letras, pero no siempre las pone donde se lo pides.",
+     "MOSS Image spells letters well, but it doesn't always put them where you asked."),
+    ("Here the title broke into two lines and fell out of its box.",
+     "Aquí el título se partió en dos líneas y se salió de su caja."),
+    ("So this workflow makes four posters, reads them, keeps the good one, makes it twice as big, and reads it again.",
+     "Así que este workflow hace cuatro pósters, los lee, se queda con el bueno, lo hace el doble de grande y lo vuelve a leer."),
+    ("As always, everything is free, and all the links are in the description.",
+     "Como siempre, todo es gratis y tienes todos los enlaces en la descripción."),
+    ("Group one is the layout. The Layout Editor holds the poster: the title at the top, the town's name, the ticket line at the bottom, the fiddler and the lighthouse.",
+     "El grupo uno es la maquetación. El Layout Editor tiene el póster: el título arriba, el nombre del pueblo, la línea de las entradas abajo, la violinista y el faro."),
+    ("You can move or resize any box here. To start from your own idea, unmute this Prompt Enhancer, write a sentence, and press Draft layout.",
+     "Aquí puedes mover o cambiar el tamaño de cualquier caja. Para partir de tu propia idea, activa este Prompt Enhancer, escribe una frase y pulsa Draft layout."),
+    ("The Layout Compiler turns the boxes into the prompt, and asks for four images at once.",
+     "El Layout Compiler convierte las cajas en el prompt y pide cuatro imágenes a la vez."),
+    ("Group two: HaDeS MOSS v1.0 Turbo makes the four posters in eight steps, and Text Check reads the three texts on each one, inside their boxes, and passes on the best.",
+     "Grupo dos: HaDeS MOSS v1.0 Turbo hace los cuatro pósters en ocho pasos, y Text Check lee los tres textos de cada uno, dentro de sus cajas, y deja pasar el mejor.",
+     "Group two: HaDeS MOSS version one Turbo makes the four posters in eight steps, and Text Check reads the three texts on each one, inside their boxes, and passes on the best."),
+    ("Group three works on that one poster only: RealESRGAN doubles it, a light MOSS pass redraws the fine detail, and Text Check reads it again at full size.",
+     "El grupo tres trabaja solo con ese póster: RealESRGAN lo duplica, una pasada suave de MOSS redibuja el detalle fino y Text Check lo vuelve a leer a tamaño completo.",
+     "Group three works on that one poster only: Real E S R GAN doubles it, a light MOSS pass redraws the fine detail, and Text Check reads it again at full size."),
+    ("The Image Saver keeps the whole workflow inside the PNG.",
+     "El Image Saver guarda todo el workflow dentro del PNG.",
+     "The Image Saver keeps the whole workflow inside the P N G."),
+    ("Let's run it.",
+     "Vamos a ejecutarlo."),
+    ("Four posters. Text Check's report: in the first and the last, the title is out of its box; the middle two have all three texts exact, and it picks the second.",
+     "Cuatro pósters. El informe de Text Check: en el primero y el último, el título se sale de su caja; los dos del medio tienen los tres textos exactos, y elige el segundo."),
+    ("And here it is at 2048 by 3072. The final check: all three texts still exact.",
+     "Y aquí está a 2048 por 3072. La comprobación final: los tres textos siguen exactos.",
+     "And here it is at twenty forty-eight by thirty seventy-two. The final check: all three texts still exact."),
+    ("At one hundred percent, the MOSS pass keeps the lighthouse, the rocks and her face sharp, where simply enlarging blurs them.",
+     "Al cien por cien, la pasada de MOSS mantiene nítidos el faro, las rocas y su cara, donde ampliar sin más los emborrona."),
+    ("The whole run took just over forty seconds on my RTX 5090.",
+     "Toda la ejecución tardó poco más de cuarenta segundos en mi RTX 5090.",
+     "The whole run took just over forty seconds on my R T X fifty ninety."),
+    ("I ran it on three seeds: twelve posters. Every text was spelled right on all twelve.",
+     "Lo ejecuté con tres semillas: doce pósters. Todos los textos estaban bien escritos en los doce."),
+    ("But only three of the twelve kept the title on one line, inside its box. That's exactly why we make four and let Text Check choose.",
+     "Pero solo tres de los doce mantuvieron el título en una línea, dentro de su caja. Justo por eso hacemos cuatro y dejamos que Text Check elija."),
+    ("If none of the four passes, its passed output says false: try another seed.",
+     "Si ninguno de los cuatro pasa, su salida passed dice false: prueba otra semilla."),
+    ("Making it twice as big never changed a verdict.",
+     "Hacerlo el doble de grande no cambió ningún veredicto."),
+    ("And a tip: if you want the title on two lines, make its box taller.",
+     "Y un consejo: si quieres el título en dos líneas, haz su caja más alta."),
+    ("You can download this workflow for free from GitHub. The link is in the description.",
+     "Puedes descargar este workflow gratis desde GitHub. El enlace está en la descripción."),
+    ("If you've made it to the end and enjoyed the video, and you'd like to see more content like this, leave a like and subscribe. It's free!",
+     "Si has llegado hasta el final del vídeo, te ha gustado y quieres ver más contenido de este tipo, dale un buen like y suscríbete. ¡Es gratis!"),
+    ("Thanks for watching, and see you in the next one.",
+     "Gracias por verlo, y nos vemos en el próximo."),
+]
+
+
+def ap_view(name):
+    return f"/view?filename={name}&subfolder={AP_SHOTS}&type=output"
+
+
+def ap_card(lines, top=230):
+    """Measured numbers, one per row, big."""
+    rows = "".join(f'<div style="font:700 50px Segoe UI,sans-serif;margin:26px 0">{t}</div>' for t in lines)
+    return f'<div style="color:#fff;text-align:center;margin-top:{top}px">{rows}</div>'
+
+
+def ap_fail_html(es):
+    """The failing candidate (seed 1013, image 1), its top part at 1:1 with the title's box drawn in yellow."""
+    z = 1920 / W  # overlay px per video px: the layer is zoomed to the page width
+    x0, y0, w, h = 100, 0, 824, 420
+    box = (200, 60, 824, 140)
+    label = "La caja del título" if es else "The title's box"
+    return (f'<div style="text-align:center;color:#fff;font:600 30px Segoe UI,sans-serif">'
+            f'<div style="margin:120px 0 24px;color:#ffcc33">{label}</div>'
+            f'<div style="position:relative;display:inline-block;width:{w * 1.5 * z}px;height:{h * 1.5 * z}px;overflow:hidden;border-radius:8px">'
+            f'<img src="{ap_view("s1013_all_00001_.png")}" style="position:absolute;max-width:none;width:{1024 * 1.5 * z}px;'
+            f'left:{-x0 * 1.5 * z}px;top:{-y0 * 1.5 * z}px">'
+            f'<div style="position:absolute;border:{6 * z}px solid #ffd200;box-sizing:border-box;left:{(box[0] - x0) * 1.5 * z}px;'
+            f'top:{(box[1] - y0) * 1.5 * z}px;width:{(box[2] - box[0]) * 1.5 * z}px;height:{(box[3] - box[1]) * 1.5 * z}px"></div>'
+            f'</div></div>')
+
+
+def ap_crops_html(es):
+    """100 % crops: the picked 1024 poster enlarged x2 by the browser against the final 2048 x 3072 (512 image px = 512 video px)."""
+    side = 512 * 1920 / W
+    crops = ((1250, 480), (220, 480), (100, 1800))  # face, lighthouse, rocks (2048 x 3072 space)
+    labels = ("1024 ampliado ×2", "×2 + pasada MOSS") if es else ("1024 enlarged ×2", "×2 + MOSS pass")
+    cells = []
+    for x, y in crops:
+        for url, scale in ((ap_view("s1013_best1024_00001_.png"), 2), (ap_view("s1013_final_00001_.png"), 1)):
+            cells.append(f'<div style="width:{side}px;height:{side}px;overflow:hidden;border-radius:6px;position:relative">'
+                         f'<img src="{url}" style="position:absolute;max-width:none;width:{2048 * side / 512}px;height:{3072 * side / 512}px;'
+                         f'left:{-x * side / 512}px;top:{-y * side / 512}px"></div>')
+    head = "".join(f'<div style="color:#fff;font:600 24px Segoe UI,sans-serif;text-align:center">{t}</div>' for t in labels)
+    # three rows of two would not fit: three columns of pairs, face / lighthouse / rocks
+    pairs = "".join(f'<div style="display:grid;grid-template-columns:{side}px;gap:12px">{cells[2 * i]}{cells[2 * i + 1]}</div>'
+                    for i in range(3))
+    left = f'<div style="display:grid;grid-template-rows:{side}px {side}px;gap:12px;align-items:center;color:#fff;font:600 24px Segoe UI,sans-serif;text-align:right">' \
+           f'<div>{labels[0]}</div><div>{labels[1]}</div></div>'
+    return (f'<div style="display:flex;gap:22px;align-items:flex-start;margin-top:10px">{left}{pairs}</div>')
+
+
+def ap_candidates_html(urls, report, es):
+    """The take's four candidates side by side, each with its line of Text Check's report (exact count, picked)."""
+    import re as _re
+    lines = {int(m.group(1)): m.group(0) for m in _re.finditer(r"image (\d+): [^\n]*", report)}
+    cells = []
+    for i, url in enumerate(urls, 1):
+        line = lines.get(i, "")
+        ok = "3/3" in line
+        picked = "<- best" in line
+        verdict = ("3 / 3 exactos" if es else "3 / 3 exact") if ok else ("título fuera de su caja" if es else "title out of its box")
+        colour = "#5fd17a" if ok else "#ff6b5f"
+        badge = (f'<div style="margin-top:10px;font:800 26px Segoe UI,sans-serif;color:#ffcc33">{"ELEGIDO" if es else "PICKED"}</div>'
+                 if picked else '<div style="margin-top:10px;height:35px"></div>')
+        border = "4px solid #ffcc33" if picked else "4px solid transparent"
+        cells.append(f'<div style="text-align:center"><img src="{url}" style="height:600px;border-radius:6px;border:{border}">'
+                     f'<div style="margin-top:12px;font:700 26px Segoe UI,sans-serif;color:{colour}">{verdict}</div>{badge}</div>')
+    return f'<div style="display:flex;gap:30px;margin-top:40px">{"".join(cells)}</div>'
+
+
+def ap_final_html(url, report, es):
+    """The final 2048 x 3072 poster and its three texts as the final Text Check read them."""
+    import re as _re
+    names = ("Título", "Nombre del pueblo", "Entradas") if es else ("Title", "Town's name", "Ticket line")
+    verdicts = _re.findall(r"^\[([a-z ]+)\]", report, flags=_re.M)
+    rows = "".join(f'<div style="font:700 40px Segoe UI,sans-serif;margin:22px 0;color:{"#5fd17a" if v == "exact" else "#ff6b5f"}">'
+                   f'{"✓" if v == "exact" else "✗"} {n}: {v}</div>' for n, v in zip(names, verdicts))
+    head = "Comprobación final · 2048 × 3072" if es else "Final check · 2048 × 3072"
+    return (f'<div style="display:flex;align-items:center;gap:80px;margin-top:30px"><img src="{url}" style="height:820px;border-radius:6px">'
+            f'<div style="color:#fff"><div style="font:600 34px Segoe UI,sans-serif;color:#ffcc33;margin-bottom:20px">{head}</div>{rows}</div></div>')
+
+
+async def ap_take(d, ids):
+    """What the on-camera run produced: the candidates' urls, both Text Check reports, the saved poster's url."""
+    run = next(iter((await d.js("() => fetch('/history?max_items=1').then(r => r.json())")).values()))
+    out = run["outputs"]
+    view = lambda im: f"/view?filename={im['filename']}&subfolder={im['subfolder']}&type={im['type']}"
+    return ([view(im) for im in out[str(ids["candidates"])]["images"]], out[str(ids["check_report"])]["text"][0],
+            out[str(ids["check2_report"])]["text"][0], view(out[str(ids["save"])]["images"][0]))
+
+
+async def ap_prepare(page):
+    """Off camera: the whole example once with another seed (1014), so the models, the upscaler and the prompt are loaded and the
+    on-camera run is the measured warm one."""
+    import copy
+    import urllib.parse
+    import make_examples as mx
+    base = urllib.parse.urlsplit(page.url)
+    info = mx.fetch(f"{base.scheme}://{base.netloc}", "/object_info")
+    g = {k: v for k, v in copy.deepcopy(mx.EXAMPLES[AP_TITLE]).items() if k != "note"}
+    g["ks"][1]["seed"] = g["ks2"][1]["seed"] = AP_SEED + 1
+    g["save"][1]["filename_prefix"] = "MOSS/warmup_poster"
+    print("warm-up run:", await page.evaluate(UP_WARM_JS, mx.to_api(g, info, {})), flush=True)
+
+
+async def adv_poster(d: Director):
+    """Advanced workflow 1 of 6: the problem, the canvas in one pass, a run, four measured numbers."""
+    I = AP_IDS
+    es = d.language == "es"
+    every = list(I.values())
+    final_url = ap_view("s1013_final_00001_.png")
+
+    # 1. the problem
+    await d.camera(every, 10, pad=50, top=60)
+    await d.move(W * 0.97, H * 0.55, 10)
+    await d.js("(h) => window.__hv.show(h, 10)",
+               f'<div style="display:flex;align-items:center;gap:80px;margin-top:30px"><img src="{final_url}" style="height:820px;border-radius:6px">'
+               '<div style="color:#fff;max-width:640px"><div style="font:900 72px Segoe UI Black,sans-serif;line-height:1.05">HaDeS MOSS Suite</div>'
+               f'<div style="font:600 34px Segoe UI,sans-serif;color:#ffcc33;margin-top:22px">{"Workflows avanzados 1 de 6" if es else "Advanced workflows 1 of 6"}</div>'
+               '<div style="font:700 46px Segoe UI,sans-serif;margin-top:16px">Production Poster</div></div></div>')
+    await d.hold(0.8)
+    await d.say(0)
+    await d.say(1)
+    await d._after_voice(0.2)
+    await d.js("(h) => window.__hv.show(h, 400)", ap_fail_html(es))
+    await d.say(2)
+    await d.say(3)
+    await d._after_voice(0.2)
+    await d.js("() => window.__hv.hide()")
+    await d.say(4)
+    await d.say(5)
+
+    # 2. the canvas in one pass
+    await d._after_voice(0.25)
+    await d.camera([I["draft"], I["editor"]], 1300, pad=40, top=60)
+    await d.say(6)
+    await d.hold(1.0)
+    p = await d.js("([id]) => { const n = window.__hv.node(id); return window.__hv.screen(id, n.size[0] / 2, n.size[1] / 3); }", [I["editor"]])
+    await d.move(*p)
+    await d.say(7)
+    p = await d.js("([id]) => { const n = window.__hv.node(id); return window.__hv.screen(id, n.size[0] / 2, 40); }", [I["draft"]])
+    await d.move(*p)
+    await d.hold(2.2)
+    z = await d.js("(id) => window.__hv.zone(id, 'draft_run')", I["editor"])
+    if z:
+        x, y = await d.screen(I["editor"], z["x"] + z["w"] / 2, z["y"] + z["h"] / 2)
+        await d.move(x, y)
+    await d._after_voice(0.25)
+    await d.camera([I["compiler"], I["enh"]], 1200, pad=60, top=60)
+    await d.say(8)
+    await d._after_voice(0.25)
+    await d.camera([I["ks"], I["candidates"], I["check"], I["check_report"]], 1200, pad=50, top=60)
+    await d.say(9)
+    await d._after_voice(0.25)
+    await d.camera([I["upmodel"], I["up"], I["enc"], I["ks2"], I["check2"], I["check2_report"]], 1200, pad=50, top=60)
+    await d.say(10)
+    await d._after_voice(0.25)
+    await d.camera([I["save"], I["tel"], I["report"]], 1100, pad=60, top=60)
+    await d.say(11)
+
+    # 3. run
+    await d._after_voice(0.25)
+    await d.camera(every, 1200, pad=50, top=60)
+    await d.say(12)
+    _, secs = await basic_run(d, I["save"])
+    cand, report, report2, final_take = await ap_take(d, I)
+    if report.count("3/3 exact") != 2 or "image 2: 3/3 exact <- best" not in report or report2.count("[exact]") != 3:
+        raise SystemExit(f"the take's Text Check is not the measured one:\n{report}\n{report2}")
+    await d._after_voice(0.25)
+    await d.camera([I["candidates"], I["check_report"]], 1100, pad=40, top=60)
+    await d.hold(1.0)
+    await d.move(W * 0.97, H * 0.55)
+    await d.js("(h) => window.__hv.show(h)", ap_candidates_html(cand, report, es))
+    await d.say(13)
+    await d._after_voice(0.3)
+    await d.js("(h) => window.__hv.show(h)", ap_final_html(final_take, report2, es))
+    await d.say(14)
+    await d._after_voice(0.2)
+    await d.js("(h) => window.__hv.show(h)", ap_crops_html(es))
+    await d.say(15)
+    await d._after_voice(0.3)
+    await d.js("(h) => window.__hv.show(h)", ap_card([f'{secs:.1f} s · RTX 5090' if not es else f'{secs:.1f} s · RTX 5090'], top=380))
+    await d.say(16)
+
+    # 4. measured
+    nums = (["12 / 12 pósters: todos los textos bien escritos", "3 / 12: el título en su caja", "×2: ningún veredicto cambió"] if es else
+            ["12 / 12 posters: every text spelled right", "3 / 12: the title inside its box", "×2: no verdict changed"])
+    await d._after_voice(0.25)
+    await d.js("(h) => window.__hv.show(h)", ap_card(nums[:1]))
+    await d.say(17)
+    await d._after_voice(0.25)
+    await d.js("(h) => window.__hv.show(h)", ap_card(nums[:2]))
+    await d.say(18)
+    await d.say(19)
+    await d._after_voice(0.25)
+    await d.js("(h) => window.__hv.show(h)", ap_card(nums))
+    await d.say(20)
+    await d._after_voice(0.2)
+    await d.js("() => window.__hv.hide()")
+    await d.camera([I["editor"]], 1100, pad=40, top=60)
+    await d.say(21)
+
+    # 5. closing
+    await d._after_voice(0.25)
+    await d.camera(every, 1200, pad=50, top=60)
+    await d.js("(h) => window.__hv.show(h)",
+               '<div style="color:#fff;text-align:center;max-width:1300px;margin-top:300px">'
+               f'<div style="font:600 30px Segoe UI,sans-serif;color:#c9c9d1">{"Descarga gratis (enlace en la descripción)" if es else "Free download (link in the description)"}</div>'
+               f'<div style="font:700 44px Segoe UI,sans-serif;margin-top:22px">examples/advanced/{AP_TITLE}.json</div></div>')
+    await d.say(22)
+    await d._after_voice(0.25)
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }",
+               f'<div style="display:flex;align-items:center;gap:80px;margin-top:30px"><img src="{final_url}" style="height:820px;border-radius:6px">'
+               '<div style="color:#fff;max-width:640px"><div style="font:900 72px Segoe UI Black,sans-serif;line-height:1.05">HaDeS MOSS Suite</div>'
+               '<div style="font:600 34px Segoe UI,sans-serif;color:#ffcc33;margin-top:22px">Production Poster</div>'
+               f'<div style="font:400 26px Segoe UI,sans-serif;color:#c9c9d1;margin-top:44px">{"Workflow, Suite y modelos: enlaces en la descripción" if es else "Workflow, Suite and models: links in the description"}</div></div></div>')
+    await d.say(23)
+    await d.say(24)
+    await d.end(1.5)
+
+
+adv_poster.prepare = ap_prepare
+
+
 SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "layout_test": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_test, LAYOUT_TEST_LINES),
           "layout_sentence": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_sentence, LAYOUT_SENTENCE_LINES),
@@ -5141,7 +5429,8 @@ SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "layout_text": (None, layout_text, L8_LINES),
           "controlnet": (None, controlnet_video, CN_LINES),
           "img2img": (None, img2img_video, I2I_LINES),
-          "hms_v1": (None, hms_v1_video, HMS_LINES)}
+          "hms_v1": (None, hms_v1_video, HMS_LINES),
+          "adv_poster": (AP_FILE, adv_poster, AP_LINES)}
 
 # spoken forms where the written caption reads badly aloud
 SPOKEN = {"DRAFT LAYOUT": "Draft layout"}
