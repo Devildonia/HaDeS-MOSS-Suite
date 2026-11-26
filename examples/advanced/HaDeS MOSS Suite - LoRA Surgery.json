@@ -1,0 +1,1264 @@
+{
+ "id": "d9dcc555-11ab-5232-8cf9-b1dbb6f09514",
+ "revision": 0,
+ "last_node_id": 18,
+ "last_link_id": 26,
+ "nodes": [
+  {
+   "id": 1,
+   "type": "HaDeSMossLoader",
+   "pos": [
+    0,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "moss_image_base_bf16.safetensors",
+    "qwen3.5_9b_int8_convrot.safetensors",
+    "flux2-vae.safetensors",
+    "default",
+    "default"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossLoader",
+    "models": [
+     {
+      "name": "moss_image_base_bf16.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_base_bf16.safetensors",
+      "directory": "diffusion_models"
+     },
+     {
+      "name": "qwen3.5_9b_int8_convrot.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_int8_convrot.safetensors",
+      "directory": "text_encoders"
+     },
+     {
+      "name": "flux2-vae.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae.safetensors",
+      "directory": "vae"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      2
+     ]
+    },
+    {
+     "name": "CLIP",
+     "type": "CLIP",
+     "links": [
+      9
+     ]
+    },
+    {
+     "name": "VAE",
+     "type": "VAE",
+     "links": [
+      15
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      18
+     ]
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "type": "UNETLoader",
+   "pos": [
+    0,
+    380
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 1,
+   "mode": 0,
+   "inputs": [],
+   "widgets_values": [
+    "moss_image_sft_bf16.safetensors",
+    "default"
+   ],
+   "properties": {
+    "Node name for S&R": "UNETLoader",
+    "models": [
+     {
+      "name": "moss_image_sft_bf16.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_sft_bf16.safetensors",
+      "directory": "diffusion_models"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      1
+     ]
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "type": "HaDeSMossModelBlockMerger",
+   "pos": [
+    450,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 4,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "model1",
+     "type": "MODEL",
+     "link": 1
+    },
+    {
+     "name": "model2",
+     "type": "MODEL",
+     "link": 2
+    }
+   ],
+   "widgets_values": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.3,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    ""
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossModelBlockMerger"
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      4,
+      6,
+      8,
+      25,
+      26
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      19
+     ]
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "type": "UNETLoader",
+   "pos": [
+    450,
+    1100
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 2,
+   "mode": 2,
+   "inputs": [],
+   "widgets_values": [
+    "HaDeS_MOSS_preview_beta.safetensors",
+    "default"
+   ],
+   "properties": {
+    "Node name for S&R": "UNETLoader",
+    "models": [
+     {
+      "name": "HaDeS_MOSS_preview_beta.safetensors",
+      "url": "https://huggingface.co/DeVilDoNia/Bulle-d-Encre/resolve/main/HaDeS_MOSS_preview_beta.safetensors",
+      "directory": "diffusion_models"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      3
+     ]
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "type": "HaDeSMossLoraExtractor",
+   "pos": [
+    900,
+    1100
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 6,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "model_tuned",
+     "type": "MODEL",
+     "link": 3
+    },
+    {
+     "name": "model_base",
+     "type": "MODEL",
+     "link": 4
+    }
+   ],
+   "widgets_values": [
+    64,
+    "bulle_extracted",
+    false,
+    "Bulle d'Encre",
+    "SFT + 30% Base in layers 24-29 (Block Merger)"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossLoraExtractor"
+   },
+   "outputs": [
+    {
+     "name": "saved_lora_path",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      5
+     ]
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "type": "PreviewAny",
+   "pos": [
+    1350,
+    1100
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 11,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "source",
+     "type": "*",
+     "link": 5
+    }
+   ],
+   "widgets_values": [],
+   "properties": {
+    "Node name for S&R": "PreviewAny"
+   },
+   "outputs": [
+    {
+     "name": "STRING",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "type": "HaDeSMossLoraMerger",
+   "pos": [
+    900,
+    1600
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 7,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 6
+    }
+   ],
+   "widgets_values": [
+    "bulle_extracted.safetensors",
+    1.0,
+    "HaDeS-MOSS-Turbo-8steps-v1.0.safetensors",
+    -0.3,
+    66,
+    "bulle_style",
+    0.0,
+    false
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossLoraMerger",
+    "models": [
+     {
+      "name": "HaDeS-MOSS-Turbo-8steps-v1.0.safetensors",
+      "url": "https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo/resolve/main/HaDeS-MOSS-Turbo-8steps-v1.0.safetensors",
+      "directory": "loras"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "saved_lora_path",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      7
+     ]
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "type": "PreviewAny",
+   "pos": [
+    1350,
+    1600
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 12,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "source",
+     "type": "*",
+     "link": 7
+    }
+   ],
+   "widgets_values": [],
+   "properties": {
+    "Node name for S&R": "PreviewAny"
+   },
+   "outputs": [
+    {
+     "name": "STRING",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "type": "HaDeSMossMultiLora",
+   "pos": [
+    900,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 8,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 8
+    }
+   ],
+   "widgets_values": [
+    false,
+    "[{\"name\": \"bulle_style.safetensors\", \"on\": true, \"strength\": 1.0}, {\"name\": \"HaDeS-MOSS-Turbo-8steps-v1.0.safetensors\", \"on\": true, \"strength\": 1.0}]"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossMultiLora"
+   },
+   "outputs": [
+    {
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      10
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      20
+     ]
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "type": "HaDeSMossPromptEnhancer",
+   "pos": [
+    1350,
+    0
+   ],
+   "size": [
+    440,
+    100
+   ],
+   "flags": {},
+   "order": 5,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "clip",
+     "type": "CLIP",
+     "link": 9
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "Photograph of an old fisherman with a grey beard mending a net on a wooden dock at sunrise, his face and weathered hands in view, thick wool sweater, seagulls in the background.",
+    "as written",
+    1024,
+    1024,
+    0.7,
+    1,
+    "fixed",
+    1024,
+    "",
+    "off",
+    1.0
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossPromptEnhancer"
+   },
+   "outputs": [
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "links": [
+      11
+     ]
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "links": [
+      12
+     ]
+    },
+    {
+     "name": "prompt",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "draft",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "width",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "height",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      21
+     ]
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "type": "HaDeSMossLatent",
+   "pos": [
+    1850,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 3,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "1:1",
+    1.0,
+    1024,
+    1024,
+    1,
+    1013,
+    "fixed"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossLatent"
+   },
+   "outputs": [
+    {
+     "name": "latent",
+     "type": "LATENT",
+     "links": [
+      13
+     ]
+    },
+    {
+     "name": "width",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "height",
+     "type": "INT",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      22
+     ]
+    },
+    {
+     "name": "seed",
+     "type": "INT",
+     "links": [
+      14
+     ]
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "type": "HaDeSMossKSampler",
+   "pos": [
+    2300,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 13,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 10
+    },
+    {
+     "name": "positive",
+     "type": "CONDITIONING",
+     "link": 11
+    },
+    {
+     "name": "negative",
+     "type": "CONDITIONING",
+     "link": 12
+    },
+    {
+     "name": "latent_image",
+     "type": "LATENT",
+     "link": 13
+    },
+    {
+     "name": "seed",
+     "type": "INT",
+     "link": 14,
+     "widget": {
+      "name": "seed"
+     }
+    },
+    {
+     "name": "vae",
+     "type": "VAE",
+     "link": 15,
+     "shape": 7
+    },
+    {
+     "name": "turbo",
+     "type": "MOSS_TURBO",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    0,
+    "fixed",
+    8,
+    1.0,
+    "euler",
+    "simple",
+    1.0,
+    0.0,
+    "off",
+    "steps / denoise (core)"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossKSampler"
+   },
+   "outputs": [
+    {
+     "name": "latent",
+     "type": "LATENT",
+     "links": []
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "links": [
+      16
+     ]
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": [
+      23
+     ]
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "type": "HaDeSMossImageSaver",
+   "pos": [
+    2750,
+    0
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 15,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "images",
+     "type": "IMAGE",
+     "link": 16
+    },
+    {
+     "name": "metadata",
+     "type": "STRING",
+     "link": 17,
+     "shape": 7
+    },
+    {
+     "name": "primary_stage_metadata",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "positive",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "negative",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "MOSS/HaDeS_MOSS_surgery_%seed%",
+    true,
+    true,
+    true
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossImageSaver"
+   },
+   "outputs": [
+    {
+     "name": "parameters",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "type": "HaDeSMossSuiteTelemetry",
+   "pos": [
+    2750,
+    480
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 14,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "info_1",
+     "type": "STRING",
+     "link": 18,
+     "shape": 7
+    },
+    {
+     "name": "info_2",
+     "type": "STRING",
+     "link": 19,
+     "shape": 7
+    },
+    {
+     "name": "info_3",
+     "type": "STRING",
+     "link": 20,
+     "shape": 7
+    },
+    {
+     "name": "info_4",
+     "type": "STRING",
+     "link": 21,
+     "shape": 7
+    },
+    {
+     "name": "info_5",
+     "type": "STRING",
+     "link": 22,
+     "shape": 7
+    },
+    {
+     "name": "info_6",
+     "type": "STRING",
+     "link": 23,
+     "shape": 7
+    },
+    {
+     "name": "info_7",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    },
+    {
+     "name": "info_8",
+     "type": "STRING",
+     "link": null,
+     "shape": 7
+    }
+   ],
+   "widgets_values": [
+    "HaDeS MOSS Suite Telemetry"
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossSuiteTelemetry"
+   },
+   "outputs": [
+    {
+     "name": "report",
+     "type": "STRING",
+     "links": [
+      24
+     ]
+    },
+    {
+     "name": "json",
+     "type": "STRING",
+     "links": [
+      17
+     ]
+    },
+    {
+     "name": "summary",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "type": "PreviewAny",
+   "pos": [
+    3200,
+    480
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 16,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "source",
+     "type": "*",
+     "link": 24
+    }
+   ],
+   "widgets_values": [],
+   "properties": {
+    "Node name for S&R": "PreviewAny"
+   },
+   "outputs": [
+    {
+     "name": "STRING",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 16,
+   "type": "HaDeSMossLoraMerger",
+   "pos": [
+    1850,
+    1600
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 9,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 25
+    }
+   ],
+   "widgets_values": [
+    "bulle_style.safetensors",
+    1.0,
+    "HaDeS-MOSS-Turbo-8steps-v1.0.safetensors",
+    1.0,
+    68,
+    "bulle_style_turbo",
+    0.0,
+    false
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossLoraMerger",
+    "models": [
+     {
+      "name": "HaDeS-MOSS-Turbo-8steps-v1.0.safetensors",
+      "url": "https://huggingface.co/DeVilDoNia/HaDeS-MOSS-Turbo/resolve/main/HaDeS-MOSS-Turbo-8steps-v1.0.safetensors",
+      "directory": "loras"
+     }
+    ]
+   },
+   "outputs": [
+    {
+     "name": "saved_lora_path",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "type": "HaDeSMossLoraResize",
+   "pos": [
+    2300,
+    1600
+   ],
+   "size": [
+    380,
+    100
+   ],
+   "flags": {},
+   "order": 10,
+   "mode": 2,
+   "inputs": [
+    {
+     "name": "model",
+     "type": "MODEL",
+     "link": 26
+    }
+   ],
+   "widgets_values": [
+    "bulle_style_turbo.safetensors",
+    32,
+    "bulle_style_turbo_r32",
+    0.0,
+    false
+   ],
+   "properties": {
+    "Node name for S&R": "HaDeSMossLoraResize"
+   },
+   "outputs": [
+    {
+     "name": "saved_lora_path",
+     "type": "STRING",
+     "links": []
+    },
+    {
+     "name": "info",
+     "type": "STRING",
+     "links": []
+    }
+   ]
+  },
+  {
+   "id": 18,
+   "type": "Note",
+   "pos": [
+    0,
+    -760
+   ],
+   "size": [
+    800,
+    520
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "widgets_values": [
+    "HaDeS MOSS Suite - LoRA Surgery (advanced)\n\nBulle d'Encre = SFT with 30% of Base in layers 24-29 + Turbo 8-steps v1.0 x0.5 + a style LoRA x0.8.\nExtracting it gives style and half a turbo in one LoRA; this workflow takes the turbo out again.\n\n1. (muted) LoRA Extractor: Bulle d'Encre minus its rebuilt base, rank 64 (about 100 s, 252 MB).\n2. (muted) LoRA Merger with a negative weight: extracted x1.0 + Turbo v1.0 x-0.30 = the style alone.\n   Why -0.30 and not the recipe's -0.5: the extracted LoRA carries only about two thirds of the half turbo\n   (rank 64 and the bf16 bake lose some), measured on the weights. -0.5 leaves a negative turbo, and\n   at 15 steps the images come out dark and muddy; -0.30 renders like the original style LoRA.\n3. The style on its base with the full turbo (Multi-LoRA, switch it on once bulle_style exists):\n   8 steps, CFG 1, euler / simple, under 4 s. For the style without turbo, switch the turbo row off and\n   use 15 steps, CFG 2.5.\n4. (muted) One file: the style + the full turbo (rank 68), then a rank-32 copy (126 MB), about 3.3 s.\n\nMeasured (tools/RESULTS.md), four prompts, distance in seeds (1.0 = as different as another seed):\n  surgery -0.30 against the original style LoRA: 0.17 at 15 steps, 0.17 at 8 steps with the turbo\n  (-0.5: 0.46 and 0.38; without surgery 0.55). Row order alone moves 0.12.\n  one file against the two rows live 0.28 (bf16 factors move details at 8 steps), rank 32 against it 0.16.\n\nThe Extractor, Merger and Resize save in models/loras; the Merger takes negative weights (-2 to 2)."
+   ],
+   "properties": {}
+  }
+ ],
+ "links": [
+  [
+   1,
+   2,
+   0,
+   3,
+   0,
+   "MODEL"
+  ],
+  [
+   2,
+   1,
+   0,
+   3,
+   1,
+   "MODEL"
+  ],
+  [
+   3,
+   4,
+   0,
+   5,
+   0,
+   "MODEL"
+  ],
+  [
+   4,
+   3,
+   0,
+   5,
+   1,
+   "MODEL"
+  ],
+  [
+   5,
+   5,
+   1,
+   6,
+   0,
+   "STRING"
+  ],
+  [
+   6,
+   3,
+   0,
+   7,
+   0,
+   "MODEL"
+  ],
+  [
+   7,
+   7,
+   1,
+   8,
+   0,
+   "STRING"
+  ],
+  [
+   8,
+   3,
+   0,
+   9,
+   0,
+   "MODEL"
+  ],
+  [
+   9,
+   1,
+   1,
+   10,
+   0,
+   "CLIP"
+  ],
+  [
+   10,
+   9,
+   0,
+   12,
+   0,
+   "MODEL"
+  ],
+  [
+   11,
+   10,
+   0,
+   12,
+   1,
+   "CONDITIONING"
+  ],
+  [
+   12,
+   10,
+   1,
+   12,
+   2,
+   "CONDITIONING"
+  ],
+  [
+   13,
+   11,
+   0,
+   12,
+   3,
+   "LATENT"
+  ],
+  [
+   14,
+   11,
+   4,
+   12,
+   4,
+   "INT"
+  ],
+  [
+   15,
+   1,
+   2,
+   12,
+   5,
+   "VAE"
+  ],
+  [
+   16,
+   12,
+   1,
+   13,
+   0,
+   "IMAGE"
+  ],
+  [
+   17,
+   14,
+   1,
+   13,
+   1,
+   "STRING"
+  ],
+  [
+   18,
+   1,
+   3,
+   14,
+   0,
+   "STRING"
+  ],
+  [
+   19,
+   3,
+   1,
+   14,
+   1,
+   "STRING"
+  ],
+  [
+   20,
+   9,
+   1,
+   14,
+   2,
+   "STRING"
+  ],
+  [
+   21,
+   10,
+   6,
+   14,
+   3,
+   "STRING"
+  ],
+  [
+   22,
+   11,
+   3,
+   14,
+   4,
+   "STRING"
+  ],
+  [
+   23,
+   12,
+   2,
+   14,
+   5,
+   "STRING"
+  ],
+  [
+   24,
+   14,
+   0,
+   15,
+   0,
+   "STRING"
+  ],
+  [
+   25,
+   3,
+   0,
+   16,
+   0,
+   "MODEL"
+  ],
+  [
+   26,
+   3,
+   0,
+   17,
+   0,
+   "MODEL"
+  ]
+ ],
+ "groups": [
+  {
+   "id": 1,
+   "title": "1-2. Extract and cut the turbo out (muted)",
+   "bounding": [
+    420,
+    1020,
+    1340,
+    1070
+   ],
+   "color": "#553355",
+   "font_size": 24,
+   "flags": {}
+  },
+  {
+   "id": 2,
+   "title": "3. The style + the full turbo, 8 steps",
+   "bounding": [
+    870,
+    -80,
+    2740,
+    1050
+   ],
+   "color": "#335533",
+   "font_size": 24,
+   "flags": {}
+  },
+  {
+   "id": 3,
+   "title": "4. One file (muted)",
+   "bounding": [
+    1820,
+    1520,
+    890,
+    570
+   ],
+   "color": "#334466",
+   "font_size": 24,
+   "flags": {}
+  }
+ ],
+ "config": {},
+ "extra": {},
+ "version": 0.4
+}

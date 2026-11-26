@@ -798,8 +798,72 @@ EXAMPLES["HaDeS MOSS Suite - Two Stages, Two Models"] = {
                 ("2. SFT redraws at 0.3", ["sft", "t2", "ks2", "save", "tel", "report"], "#334466")],
 }
 
+EXAMPLES["HaDeS MOSS Suite - LoRA Surgery"] = {
+    **loader(BASE),  # the text encoder and the VAE (and Base for the Block Merger)
+    # Bulle d'Encre's base, rebuilt: SFT with 30 % of Base in layers 24-29 only
+    "sft": ("UNETLoader", {"unet_name": SFT, "weight_dtype": "default"}),
+    "bm": ("HaDeSMossModelBlockMerger", {"model1": ("sft", 0), "model2": ("load", 0), "layers_00_05": 0.0, "layers_06_11": 0.0,
+                                         "layers_12_17": 0.0, "layers_18_23": 0.0, "layers_24_29": 0.3, "layers_30_35": 0.0,
+                                         "layers_36_41": 0.0, "text_embedder": 0.0, "time_modulation": 0.0, "io": 0.0, "recipe_override": ""}),
+    # 1. (muted) Bulle d'Encre minus its base: style and half a turbo in one LoRA (rank 64, 252 MB, about 100 s)
+    "bulle": ("UNETLoader", {"unet_name": BULLE, "weight_dtype": "default"}, MUTED),
+    "extract": ("HaDeSMossLoraExtractor", {"model_tuned": ("bulle", 0), "model_base": ("bm", 0), "rank": 64,
+                                           "export_filename": "bulle_extracted", "overwrite_existing": False, "tuned_name": "Bulle d'Encre",
+                                           "base_name": "SFT + 30% Base in layers 24-29 (Block Merger)"}, MUTED),
+    "extract_info": ("PreviewAny", {"source": ("extract", 1)}, MUTED),
+    # 2. (muted) the surgery: the turbo taken out with a negative weight; -0.30, not the recipe's -0.5 (measured: the extracted LoRA
+    #    carries about two thirds of the half turbo, and -0.5 left a negative turbo that darkens the images)
+    "surgery": ("HaDeSMossLoraMerger", {"model": ("bm", 0), "lora_a": "bulle_extracted.safetensors", "weight_a": 1.0, "lora_b": TURBO_V10,
+                                        "weight_b": -0.3, "rank": 66, "export_filename": "bulle_style", "dynamic_energy": 0.0,
+                                        "overwrite_existing": False}, MUTED),
+    "surgery_info": ("PreviewAny", {"source": ("surgery", 1)}, MUTED),
+    # 3. the style alone on its base, with the full turbo for 8 steps (switch the Multi-LoRA on once bulle_style exists)
+    "loras": ("HaDeSMossMultiLora", {"model": ("bm", 0), "enabled": False, "loras": json.dumps(
+        [{"name": "bulle_style.safetensors", "on": True, "strength": 1.0}, {"name": TURBO_V10, "on": True, "strength": 1.0}])}),
+    "enh": prompt("Photograph of an old fisherman with a grey beard mending a net on a wooden dock at sunrise, his face and weathered "
+                  "hands in view, thick wool sweater, seagulls in the background."),
+    "latent": latent(seed=1013),
+    "ks": ("HaDeSMossKSampler", {"model": ("loras", 0), "positive": ("enh", 0), "negative": ("enh", 1), "latent_image": ("latent", 0),
+                                 "seed": ("latent", 4), "steps": 8, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple",
+                                 "denoise": 1.0, "flow_shift": 0.0, "slg": "off", "vae": ("load", 2)}),
+    "save": ("HaDeSMossImageSaver", {"images": ("ks", 1), "metadata": ("tel", 1), "filename_prefix": "MOSS/HaDeS_MOSS_surgery_%seed%",
+                                     "hashes": True, "embed_workflow": True}),
+    **telemetry(("load", 3), ("bm", 1), ("loras", 1), ("enh", 6), ("latent", 3), ("ks", 2)),
+    # 4. (muted) one file: the style with the full turbo, then a rank-32 copy
+    "onefile": ("HaDeSMossLoraMerger", {"model": ("bm", 0), "lora_a": "bulle_style.safetensors", "weight_a": 1.0, "lora_b": TURBO_V10,
+                                        "weight_b": 1.0, "rank": 68, "export_filename": "bulle_style_turbo", "dynamic_energy": 0.0,
+                                        "overwrite_existing": False}, MUTED),
+    "resize": ("HaDeSMossLoraResize", {"model": ("bm", 0), "lora_name": "bulle_style_turbo.safetensors", "target_rank": 32,
+                                       "export_filename": "bulle_style_turbo_r32", "dynamic_energy": 0.0, "overwrite_existing": False}, MUTED),
+    "note": ("Note", {"text": "HaDeS MOSS Suite - LoRA Surgery (advanced)\n\n"
+                              "Bulle d'Encre = SFT with 30% of Base in layers 24-29 + Turbo 8-steps v1.0 x0.5 + a style LoRA x0.8.\n"
+                              "Extracting it gives style and half a turbo in one LoRA; this workflow takes the turbo out again.\n\n"
+                              "1. (muted) LoRA Extractor: Bulle d'Encre minus its rebuilt base, rank 64 (about 100 s, 252 MB).\n"
+                              "2. (muted) LoRA Merger with a negative weight: extracted x1.0 + Turbo v1.0 x-0.30 = the style alone.\n"
+                              "   Why -0.30 and not the recipe's -0.5: the extracted LoRA carries only about two thirds of the half turbo\n"
+                              "   (rank 64 and the bf16 bake lose some), measured on the weights. -0.5 leaves a negative turbo, and\n"
+                              "   at 15 steps the images come out dark and muddy; -0.30 renders like the original style LoRA.\n"
+                              "3. The style on its base with the full turbo (Multi-LoRA, switch it on once bulle_style exists):\n"
+                              "   8 steps, CFG 1, euler / simple, under 4 s. For the style without turbo, switch the turbo row off and\n"
+                              "   use 15 steps, CFG 2.5.\n"
+                              "4. (muted) One file: the style + the full turbo (rank 68), then a rank-32 copy (126 MB), about 3.3 s.\n\n"
+                              "Measured (tools/RESULTS.md), four prompts, distance in seeds (1.0 = as different as another seed):\n"
+                              "  surgery -0.30 against the original style LoRA: 0.17 at 15 steps, 0.17 at 8 steps with the turbo\n"
+                              "  (-0.5: 0.46 and 0.38; without surgery 0.55). Row order alone moves 0.12.\n"
+                              "  one file against the two rows live 0.28 (bf16 factors move details at 8 steps), rank 32 against it 0.16.\n\n"
+                              "The Extractor, Merger and Resize save in models/loras; the Merger takes negative weights (-2 to 2)."}),
+    "_layout": {"note": (0, -760), "load": (0, 0), "sft": (0, 380), "bm": (450, 0), "bulle": (450, 1100), "extract": (900, 1100),
+                "extract_info": (1350, 1100), "surgery": (900, 1600), "surgery_info": (1350, 1600), "loras": (900, 0), "enh": (1350, 0),
+                "latent": (1850, 0), "ks": (2300, 0), "save": (2750, 0), "tel": (2750, 480), "report": (3200, 480),
+                "onefile": (1850, 1600), "resize": (2300, 1600)},
+    "_groups": [("1-2. Extract and cut the turbo out (muted)", ["bulle", "extract", "extract_info", "surgery", "surgery_info"], "#553355"),
+                ("3. The style + the full turbo, 8 steps", ["loras", "enh", "latent", "ks", "save", "tel", "report"], "#335533"),
+                ("4. One file (muted)", ["onefile", "resize"], "#334466")],
+}
+
 DEV_EXAMPLE_TITLES = {"HaDeS MOSS Suite - Dev Tools", "HaDeS MOSS Suite - Stage Metadata (Dev)"}
-ADVANCED_EXAMPLE_TITLES = {"HaDeS MOSS Suite - Production Poster", "HaDeS MOSS Suite - Merge Lab", "HaDeS MOSS Suite - Two Stages, Two Models"}
+ADVANCED_EXAMPLE_TITLES = {"HaDeS MOSS Suite - Production Poster", "HaDeS MOSS Suite - Merge Lab", "HaDeS MOSS Suite - Two Stages, Two Models",
+                           "HaDeS MOSS Suite - LoRA Surgery"}
 
 
 def fetch(server, path, data=None):

@@ -1105,6 +1105,35 @@ crops and reports in `I:/HaDeS_MOSS/advanced_workflows/two_stage`.
   26 links and two groups, no node overlapping another, the second sampler at 0.3 exact, and is the same after save / reload in each.
   With the local file names set, Run in Nodes 2.0 gave the API run's image (0.0 apart) and the stage-1 preview.
 
+## LoRA surgery, the fourth advanced workflow (2026-11-26, Suite 0.9.8)
+
+Bulle d'Encre is SFT with 30 % of Base in layers 24-29 + Turbo 8-steps v1.0 x0.5 + the author's style LoRA x0.8 (its `hades/recipe`). The
+question: can the LoRA Merger, with a negative weight, take the turbo back out of the extracted LoRA and leave the style alone? The style
+LoRA itself (the author's own, kept private) served only as the reference here; it is not in the example. Setup and distance unit as in
+"The LoRA toolkit on Bulle d'Encre": four prompts, seed 1013, MAE at 512 x 512 divided by Bulle d'Encre's seed 1013-1014 distance (1.0 =
+another seed), averaged; clean ComfyUI on port 8189, `--use-sage-attention`, RTX 5090. Scripts, reports and sheets in
+`I:/HaDeS_MOSS/advanced_workflows/lora_surgery`.
+
+- **Files:** the extraction (rank 64 against the base rebuilt live) 105.8 s, 252.1 MB, 97.0 % energy. The surgery (Merger, rank 66 = 64 + 2,
+  exact) 1-2.4 s, 255.4 MB, 100 % energy; the style + the full turbo in one file (rank 68) 0.9-2.1 s, 258.8 MB; resized to rank 32 0.7 s,
+  126.1 MB, 99.8 % (worst layer 98.5 %).
+- **Weights** (relative Frobenius error against 0.8 x the style LoRA, all 168 layers): extracted 4.2 %, surgery -0.5 3.3 %, -0.30 3.0 %.
+  0.5 x the turbo is 4.4 % of that size overall (14.7 % in layers 36-41; the turbo trains 24-41 only). Of the half turbo, the extracted LoRA
+  carries about 0.66 (its residual against the style projected on the turbo: 0.51 / 0.65 / 0.72 in 24-29 / 30-35 / 36-41), so about 0.33 x
+  turbo is in it, not 0.5: rank 64 and the bf16 bake with `nearest` rounding (Model Saver: about 80-85 % of a subtle LoRA kept) lose some.
+- **15 steps, CFG 2.5, euler / simple, no turbo** (distance to the base + the original style LoRA x0.8): surgery -0.30 0.17, surgery -0.5
+  0.46, the extracted LoRA 0.55, the base alone 0.57. By eye -0.30 renders the original style's images; -0.5 is dark and muddy on all four
+  (the café and the comic lose most of their light); the extracted LoRA renders Bulle d'Encre's (0.19 from it), turbo half included.
+- **8 steps, CFG 1, the style + Turbo v1.0 x1.0** (distance to the original style x0.8 + the turbo): surgery -0.30 0.17, -0.5 0.38. The same
+  two rows in the opposite order: 0.12 (the floor). Against Bulle d'Encre at 15 steps: -0.30 + turbo 0.70, the original style + turbo 0.68,
+  the extracted LoRA + turbo x0.5 (the toolkit's way) 0.56: Bulle d'Encre holds only part of a turbo, so a full turbo moves away from it,
+  with the style kept by eye.
+- **One file** (the -0.30 style + the turbo, rank 68) against the two rows live: 0.28, above the 0.12 floor (the fourth video's merge: 0.44;
+  bf16 factors move details at 8 steps); rank 32 against the one file 0.16. Warm time 3.2-3.3 s for one file, 3.4-3.9 s for two rows (two runs).
+- Frontend: the example loads in the three views (classic with HaDeS widgets, classic with standard widgets, Nodes 2.0) with 18 nodes,
+  26 links, three groups and seven muted nodes, no node or group overlapping another, the Merger at -0.30, and is the same after save /
+  reload in each. With the Multi-LoRA on and the measured -0.30 file, Run in Nodes 2.0 gave the measured fisherman (0.0 apart).
+
 ## Compare models and LoRAs (2026-11-21, for the seventh video tutorial)
 
 Clean ComfyUI on port 8189, `--use-sage-attention`, RTX 5090, the tutorials' fisherman (seed 1013). Scripts and sheets in
