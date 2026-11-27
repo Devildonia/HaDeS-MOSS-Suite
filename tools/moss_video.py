@@ -5130,63 +5130,116 @@ hms_v1_video.prepare = hms_prepare
 # ---- advanced workflow 1: Production Poster (examples/advanced) ----
 
 AP_TITLE = "HaDeS MOSS Suite - Production Poster"
-AP_FILE = "advanced/HaDeS MOSS Suite - Production Poster.json"
+AP_FILE = None  # built on camera (guion v2, a lesson); the finished example is the download
 AP_SEED = 1013  # the example's seed; measured warm 42.7 s, images 2 and 3 exact, picks 2 (videos/advanced/adv_poster/MEDIDAS.md)
 AP_SHOTS = "adv_poster"  # the measured run of the same seed in comfy_output, for the overlays (the failing candidate, the crops)
 AP_IDS = {"loader": 1, "draft": 2, "editor": 3, "compiler": 4, "enh": 5, "ks": 6, "candidates": 7, "check": 8, "check_report": 9,
           "upmodel": 10, "up": 11, "enc": 12, "ks2": 13, "check2": 14, "check2_report": 15, "save": 16, "tel": 17, "report": 18}
 
 AP_LINES = [
-    ("Hi, I'm HaDeS, and welcome to the first of six advanced workflows: several Suite nodes chained together, one run, a finished result.",
-     "Hola, soy HaDeS, y bienvenido al primero de seis workflows avanzados: varios nodos de la Suite encadenados, una ejecución, un resultado terminado."),
-    ("Today, a festival poster with three texts, made and checked in a single run.",
-     "Hoy, un póster de festival con tres textos, hecho y revisado en una sola ejecución."),
-    ("MOSS-Image spells letters well, but it doesn't always put them where you asked.",
-     "MOSS-Image escribe bien las letras, pero no siempre las pone donde se lo pides.",
-     "MOSS Image spells letters well, but it doesn't always put them where you asked."),
-    ("Here the title broke into two lines and fell out of its box.",
-     "Aquí el título se partió en dos líneas y se salió de su caja."),
-    ("So this workflow makes four posters, reads them, keeps the good one, makes it twice as big, and reads it again.",
-     "Así que este workflow hace cuatro pósters, los lee, se queda con el bueno, lo hace el doble de grande y lo vuelve a leer."),
-    ("As always, everything is free, and all the links are in the description.",
-     "Como siempre, todo es gratis y tienes todos los enlaces en la descripción."),
-    ("Group one is the layout. The Layout Editor holds the poster: the title at the top, the town's name, the ticket line at the bottom, the fiddler and the lighthouse.",
-     "El grupo uno es la maquetación. El Layout Editor tiene el póster: el título arriba, el nombre del pueblo, la línea de las entradas abajo, la violinista y el faro."),
-    ("You can move or resize any box here. To start from your own idea, unmute this Prompt Enhancer, write a sentence, and press Draft layout.",
-     "Aquí puedes mover o cambiar el tamaño de cualquier caja. Para partir de tu propia idea, activa este Prompt Enhancer, escribe una frase y pulsa Draft layout."),
-    ("The Layout Compiler turns the boxes into the prompt, and asks for four images at once.",
-     "El Layout Compiler convierte las cajas en el prompt y pide cuatro imágenes a la vez."),
-    ("Group two: HaDeS MOSS v1.0 Turbo makes the four posters in eight steps, and Text Check reads the three texts on each one, inside their boxes, and passes on the best.",
-     "Grupo dos: HaDeS MOSS v1.0 Turbo hace los cuatro pósters en ocho pasos, y Text Check lee los tres textos de cada uno, dentro de sus cajas, y deja pasar el mejor.",
-     "Group two: HaDeS MOSS version one Turbo makes the four posters in eight steps, and Text Check reads the three texts on each one, inside their boxes, and passes on the best."),
-    ("Group three works on that one poster only: RealESRGAN doubles it, a light MOSS pass redraws the fine detail, and Text Check reads it again at full size.",
-     "El grupo tres trabaja solo con ese póster: RealESRGAN lo duplica, una pasada suave de MOSS redibuja el detalle fino y Text Check lo vuelve a leer a tamaño completo.",
-     "Group three works on that one poster only: Real E S R GAN doubles it, a light MOSS pass redraws the fine detail, and Text Check reads it again at full size."),
-    ("The Image Saver keeps the whole workflow inside the PNG.",
-     "El Image Saver guarda todo el workflow dentro del PNG.",
-     "The Image Saver keeps the whole workflow inside the P N G."),
+    ("Hi, I'm HaDeS, and welcome to advanced workflow number one: Production Poster.",
+     "Hola, soy HaDeS, y bienvenido al workflow avanzado número uno: Production Poster."),
+    ("Today we'll make a festival poster with three texts, and the workflow itself will check that every text is right and in its place.",
+     "Hoy vamos a hacer un póster de festival con tres textos, y el propio workflow comprobará que cada texto está bien escrito y en su sitio."),
+    ("You'll learn how to plan an image with boxes, how to make several versions at once, how to let ComfyUI read the text for you, and how to make the winner twice as big.",
+     "Vas a aprender a planificar una imagen con cajas, a hacer varias versiones a la vez, a dejar que ComfyUI lea el texto por ti y a hacer el ganador el doble de grande."),
+    ("We'll build it together, from an empty canvas, one node at a time. As always, everything is free, and all the links are in the description.",
+     "Lo montamos juntos, desde el lienzo vacío, nodo a nodo. Como siempre, todo es gratis y tienes todos los enlaces en la descripción."),
+    ("First, why do we need this? MOSS-Image is good at spelling. But it doesn't always put the text where you asked.",
+     "Primero, ¿por qué hace falta esto? MOSS-Image escribe bien. Pero no siempre pone el texto donde se lo pides.",
+     "First, why do we need this? MOSS Image is good at spelling. But it doesn't always put the text where you asked."),
+    ("Look at this one. The yellow frame is where I asked for the title. The model broke it into two lines, and the second line fell out of the box.",
+     "Mira este. El marco amarillo es donde pedí el título. El modelo lo partió en dos líneas, y la segunda se salió de la caja."),
+    ("You could generate again and again and check every image by eye. Or you can let the workflow do it. That's what we'll build.",
+     "Podrías generar una y otra vez y revisar cada imagen a ojo. O puedes dejar que lo haga el workflow. Eso es lo que vamos a montar."),
+    ("Let's start with the MOSS Loader. The model is HaDeS MOSS v1.0 Turbo: MOSS-Image Base with my eight-step turbo already inside, so it needs only eight steps at CFG one.",
+     "Empezamos con el MOSS Loader. El modelo es HaDeS MOSS v1.0 Turbo: MOSS-Image Base con mi turbo de ocho pasos ya dentro, así que solo necesita ocho pasos a CFG uno.",
+     "Let's start with the MOSS Loader. The model is HaDeS MOSS version one Turbo: MOSS Image Base with my eight-step turbo already inside, so it needs only eight steps at C F G one."),
+    ("The text encoder reads the prompt, and, as we'll see later, it can also read text in an image. The VAE turns the result into pixels.",
+     "El text encoder lee el prompt y, como veremos luego, también sabe leer el texto de una imagen. El VAE convierte el resultado en píxeles.",
+     "The text encoder reads the prompt, and, as we'll see later, it can also read text in an image. The V A E turns the result into pixels."),
+    ("Now the plan of the poster. The MOSS Layout Editor holds a canvas with boxes. Each box says what goes there.",
+     "Ahora el plano del póster. El MOSS Layout Editor tiene un lienzo con cajas. Cada caja dice qué va ahí."),
+    ("There are two kinds. Text boxes hold the exact words to write: the title at the top, the town's name in a small badge, and the ticket line at the bottom.",
+     "Hay dos tipos. Las cajas de texto llevan las palabras exactas que hay que escribir: el título arriba, el nombre del pueblo en una pequeña insignia y la línea de las entradas abajo."),
+    ("The other boxes describe things: here, the fiddler on the right and the lighthouse on the left.",
+     "Las otras cajas describen cosas: aquí, la violinista a la derecha y el faro a la izquierda."),
+    ("You can move a box, or resize it, right here on the canvas. Remember the title box: its size will matter later.",
+     "Puedes mover una caja, o cambiar su tamaño, aquí mismo en el lienzo. Acuérdate de la caja del título: su tamaño importará luego."),
+    ("Where do the boxes come from? You can draw them, or let the Prompt Enhancer draft them. In layout mode, you write your idea in one sentence, connect it to the editor, and press Draft layout.",
+     "¿De dónde salen las cajas? Puedes dibujarlas, o dejar que el Prompt Enhancer las proponga. En modo layout, escribes tu idea en una frase, lo conectas al editor y pulsas Draft layout."),
+    ("I drafted this poster that way and then adjusted the boxes. For today, I mute the Prompt Enhancer, so these boxes stay as they are.",
+     "Este póster lo empecé así y luego ajusté las cajas. Para hoy, desactivo el Prompt Enhancer, así estas cajas se quedan como están."),
+    ("Next, the MOSS Layout Compiler. It turns the boxes into the prompt MOSS-Image understands, and it makes the empty image, the latent, with the poster's size.",
+     "Después, el MOSS Layout Compiler. Convierte las cajas en el prompt que entiende MOSS-Image, y crea la imagen vacía, el latent, con el tamaño del póster.",
+     "Next, the MOSS Layout Compiler. It turns the boxes into the prompt MOSS Image understands, and it makes the empty image, the latent, with the poster's size."),
+    ("And here's the important setting: batch size, four. What is it for? Instead of one poster, we get four, each from different noise, in one run.",
+     "Y aquí está el ajuste importante: batch size, cuatro. ¿Para qué sirve? En lugar de un póster, tenemos cuatro, cada uno con un ruido distinto, en una sola ejecución."),
+    ("Why four? Because, as we saw, the model sometimes misplaces the title. With four tries, the chance that at least one is right is much better.",
+     "¿Por qué cuatro? Porque, como vimos, el modelo a veces coloca mal el título. Con cuatro intentos, es mucho más probable que al menos uno salga bien."),
+    ("A second Prompt Enhancer, in as written mode, encodes that prompt exactly as the compiler wrote it.",
+     "Un segundo Prompt Enhancer, en modo as written, codifica ese prompt exactamente como lo escribió el compiler."),
+    ("The MOSS KSampler makes the four posters: eight steps, CFG one, euler and simple, as the turbo model needs, and a fixed seed so you can repeat my result.",
+     "El MOSS KSampler hace los cuatro pósters: ocho pasos, CFG uno, euler y simple, como necesita el modelo turbo, y una semilla fija para que puedas repetir mi resultado.",
+     "The MOSS KSampler makes the four posters: eight steps, C F G one, euler and simple, as the turbo model needs, and a fixed seed so you can repeat my result."),
+    ("A Preview Image will show all four.",
+     "Un Preview Image enseñará los cuatro."),
+    ("Now the key node: MOSS Text Check. What does it do? It reads the text in an image and compares it with the text you asked for.",
+     "Ahora el nodo clave: MOSS Text Check. ¿Qué hace? Lee el texto de una imagen y lo compara con el que pediste."),
+    ("It reads with MOSS-Image's own text encoder, the same one that read our prompt. No other model is loaded.",
+     "Lee con el propio text encoder de MOSS-Image, el mismo que leyó nuestro prompt. No se carga ningún otro modelo.",
+     "It reads with MOSS Image's own text encoder, the same one that read our prompt. No other model is loaded."),
+    ("We give it the four posters, the text encoder, and the layout from the editor, so it knows which text should be in which box.",
+     "Le damos los cuatro pósters, el text encoder y el layout del editor, para que sepa qué texto debe ir en cada caja."),
+    ("For each text it gives a verdict: exact, close if some letters differ, missing, or outside its box if it's written, but in the wrong place.",
+     "Para cada texto da un veredicto: exact si es exacto, close si cambian algunas letras, missing si falta, o outside its box si está escrito, pero en el sitio equivocado."),
+    ("And its best image output passes on only the poster with the most texts exact. If none is perfect, its passed output says false, so you know to try another seed.",
+     "Y su salida best image deja pasar solo el póster con más textos exactos. Si ninguno es perfecto, su salida passed dice false, y así sabes que toca probar otra semilla."),
+    ("A Preview as Text shows its report.",
+     "Un Preview as Text enseña su informe."),
+    ("Now we make the winner twice as big. First, RealESRGAN x2, an upscaling model, doubles the pixels.",
+     "Ahora hacemos el ganador el doble de grande. Primero, RealESRGAN x2, un modelo de escalado, duplica los píxeles.",
+     "Now we make the winner twice as big. First, Real E S R GAN times two, an upscaling model, doubles the pixels."),
+    ("But an upscaler can only guess the fine detail, so it looks soft. So VAE Encode turns the big image back into a latent, and a second MOSS KSampler redraws it lightly.",
+     "Pero un escalador solo puede adivinar el detalle fino, así que queda blando. Por eso VAE Encode vuelve a convertir la imagen grande en latent, y un segundo MOSS KSampler la redibuja suavemente.",
+     "But an upscaler can only guess the fine detail, so it looks soft. So V A E Encode turns the big image back into a latent, and a second MOSS KSampler redraws it lightly."),
+    ("How lightly? That's denoise: zero point two five. It keeps the poster, and redraws only the fine detail. Same model, same prompt, same seed.",
+     "¿Cómo de suave? Eso es el denoise: cero coma dos cinco. Mantiene el póster y redibuja solo el detalle fino. El mismo modelo, el mismo prompt, la misma semilla."),
+    ("And a second Text Check reads the big poster, to make sure the redraw didn't break a letter.",
+     "Y un segundo Text Check lee el póster grande, para asegurarse de que el redibujado no ha roto ninguna letra."),
+    ("Last, Suite Telemetry gathers the settings of every node, and the MOSS Image Saver writes them into the PNG with the whole workflow. Drop the PNG on ComfyUI, and you get it all back.",
+     "Por último, Suite Telemetry reúne los ajustes de cada nodo, y el MOSS Image Saver los escribe en el PNG con el workflow entero. Arrastra el PNG a ComfyUI y lo recuperas todo.",
+     "Last, Suite Telemetry gathers the settings of every node, and the MOSS Image Saver writes them into the P N G with the whole workflow. Drop the P N G on ComfyUI, and you get it all back."),
     ("Let's run it.",
      "Vamos a ejecutarlo."),
-    ("Four posters. Text Check's report: in the first and the last, the title is out of its box; the middle two have all three texts exact, and it picks the second.",
-     "Cuatro pósters. El informe de Text Check: en el primero y el último, el título se sale de su caja; los dos del medio tienen los tres textos exactos, y elige el segundo."),
+    ("Here are the four posters. Look at the titles before we read the report. Can you see which ones broke?",
+     "Aquí están los cuatro pósters. Mira los títulos antes de leer el informe. ¿Ves cuáles se han partido?"),
+    ("Now Text Check's report: one line per poster. The first and the last have the title outside its box. The second and the third have all three texts exact.",
+     "Ahora el informe de Text Check: una línea por póster. El primero y el último tienen el título fuera de su caja. El segundo y el tercero tienen los tres textos exactos."),
+    ("When two tie, it looks at which one it read most closely, and then takes the first. Here, the second poster goes on.",
+     "Cuando dos empatan, mira cuál ha leído con más precisión, y después se queda con el primero. Aquí sigue adelante el segundo póster."),
     ("And here it is at 2048 by 3072. The final check: all three texts still exact.",
      "Y aquí está a 2048 por 3072. La comprobación final: los tres textos siguen exactos.",
      "And here it is at twenty forty-eight by thirty seventy-two. The final check: all three texts still exact."),
-    ("At one hundred percent, the MOSS pass keeps the lighthouse, the rocks and her face sharp, where simply enlarging blurs them.",
-     "Al cien por cien, la pasada de MOSS mantiene nítidos el faro, las rocas y su cara, donde ampliar sin más los emborrona."),
-    ("The whole run took just over forty seconds on my RTX 5090.",
-     "Toda la ejecución tardó poco más de cuarenta segundos en mi RTX 5090.",
-     "The whole run took just over forty seconds on my R T X fifty ninety."),
-    ("I ran it on three seeds: twelve posters. Every text was spelled right on all twelve.",
+    ("At one hundred percent, compare simply enlarging the picture with our MOSS pass: the lighthouse, the rocks and her face stay sharp.",
+     "Al cien por cien, compara ampliar la imagen sin más con nuestra pasada de MOSS: el faro, las rocas y su cara se mantienen nítidos."),
+    ("The whole run took about forty seconds on my RTX 5090.",
+     "Toda la ejecución tardó unos cuarenta segundos en mi RTX 5090.",
+     "The whole run took about forty seconds on my R T X fifty ninety."),
+    ("I ran this on three seeds: twelve posters. Every text was spelled right on all twelve.",
      "Lo ejecuté con tres semillas: doce pósters. Todos los textos estaban bien escritos en los doce."),
-    ("But only three of the twelve kept the title on one line, inside its box. That's exactly why we make four and let Text Check choose.",
-     "Pero solo tres de los doce mantuvieron el título en una línea, dentro de su caja. Justo por eso hacemos cuatro y dejamos que Text Check elija."),
-    ("If none of the four passes, its passed output says false: try another seed.",
-     "Si ninguno de los cuatro pasa, su salida passed dice false: prueba otra semilla."),
-    ("Making it twice as big never changed a verdict.",
-     "Hacerlo el doble de grande no cambió ningún veredicto."),
-    ("And a tip: if you want the title on two lines, make its box taller.",
-     "Y un consejo: si quieres el título en dos líneas, haz su caja más alta."),
+    ("But only three of the twelve kept the title on one line, inside its box. That's why we make four and let Text Check choose.",
+     "Pero solo tres de los doce mantuvieron el título en una línea, dentro de su caja. Por eso hacemos cuatro y dejamos que Text Check elija."),
+    ("And making it twice as big never changed a verdict.",
+     "Y hacerlo el doble de grande no cambió ningún veredicto."),
+    ("Remember the title box? If you want the title on two lines, make that box taller. Text Check holds the image to your boxes, so the box decides.",
+     "¿Te acuerdas de la caja del título? Si quieres el título en dos líneas, haz esa caja más alta. Text Check obliga a la imagen a respetar tus cajas, así que la caja decide."),
+    ("Let's recap. One: plan the image with boxes in the Layout Editor.",
+     "Repasemos. Uno: planifica la imagen con cajas en el Layout Editor."),
+    ("Two: make several versions at once with batch size, and let Text Check pick the one with every text right.",
+     "Dos: haz varias versiones a la vez con batch size, y deja que Text Check elija la que tiene todos los textos bien."),
+    ("Three: double it with an upscaler and a light MOSS pass, and check it again.",
+     "Tres: duplícala con un escalador y una pasada suave de MOSS, y vuelve a comprobarla."),
     ("You can download this workflow for free from GitHub. The link is in the description.",
      "Puedes descargar este workflow gratis desde GitHub. El enlace está en la descripción."),
     ("If you've made it to the end and enjoyed the video, and you'd like to see more content like this, leave a like and subscribe. It's free!",
@@ -5194,6 +5247,11 @@ AP_LINES = [
     ("Thanks for watching, and see you in the next one.",
      "Gracias por verlo, y nos vemos en el próximo."),
 ]
+
+# graph-space positions of the lesson's nodes (two rows, the x2 stage to the right)
+AP_POS = {"load": (0, 0), "draft": (450, 0), "editor": (950, 0), "compiler": (1550, 0), "enh": (1550, 600), "ks": (2050, 0),
+          "candidates": (2050, 560), "check": (2500, 0), "check_report": (2500, 420), "upmodel": (2950, 0), "up": (2950, 150),
+          "enc": (2950, 300), "ks2": (3350, 0), "check2": (3800, 0), "check2_report": (3800, 420), "save": (4250, 0), "tel": (4250, 560)}
 
 
 def ap_view(name):
@@ -5296,119 +5354,304 @@ async def ap_prepare(page):
     print("warm-up run:", await page.evaluate(UP_WARM_JS, mx.to_api(g, info, {})), flush=True)
 
 
-async def adv_poster(d: Director):
-    """Advanced workflow 1 of 6: the problem, the canvas in one pass, a run, four measured numbers."""
-    I = AP_IDS
-    es = d.language == "es"
-    every = list(I.values())
-    final_url = ap_view("s1013_final_00001_.png")
+async def ap_add(d, *a):
+    """basic_add, then the pointer leaves the new node's title (resting there shows the node's description tooltip)."""
+    node = await basic_add(d, *a)
+    await d.move(W * 0.97, H * 0.55, 400)
+    return node
 
-    # 1. the problem
-    await d.camera(every, 10, pad=50, top=60)
+
+async def adv_poster(d: Director):
+    """Advanced workflow #1 as a lesson (guion v2): the problem, the workflow built node by node with zooms, a run, the report read
+    line by line, the final check and crops, four measured numbers, the title-box tip, a recap."""
+    import make_examples as mx
+    P = AP_POS
+    es = d.language == "es"
+    final_url = ap_view("s1013_final_00001_.png")
+    await d.camera({"box": [-60, -80, 1600, 1100]}, 10, pad=60, top=60)
     await d.move(W * 0.97, H * 0.55, 10)
+
+    # 1. what we'll learn
     await d.js("(h) => window.__hv.show(h, 10)",
                f'<div style="display:flex;align-items:center;gap:80px;margin-top:30px"><img src="{final_url}" style="height:820px;border-radius:6px">'
                '<div style="color:#fff;max-width:640px"><div style="font:900 72px Segoe UI Black,sans-serif;line-height:1.05">HaDeS MOSS Suite</div>'
-               f'<div style="font:600 34px Segoe UI,sans-serif;color:#ffcc33;margin-top:22px">{"Workflows avanzados 1 de 6" if es else "Advanced workflows 1 of 6"}</div>'
+               f'<div style="font:600 34px Segoe UI,sans-serif;color:#ffcc33;margin-top:22px">{"Workflow avanzado n.º 1" if es else "Advanced workflow #1"}</div>'
                '<div style="font:700 46px Segoe UI,sans-serif;margin-top:16px">Production Poster</div></div></div>')
     await d.hold(0.8)
-    await d.say(0)
-    await d.say(1)
-    await d._after_voice(0.2)
-    await d.js("(h) => window.__hv.show(h, 400)", ap_fail_html(es))
-    await d.say(2)
-    await d.say(3)
-    await d._after_voice(0.2)
-    await d.js("() => window.__hv.hide()")
+    for k in range(4):
+        await d.say(k)
+
+    # 2. the problem
+    await d._after_voice(0.25)
+    await d.js("(h) => window.__hv.show(h)", ap_fail_html(es))
     await d.say(4)
     await d.say(5)
-
-    # 2. the canvas in one pass
-    await d._after_voice(0.25)
-    await d.camera([I["draft"], I["editor"]], 1300, pad=40, top=60)
     await d.say(6)
-    await d.hold(1.0)
-    p = await d.js("([id]) => { const n = window.__hv.node(id); return window.__hv.screen(id, n.size[0] / 2, n.size[1] / 3); }", [I["editor"]])
-    await d.move(*p)
+    await d._after_voice(0.5)
+    await d.js("() => window.__hv.hide()")
+
+    # 3. the model
+    load = await ap_add(d, "HaDeSMossLoader", "MOSS Loader", P["load"])
+    await up_set(d, load, dict(BASIC_LOADER, unet_name="HaDeS_MOSS_v1.0_Turbo.safetensors"))
+    await d.camera([load], 900, pad=140, top=60)
     await d.say(7)
-    p = await d.js("([id]) => { const n = window.__hv.node(id); return window.__hv.screen(id, n.size[0] / 2, 40); }", [I["draft"]])
-    await d.move(*p)
-    await d.hold(2.2)
-    z = await d.js("(id) => window.__hv.zone(id, 'draft_run')", I["editor"])
-    if z:
-        x, y = await d.screen(I["editor"], z["x"] + z["w"] / 2, z["y"] + z["h"] / 2)
-        await d.move(x, y)
+    await basic_point(d, load, "unet_name")
     await d._after_voice(0.25)
-    await d.camera([I["compiler"], I["enh"]], 1200, pad=60, top=60)
+    await basic_point(d, load, "clip_name")
     await d.say(8)
+    await d.hold(2.0)
+    await basic_point(d, load, "vae_name")
+
+    # 4. planning with boxes
     await d._after_voice(0.25)
-    await d.camera([I["ks"], I["candidates"], I["check"], I["check_report"]], 1200, pad=50, top=60)
+    await d.camera({"box": [880, -80, 1560, 1100]}, 1000, pad=60, top=60)
+    editor = await ap_add(d, "HaDeSMossLayoutEditor", "MOSS Layout Editor", P["editor"])
+    await d.js("""([id, v]) => { const w = window.__hv.widget(id, 'draft'); w.value = v; w.callback?.(v);
+        window.__hv.node(id).setDirtyCanvas(true, true); }""", [editor, json.dumps(mx.FOLK_DRAFT, indent=2, ensure_ascii=False)])
+    await d.hold(0.5)
+    await d.camera([editor], 900, pad=60, top=60)
     await d.say(9)
     await d._after_voice(0.25)
-    await d.camera([I["upmodel"], I["up"], I["enc"], I["ks2"], I["check2"], I["check2_report"]], 1200, pad=50, top=60)
     await d.say(10)
     await d._after_voice(0.25)
-    await d.camera([I["save"], I["tel"], I["report"]], 1100, pad=60, top=60)
     await d.say(11)
-
-    # 3. run
     await d._after_voice(0.25)
-    await d.camera(every, 1200, pad=50, top=60)
     await d.say(12)
-    _, secs = await basic_run(d, I["save"])
-    cand, report, report2, final_take = await ap_take(d, I)
+    await d._after_voice(1.0)
+    await d.camera({"box": [380, -80, 1560, 1100]}, 900, pad=60, top=60)
+    draft = await ap_add(d, "HaDeSMossPromptEnhancer", "MOSS Prompt Enhancer", P["draft"])
+    await up_set(d, draft, {"mode": "layout", "width": 1024, "height": 1536, "temperature": 0.7, "seed": 2, "max_tokens": 1024,
+                            "negative": "", "idea": mx.FOLK_IDEA})
+    await d.say(13)
+    async with d.fast(1.6):
+        await basic_link(d, load, "CLIP", draft, "clip", 700)
+        await basic_link(d, draft, "draft", editor, "draft_in", 700)
+    await ml_zoom(d, draft, ["mode"])
+    await basic_point(d, draft, "mode")
+    await d.hold(1.5)
+    z = await d.js("(id) => window.__hv.zone(id, 'draft_run')", editor)
+    await d.camera([editor], 900, pad=60, top=60)
+    if z:
+        x, y = await d.screen(editor, z["x"] + z["w"] / 2, z["y"] + z["h"] / 2)
+        await d.move(x, y)
+    await d._after_voice(0.25)
+    await d.js("(id) => { const n = window.__hv.node(id); n.mode = 2; window.__hv.app().graph.setDirtyCanvas(true, true); }", draft)
+    await d.camera({"box": [380, -80, 1560, 1100]}, 900, pad=60, top=60)
+    await d.say(14)
+
+    # 5. four versions at once
+    await d._after_voice(0.25)
+    await d.camera({"box": [1480, -80, 2050, 1100]}, 1000, pad=60, top=60)
+    comp = await ap_add(d, "HaDeSMossLayoutCompiler", "MOSS Layout Compiler", P["compiler"])
+    await up_set(d, comp, {"batch_size": 1})
+    async with d.fast(1.6):
+        await d.camera({"box": [880, -80, 2050, 1100]}, 500, pad=60, top=60)
+        await basic_link(d, editor, "draft", comp, "draft", 700)
+    await d.camera([comp], 900, pad=120, top=60)
+    await d.say(15)
+    await d._after_voice(0.25)
+    await ml_zoom(d, comp, ["batch_size"])
+    await basic_point(d, comp, "batch_size")
+    await d.hold(0.4)
+    await up_set(d, comp, {"batch_size": 4})
+    await d.say(16)
+    await d.say(17)
+    await d._after_voice(0.25)
+    await d.camera({"box": [1480, -80, 2050, 1500]}, 900, pad=60, top=60)
+    enh = await ap_add(d, "HaDeSMossPromptEnhancer", "MOSS Prompt Enhancer", P["enh"])
+    await up_set(d, enh, {"mode": "as written", "width": 1024, "height": 1024, "seed": 1, "negative": "", "max_tokens": 1024})
+    async with d.fast(1.6):
+        await d.camera({"box": [-60, -80, 2050, 1500]}, 500, pad=60, top=60)
+        await basic_link(d, load, "CLIP", enh, "clip", 700)
+        await d.camera({"box": [1480, -80, 2050, 1500]}, 500, pad=60, top=60)
+        await basic_link(d, comp, "prompt", enh, "idea", 700)
+    await ml_zoom(d, enh, ["mode"])
+    await basic_point(d, enh, "mode")
+    await d.say(18)
+
+    # 6. generate
+    await d._after_voice(0.25)
+    await d.camera({"box": [1980, -80, 2460, 1100]}, 1000, pad=60, top=60)
+    ks = await ap_add(d, "HaDeSMossKSampler", "MOSS KSampler", P["ks"])
+    await up_set(d, ks, {"seed": AP_SEED, "control_after_generate": "fixed", "steps": 8, "cfg": 1.0, "sampler_name": "euler",
+                         "scheduler": "simple", "denoise": 1.0})
+    async with d.fast(3.0):
+        await d.camera({"box": [-60, -80, 2460, 1500]}, 500, pad=60, top=60)
+        await basic_link(d, load, "MODEL", ks, "model", 600)
+        await basic_link(d, load, "VAE", ks, "vae", 600)
+        await d.camera({"box": [1480, -80, 2460, 1500]}, 500, pad=60, top=60)
+        for a, out, inp in ((enh, "positive", "positive"), (enh, "negative", "negative"), (comp, "latent", "latent_image")):
+            await basic_link(d, a, out, ks, inp, 600)
+    await ml_zoom(d, ks, ["steps", "cfg", "sampler_name", "scheduler", "seed"])
+    await basic_point(d, ks, "steps")
+    await d.say(19)
+    await d.hold(2.5)
+    await basic_point(d, ks, "seed")
+    await d._after_voice(0.25)
+    await d.camera({"box": [1980, -80, 2460, 1100]}, 700, pad=60, top=60)
+    cand = await ap_add(d, "PreviewImage", "Preview Image", P["candidates"])
+    await basic_link(d, ks, "image", cand, "images", 600)
+    await d.camera([ks, cand], 900, pad=60, top=60)
+    await d.say(20)
+
+    # 7. let the machine read
+    await d._after_voice(0.25)
+    await d.camera({"box": [2430, -80, 2900, 900]}, 1000, pad=60, top=60)
+    check = await ap_add(d, "HaDeSMossTextCheck", "MOSS Text Check", P["check"])
+    await d.camera([check], 900, pad=120, top=60)
+    await d.say(21)
+    await d.say(22)
+    await d._after_voice(0.25)
+    await d.camera({"box": [-60, -80, 2900, 1500]}, 900, pad=60, top=60)
+    await d.say(23)
+    async with d.fast(2.0):
+        await basic_link(d, load, "CLIP", check, "clip", 700)
+        await basic_link(d, editor, "draft", check, "layout", 700)
+        await d.camera({"box": [1980, -80, 2900, 1100]}, 500, pad=60, top=60)
+        await basic_link(d, ks, "image", check, "image", 600)
+    await d._after_voice(0.25)
+    await d.camera([check], 900, pad=120, top=60)
+    await d.say(24)
+    await d._after_voice(0.25)
+    await d.move(*await d.js("([id, n]) => window.__hv.slot(id, n, true)", [check, "best_image"]))
+    await d.say(25)
+    await d.hold(3.0)
+    await d.move(*await d.js("([id, n]) => window.__hv.slot(id, n, true)", [check, "passed"]))
+    await d._after_voice(0.25)
+    await d.camera({"box": [2430, -80, 2900, 900]}, 700, pad=60, top=60)
+    rep1 = await ap_add(d, "PreviewAny", "Preview as Text", P["check_report"])
+    await basic_link(d, check, "report", rep1, "source", 600)
+    await d.camera([check, rep1], 900, pad=60, top=60)
+    await d.say(26)
+
+    # 8. twice as big
+    await d._after_voice(0.25)
+    await d.camera({"box": [2880, -80, 3330, 700]}, 1000, pad=60, top=60)
+    upm = await ap_add(d, "UpscaleModelLoader", "Load Upscale Model", P["upmodel"])
+    await up_set(d, upm, {"model_name": "RealESRGAN_x2plus.pth"})
+    up = await ap_add(d, "ImageUpscaleWithModel", "Upscale Image (using Model)", P["up"])
+    async with d.fast(1.6):
+        await basic_link(d, upm, "UPSCALE_MODEL", up, "upscale_model", 600)
+        await d.camera({"box": [2430, -80, 3330, 900]}, 500, pad=60, top=60)
+        await basic_link(d, check, "best_image", up, "image", 600)
+    await d.camera([upm, up], 900, pad=80, top=60)
+    await d.say(27)
+    await d._after_voice(0.25)
+    enc = await ap_add(d, "VAEEncode", "VAE Encode", P["enc"])
+    ks2 = await ap_add(d, "HaDeSMossKSampler", "MOSS KSampler", P["ks2"])
+    await up_set(d, ks2, {"seed": AP_SEED, "control_after_generate": "fixed", "steps": 8, "cfg": 1.0, "sampler_name": "euler",
+                          "scheduler": "simple", "denoise": 0.25})
+    await d.camera({"box": [2880, -80, 3800, 900]}, 900, pad=60, top=60)
+    await d.say(28)
+    async with d.fast(3.0):
+        await basic_link(d, up, "IMAGE", enc, "pixels", 600)
+        await basic_link(d, enc, "LATENT", ks2, "latent_image", 600)
+        await d.camera({"box": [-60, -80, 3800, 1500]}, 500, pad=60, top=60)
+        await basic_link(d, load, "MODEL", ks2, "model", 600)
+        await basic_link(d, load, "VAE", ks2, "vae", 600)
+        await basic_link(d, load, "VAE", enc, "vae", 600)
+        await d.camera({"box": [1480, -80, 3800, 1500]}, 500, pad=60, top=60)
+        await basic_link(d, enh, "positive", ks2, "positive", 600)
+        await basic_link(d, enh, "negative", ks2, "negative", 600)
+    await d._after_voice(0.25)
+    await ml_zoom(d, ks2, ["denoise"])
+    await basic_point(d, ks2, "denoise")
+    await d.say(29)
+    await d._after_voice(0.25)
+    await d.camera({"box": [3730, -80, 4200, 900]}, 1000, pad=60, top=60)
+    check2 = await ap_add(d, "HaDeSMossTextCheck", "MOSS Text Check", P["check2"])
+    rep2 = await ap_add(d, "PreviewAny", "Preview as Text", P["check2_report"])
+    await d.say(30)
+    async with d.fast(2.0):
+        await basic_link(d, check2, "report", rep2, "source", 600)
+        await d.camera({"box": [3280, -80, 4200, 900]}, 500, pad=60, top=60)
+        await basic_link(d, ks2, "image", check2, "image", 600)
+        await d.camera({"box": [-60, -80, 4200, 1500]}, 500, pad=60, top=60)
+        await basic_link(d, load, "CLIP", check2, "clip", 700)
+        await basic_link(d, editor, "draft", check2, "layout", 700)
+
+    # 9. saved with everything inside
+    await d._after_voice(0.25)
+    await d.camera({"box": [4180, -80, 4650, 1100]}, 1000, pad=60, top=60)
+    tel = await ap_add(d, "HaDeSMossSuiteTelemetry", "MOSS Suite Telemetry", P["tel"])
+    save = await ap_add(d, "HaDeSMossImageSaver", "MOSS Image Saver", P["save"])
+    await up_set(d, save, {"filename_prefix": "MOSS/HaDeS_MOSS_poster_%seed%", "hashes": True, "embed_workflow": True})
+    await d.say(31)
+    async with d.fast(3.0):
+        await basic_link(d, tel, "json", save, "metadata", 600)
+        await d.camera({"box": [3280, -80, 4650, 1100]}, 500, pad=60, top=60)
+        await basic_link(d, ks2, "image", save, "images", 600)
+        await d.camera({"box": [-60, -80, 4650, 1500]}, 500, pad=60, top=60)
+        for k, (a, ) in enumerate(((load,), (editor,), (comp,), (enh,), (ks,), (check,), (ks2,), (check2,)), 1):
+            await basic_link(d, a, "info", tel, f"info_{k}", 600)
+
+    # 10. run and read the result
+    await d._after_voice(0.25)
+    await d.camera({"box": [-60, -80, 4650, 1500]}, 900, pad=60, top=60)
+    await d.say(32)
+    _, secs = await basic_run(d, save)
+    ids = {"candidates": cand, "check_report": rep1, "check2_report": rep2, "save": save}
+    cands, report, report2, final_take = await ap_take(d, ids)
     if report.count("3/3 exact") != 2 or "image 2: 3/3 exact <- best" not in report or report2.count("[exact]") != 3:
         raise SystemExit(f"the take's Text Check is not the measured one:\n{report}\n{report2}")
-    await d._after_voice(0.25)
-    await d.camera([I["candidates"], I["check_report"]], 1100, pad=40, top=60)
-    await d.hold(1.0)
     await d.move(W * 0.97, H * 0.55)
-    await d.js("(h) => window.__hv.show(h)", ap_candidates_html(cand, report, es))
-    await d.say(13)
-    await d._after_voice(0.3)
+    plain = [f'<div style="text-align:center"><img src="{u}" style="height:600px;border-radius:6px"></div>' for u in cands]
+    await d.js("(h) => window.__hv.show(h)", f'<div style="display:flex;gap:30px;margin-top:40px">{"".join(plain)}</div>')
+    await d.say(33)
+    await d._after_voice(2.0)
+    await d.js("(h) => window.__hv.show(h)", ap_candidates_html(cands, report, es))
+    await d.say(34)
+    await d.say(35)
+    await d._after_voice(0.25)
     await d.js("(h) => window.__hv.show(h)", ap_final_html(final_take, report2, es))
-    await d.say(14)
+    await d.say(36)
     await d._after_voice(0.2)
     await d.js("(h) => window.__hv.show(h)", ap_crops_html(es))
-    await d.say(15)
+    await d.say(37)
     await d._after_voice(0.3)
-    await d.js("(h) => window.__hv.show(h)", ap_card([f'{secs:.1f} s · RTX 5090' if not es else f'{secs:.1f} s · RTX 5090'], top=380))
-    await d.say(16)
+    await d.js("(h) => window.__hv.show(h)", ap_card([f'{secs:.1f} s · RTX 5090'], top=380))
+    await d.say(38)
 
-    # 4. measured
+    # 11. measured, and a tip
     nums = (["12 / 12 pósters: todos los textos bien escritos", "3 / 12: el título en su caja", "×2: ningún veredicto cambió"] if es else
             ["12 / 12 posters: every text spelled right", "3 / 12: the title inside its box", "×2: no verdict changed"])
     await d._after_voice(0.25)
     await d.js("(h) => window.__hv.show(h)", ap_card(nums[:1]))
-    await d.say(17)
+    await d.say(39)
     await d._after_voice(0.25)
     await d.js("(h) => window.__hv.show(h)", ap_card(nums[:2]))
-    await d.say(18)
-    await d.say(19)
+    await d.say(40)
     await d._after_voice(0.25)
     await d.js("(h) => window.__hv.show(h)", ap_card(nums))
-    await d.say(20)
-    await d._after_voice(0.2)
-    await d.js("() => window.__hv.hide()")
-    await d.camera([I["editor"]], 1100, pad=40, top=60)
-    await d.say(21)
-
-    # 5. closing
+    await d.say(41)
     await d._after_voice(0.25)
-    await d.camera(every, 1200, pad=50, top=60)
+    await d.js("() => window.__hv.hide()")
+    await d.camera([editor], 900, pad=40, top=60)
+    await d.say(42)
+
+    # 12. recap and closing
+    recap = (["1 · planifica con cajas", "2 · varias versiones, Text Check elige", "3 · ×2 y vuelve a comprobar"] if es else
+             ["1 · plan with boxes", "2 · several versions, Text Check picks", "3 · ×2, and check again"])
+    for k in range(3):
+        await d._after_voice(0.25)
+        await d.js("(h) => window.__hv.show(h)", ap_card(recap[:k + 1]))
+        await d.say(43 + k)
+    await d._after_voice(0.25)
+    await d.js("() => window.__hv.hide()")
+    await d.camera({"box": [-60, -80, 4650, 1500]}, 1200, pad=60, top=60)
     await d.js("(h) => window.__hv.show(h)",
                '<div style="color:#fff;text-align:center;max-width:1300px;margin-top:300px">'
                f'<div style="font:600 30px Segoe UI,sans-serif;color:#c9c9d1">{"Descarga gratis (enlace en la descripción)" if es else "Free download (link in the description)"}</div>'
                f'<div style="font:700 44px Segoe UI,sans-serif;margin-top:22px">examples/advanced/{AP_TITLE}.json</div></div>')
-    await d.say(22)
+    await d.say(46)
     await d._after_voice(0.25)
     await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }",
-               f'<div style="display:flex;align-items:center;gap:80px;margin-top:30px"><img src="{final_url}" style="height:820px;border-radius:6px">'
+               f'<div style="display:flex;align-items:center;gap:80px;margin-top:30px"><img src="{final_take}" style="height:820px;border-radius:6px">'
                '<div style="color:#fff;max-width:640px"><div style="font:900 72px Segoe UI Black,sans-serif;line-height:1.05">HaDeS MOSS Suite</div>'
                '<div style="font:600 34px Segoe UI,sans-serif;color:#ffcc33;margin-top:22px">Production Poster</div>'
                f'<div style="font:400 26px Segoe UI,sans-serif;color:#c9c9d1;margin-top:44px">{"Workflow, Suite y modelos: enlaces en la descripción" if es else "Workflow, Suite and models: links in the description"}</div></div></div>')
-    await d.say(23)
-    await d.say(24)
+    await d.say(47)
+    await d.say(48)
     await d.end(1.5)
 
 
