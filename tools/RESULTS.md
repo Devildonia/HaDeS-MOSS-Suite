@@ -3334,3 +3334,56 @@ at 500 x 520 (clean 8189, frontend 1.57.4):
 
 Workflows saved before 0.9.7 carry no `hades_view` and load as before.
 
+## PCM pilot, Turbo + PCM recipes and HaDeS MOSS Detailer v0.1 (Base, 2026-11-27)
+
+**PCM pilot.** `tools/moss_pcm_train.py` (phased consistency, PCD* variant adapted to flow matching): Base (`mossImage_base_bf16`)
+as teacher and student, 8 phases from the stock euler / simple 8-step schedule, teacher one euler step without CFG, condition drop 0.1,
+rank 16 on layers 24-41, lr 2e-5, batch 16, 512 px; data: the 2,048 Base renders (25 steps, CFG 3) and cached embeddings of the Turbo v2.0
+run. 4.3 s/update, 13.9 GB peak. Trained to update 3,500: the loss sat at about 0.00002 with the gradient near zero from about update
+1,000, and previews at 1,000 / 2,000 / 3,000 looked alike. Run folder `I:/HaDeS_MOSS/pcm/pilot_r16`.
+
+**Alone, against Base euler 25 steps CFG 2.5** (22 prompts, seed 1001, 1024 x 1024, 8 steps euler / simple; MAE at 512 px; Turbo v2.0
+at 8 steps CFG 1: edges 0.601, MAE 39.9): u1000 at CFG 1 / 2 / 3 / 4 MAE 28.9 / 20.1 / 27.2 / 32.4, edges at CFG 2 0.372; u3500 the
+same within noise (CFG 2 MAE 21.3), better texture distance (0.560 against 0.865). Quality alone is not there: ghosting at CFG 1, dark
+and muddy at CFG 3, a broken poster title. Floor: Base euler 50 steps against 25 steps, MAE 10.5, edges 0.136.
+
+**Mixed with Turbo v2.0** (same 22 prompts and reference; sharpness = Laplacian std as a ratio to Base's, median):
+
+| Mix, 8 steps euler / simple, CFG 2 | Shift | Edges | MAE | Sharpness |
+|---|---:|---:|---:|---:|
+| v2.0 0.3 + PCM u3500 0.7 | 5 / 7 / 9 / 11 / 13 | - / 0.339 / 0.246 / 0.259 / 0.317 | 20.1 / 17.3 / 12.1 / 12.9 / 15.9 | 0.80-0.83 |
+| v2.0 0.3 + PCM u1000 0.7 | 9 | 0.235 | 11.1 | 0.79 |
+| v2.0 0.3 + PCM u1000 0.85 | 9 | 0.218 | 11.9 | 0.82 |
+
+CFG 1.5 and 2.5 were further from Base than CFG 2 (MAE 15.8 / 15.2). Seed 1002 on 6 prompts: MAE 13.8 (u3500 0.7), one miss
+(the climber: Base's first-person hands became a contorted body). The negative prompt stayed as weak as Base's. On four seeds of a
+café portrait the mix drew Base's own people. As a 4-step mix (v2.0 1.0 + PCM, CFG 1) the PCM weight did not move v2.0's composition
+(MAE to Base about 37 at every weight) and raised sharpness: 0.75 / 0.85 / 0.97 at PCM 0 / 0.7 (u1000) / 1.0 (u3500).
+
+**Merged into one LoRA** (ranks stacked, 2 + 16 = 18, fp16; product error 2.6e-4 relative): not pixel-identical to loading the two LoRAs,
+and no merged file can be. ComfyUI adds each LoRA patch in fp16 on this GPU (`lora_compute_dtype`) and stochastic-rounds to bf16,
+so the order matters: the same two LoRAs loaded in the opposite order moved the images by MAE 3-11. On the 22 prompts the merged
+faithful file gave MAE 13.1 and sharpness 0.83 against Base, the two-LoRA mix 11.1-11.2 and 0.78-0.79 in either order. Files kept
+locally, not published.
+
+**HaDeS MOSS Detailer v0.1** = PCM u1000 alone, saved in fp16 (`HaDeS-MOSS-Detailer-v0.1.safetensors`, 28.3 MB, SHA256
+`75e08b5e17edb19bdc9ec8f4a356d8e366408b36637eb751865b61bfeb44a47d`). Against the same model and seed without it, 25 steps
+er_sde / simple, CFG 2.5, shift 5, no SLG:
+
+| Set | Model | Strength | MAE at 512 | Sharpness | Saturation |
+|---|---|---:|---:|---:|---:|
+| 12 prompts, seed 1001, 1024 x 1024 | Base | 0.3 / 0.5 / 0.7 | 4.4 / 5.2 / 7.2 | x1.05 / x1.10 / x1.21 | x0.99 / x0.99 / x1.01 |
+| | SFT | 0.3 / 0.5 / 0.7 | 4.4 / 6.3 / 8.1 | x1.02 / x1.06 / x1.11 | x0.99 / x1.01 / x1.01 |
+| 8 card scenes, seed 1200, 1344 x 1792 | Base | 0.5 | 6.3 | x1.08 | x1.01 |
+| | SFT | 0.5 | 6.7 | x1.11 | x1.01 |
+| 2 of those scenes (portrait, fisherman) | Base | 0.3 / 0.7 | 5.7 / 9.3 | x0.98 / x1.12 | x1.05 / x1.08 |
+| | SFT | 0.3 / 0.7 | 3.7 / 7.1 | x1.03 / x1.18 | x1.00 / x1.00 |
+
+- With a turbo at 8 steps, CFG 1 (Base + Turbo v2.0, SFT + Turbo SFT v1.0), Detailer 0.5 gave x1.03 sharpness on both, MAE 6.4 / 7.4.
+- SFT keeps its own look: SFT alone is x1.51 sharper and x1.38 more saturated than Base on the 12 prompts; with the Detailer it
+  gets sharper still (x1.71 at 0.7) and its saturation does not move toward Base's.
+- By eye (100 % crops): more pores and fine lines on faces, rope fibres, fur, stone. Small things can change: a pair of scissors
+  appeared in SFT's fisherman at 0.5, a watch dial's invented brand text and date window changed. One outlier on Base: the bread scene
+  moved more (MAE 23.4, saturation x0.87).
+- Not measured: other samplers and step counts, finetunes, editing / img2img, sizes above 1344 x 1792.
+- Scripts and images: `I:/HaDeS_MOSS/pcm` (sweep, detailer) and `I:/HaDeS_MOSS/detailer_release`.
