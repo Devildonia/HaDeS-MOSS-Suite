@@ -6131,6 +6131,542 @@ async def merge_lab(d: Director):
 merge_lab.prepare = ml_prepare
 
 
+TS_FILE = None  # built on camera (a lesson); the finished example is the download
+TS_SEED = 1000  # the example's seed; measured: 0.3 ArcFace 0.878 vs stage 1, 0.7 0.682, the 0.7 rerun 3.0 s (videos/advanced/adv_two_stage/MEDIDAS.md)
+TS_SHOTS = "adv_two_stage"  # the measured run of the same seed in comfy_output, for the opening and the crops
+TS_CROP = (307, 212)  # 512 x 512 around the face (detector box on stage 1)
+TS_PROMPT = ("Studio photograph of an elderly fisherman with a weathered face and a grey knitted cap, soft window light from the left, "
+             "shallow depth of field, 85mm lens, muted colors.")
+TS_LORA_BASE = "MOSS\\turbo_v10\\HaDeS-MOSS-Turbo-8steps-v1.0.safetensors"
+TS_LORA_SFT = "MOSS\\HaDeS-MOSS-Turbo-8steps-v0.7.safetensors"
+TS_POS = {"load": (0, 0), "sft": (0, 380), "enh": (450, 0), "latent": (950, 0), "t1": (950, 450), "ks": (1400, 0), "stage1": (1400, 560),
+          "t2": (1850, 450), "ks2": (2300, 0), "save": (2750, 0), "tel": (2750, 480), "report": (3200, 480)}
+TS_BOX = [-60, -120, 3640, 1050]
+
+TS_LINES = [
+    ("Hi, I'm HaDeS, and welcome to advanced workflow number three: two stages, two models.",
+     "Hola, soy HaDeS, y bienvenido al workflow avanzado número tres: dos etapas, dos modelos."),
+    ("Today you'll learn how to use two different models on the same image: one to compose the picture, and another one to finish it.",
+     "Hoy vas a aprender a usar dos modelos distintos en la misma imagen: uno para componerla y otro para terminarla."),
+    ("You'll also learn what denoise really does, and how to choose it with numbers instead of guessing.",
+     "También vas a aprender qué hace de verdad el denoise, y cómo elegirlo con números en vez de a ojo.",
+     "You'll also learn what denoise really does, and how to choose it with numbers instead of guessing."),
+    ("As always, we'll build it together from an empty canvas, everything is free, and all the links are in the description.",
+     "Como siempre, lo montamos juntos desde el lienzo vacío, todo es gratis y tienes todos los enlaces en la descripción."),
+    ("MOSS-Image comes in two versions: Base and SFT. SFT is Base trained further, to make finished, polished images.",
+     "MOSS-Image viene en dos versiones: Base y SFT. SFT es Base entrenado un poco más, para dar imágenes acabadas y pulidas.",
+     "MOSS Image comes in two versions: Base and S F T. S F T is Base trained further, to make finished, polished images."),
+    ("So why not always use SFT? Because each one is good at something different.",
+     "Entonces, ¿por qué no usar siempre SFT? Porque cada uno es bueno en una cosa distinta.",
+     "So why not always use S F T? Because each one is good at something different."),
+    ("SFT gives skin texture: pores, wrinkles, a little more warmth. But on a neutral prompt it tends to draw the same kind of face again and again.",
+     "SFT da textura de piel: poros, arrugas, algo más de calidez. Pero con un prompt neutro tiende a dibujar el mismo tipo de cara una y otra vez.",
+     "S F T gives skin texture: pores, wrinkles, a little more warmth. But on a neutral prompt it tends to draw the same kind of face again and again."),
+    ("I counted it: with \"a woman sitting in a café\" and sixteen seeds, SFT drew an East Asian woman about fourteen times. Base, about four.",
+     "Lo conté: con \"una mujer sentada en una cafetería\" y dieciséis semillas, SFT dibujó una mujer asiática unas catorce veces. Base, unas cuatro.",
+     "I counted it: with a woman sitting in a café, and sixteen seeds, S F T drew an East Asian woman about fourteen times. Base, about four."),
+    ("Base gives you more variety in the people, but its faces are softer, almost smooth.",
+     "Base te da más variedad de personas, pero sus caras son más suaves, casi lisas."),
+    ("So the idea is simple: let Base decide the picture and the person, and let SFT add the finish on top.",
+     "Así que la idea es sencilla: que Base decida la imagen y la persona, y que SFT ponga el acabado encima.",
+     "So the idea is simple: let Base decide the picture and the person, and let S F T add the finish on top."),
+    ("Let's start. The first node is the MOSS Loader. It loads three things at once: the image model, the text encoder and the VAE.",
+     "Empecemos. El primer nodo es el MOSS Loader. Carga tres cosas a la vez: el modelo de imagen, el text encoder y el VAE.",
+     "Let's start. The first node is the MOSS Loader. It loads three things at once: the image model, the text encoder and the V A E."),
+    ("As the model, we choose Base. The text encoder reads your prompt, and the VAE turns the result into pixels.",
+     "Como modelo, elegimos Base. El text encoder lee tu prompt, y el VAE convierte el resultado en píxeles.",
+     "As the model, we choose Base. The text encoder reads your prompt, and the V A E turns the result into pixels."),
+    ("Next, the Prompt Enhancer. Here we write the prompt: a studio photograph of an elderly fisherman, with a grey knitted cap and soft window light.",
+     "Después, el Prompt Enhancer. Aquí escribimos el prompt: una foto de estudio de un pescador mayor, con gorro gris de punto y luz suave de ventana."),
+    ("Its mode is \"as written\": it sends the prompt exactly as I typed it. We want both models to read the very same words.",
+     "Su modo es \"as written\": manda el prompt tal cual lo escribí. Queremos que los dos modelos lean exactamente las mismas palabras.",
+     "Its mode is as written: it sends the prompt exactly as I typed it. We want both models to read the very same words."),
+    ("Then the MOSS Latent: the empty canvas the model will paint on. One to one, one megapixel, and seed one thousand.",
+     "Después el MOSS Latent: el lienzo vacío sobre el que pintará el modelo. Uno a uno, un megapíxel, y semilla mil."),
+    ("Now the sampler, the node that actually draws. We connect the model, the prompt, the latent and the VAE.",
+     "Ahora el sampler, el nodo que de verdad dibuja. Conectamos el modelo, el prompt, el latent y el VAE.",
+     "Now the sampler, the node that actually draws. We connect the model, the prompt, the latent and the V A E."),
+    ("To make it fast, we add a MOSS Turbo node. Which one? Turbo 8-steps v1.0, because it was trained on Base, the model of this stage.",
+     "Para que vaya rápido, añadimos un nodo MOSS Turbo. ¿Cuál? Turbo 8-steps v1.0, porque se entrenó sobre Base, el modelo de esta etapa.",
+     "To make it fast, we add a MOSS Turbo node. Which one? Turbo eight steps, version one, because it was trained on Base, the model of this stage."),
+    ("Eight steps and CFG one, the settings it was trained for. When the Turbo is connected, the sampler takes these settings from it.",
+     "Ocho pasos y CFG uno, los ajustes con los que se entrenó. Cuando el Turbo está conectado, el sampler toma de él estos ajustes.",
+     "Eight steps and C F G one, the settings it was trained for. When the Turbo is connected, the sampler takes these settings from it."),
+    ("And a Preview Image after it, so we can see what Base did on its own before SFT touches it.",
+     "Y un Preview Image detrás, para ver lo que hizo Base por sí solo antes de que SFT lo toque.",
+     "And a Preview Image after it, so we can see what Base did on its own before S F T touches it."),
+    ("That's stage one. I'll put it in a group, and call it \"Base composes\".",
+     "Esa es la etapa uno. La meto en un grupo y lo llamo \"Base composes\".",
+     "That's stage one. I'll put it in a group, and call it Base composes."),
+    ("Stage two. Now we need SFT. But do we need another MOSS Loader? No: the text encoder and the VAE are the same for both models.",
+     "Etapa dos. Ahora necesitamos SFT. ¿Pero hace falta otro MOSS Loader? No: el text encoder y el VAE son los mismos para los dos modelos.",
+     "Stage two. Now we need S F T. But do we need another MOSS Loader? No: the text encoder and the V A E are the same for both models."),
+    ("So we only load the image model, with ComfyUI's Load Diffusion Model node, and choose SFT. This way the text encoder is loaded only once.",
+     "Así que solo cargamos el modelo de imagen, con el nodo Load Diffusion Model de ComfyUI, y elegimos SFT. Así el text encoder se carga una sola vez.",
+     "So we only load the image model, with ComfyUI's Load Diffusion Model node, and choose S F T. This way the text encoder is loaded only once."),
+    ("A second MOSS KSampler. Its model is SFT, and its prompt is the same Prompt Enhancer.",
+     "Un segundo MOSS KSampler. Su modelo es SFT, y su prompt es el mismo Prompt Enhancer.",
+     "A second MOSS K Sampler. Its model is S F T, and its prompt is the same Prompt Enhancer."),
+    ("And here's the key wire: its latent doesn't come from an empty canvas. It comes from the first sampler: Base's picture.",
+     "Y aquí está el cable clave: su latent no viene de un lienzo vacío. Viene del primer sampler: la imagen de Base."),
+    ("Its turbo is Turbo 8-steps v0.7, the one trained on SFT. Each model with its own turbo.",
+     "Su turbo es Turbo 8-steps v0.7, el que se entrenó sobre SFT. Cada modelo con su propio turbo.",
+     "Its turbo is Turbo eight steps, version zero point seven, the one trained on S F T. Each model with its own turbo."),
+    ("Now, the most important setting of the whole video: denoise. What is it for?",
+     "Y ahora, el ajuste más importante de todo el vídeo: el denoise. ¿Para qué sirve?"),
+    ("Denoise says how much of the image the second model is allowed to redraw. At one, it redraws everything, and Base's picture is lost. At zero, it changes nothing.",
+     "El denoise dice cuánto de la imagen puede volver a dibujar el segundo modelo. A uno, lo redibuja todo y la imagen de Base se pierde. A cero, no cambia nada."),
+    ("In between, it adds noise to Base's picture, and SFT cleans that noise its own way. Low values keep the shapes, and only touch the fine detail.",
+     "Entre medias, añade ruido a la imagen de Base, y SFT limpia ese ruido a su manera. Los valores bajos mantienen las formas y solo tocan el detalle fino.",
+     "In between, it adds noise to Base's picture, and S F T cleans that noise its own way. Low values keep the shapes, and only touch the fine detail."),
+    ("And denoise mode? Set it to exact. With few steps, the usual mode can give the same image for two different denoise values. Exact follows every value you set.",
+     "¿Y denoise mode? Ponlo en exact. Con pocos pasos, el modo normal puede dar la misma imagen con dos denoise distintos. Exact sigue cada valor que pongas."),
+    ("So which value? I didn't guess it. I measured how much each face stayed the same person, with a face-recognition model, on thirty-two images.",
+     "¿Entonces qué valor? No lo elegí a ojo. Medí cuánto seguía siendo la misma persona cada cara, con un modelo de reconocimiento facial, en treinta y dos imágenes."),
+    ("At zero point three, all thirty-two were still the same person. At zero point seven, the faces start turning into SFT's faces.",
+     "A cero coma tres, las treinta y dos seguían siendo la misma persona. A cero coma siete, las caras empiezan a convertirse en las de SFT.",
+     "At zero point three, all thirty-two were still the same person. At zero point seven, the faces start turning into S F T's faces."),
+    ("So we use zero point three: SFT's finish, Base's person.",
+     "Así que usamos cero coma tres: el acabado de SFT, la persona de Base.",
+     "So we use zero point three: S F T's finish, Base's person."),
+    ("To finish, a MOSS Image Saver: it keeps the prompt, the settings and the workflow inside the PNG.",
+     "Para terminar, un MOSS Image Saver: guarda el prompt, los ajustes y el workflow dentro del PNG.",
+     "To finish, a MOSS Image Saver: it keeps the prompt, the settings and the workflow inside the P N G."),
+    ("And Suite Telemetry, which reads every node and writes a report. We'll read it after the run.",
+     "Y Suite Telemetry, que lee todos los nodos y escribe un informe. Lo leeremos después del Run."),
+    ("Second group: \"SFT redraws at 0.3\". The workflow is ready. Let's run it.",
+     "Segundo grupo: \"SFT redraws at 0.3\". El workflow está listo. Vamos a ejecutarlo.",
+     "Second group: S F T redraws at zero point three. The workflow is ready. Let's run it."),
+    ("The first run loads both models, so it takes a little longer. After that, both stages together take about six seconds an image.",
+     "El primer Run carga los dos modelos, así que tarda algo más. Después, las dos etapas juntas tardan unos seis segundos por imagen."),
+    ("On the left, Base alone. On the right, after SFT. The same man, the same cap, the same light.",
+     "A la izquierda, Base solo. A la derecha, después de SFT. El mismo hombre, el mismo gorro, la misma luz.",
+     "On the left, Base alone. On the right, after S F T. The same man, the same cap, the same light."),
+    ("Let's look closer, at one hundred percent. Base's skin is smooth. After SFT, you get the pores, the wrinkles around the eyes, the loose hairs in the moustache, the fabric of the cap.",
+     "Acerquémonos, al cien por cien. La piel de Base es lisa. Después de SFT tienes los poros, las arrugas alrededor de los ojos, los pelos sueltos del bigote, la tela de la gorra.",
+     "Let's look closer, at one hundred percent. Base's skin is smooth. After S F T, you get the pores, the wrinkles around the eyes, the loose hairs in the moustache, the fabric of the cap."),
+    ("And the Telemetry report? It lists both stages. Its note on the turbo at denoise zero point three only says the turbo was first measured at other values; this one is measured now, in the results file.",
+     "¿Y el informe de Telemetry? Lista las dos etapas. Su nota sobre el turbo a denoise cero coma tres solo dice que el turbo se midió primero con otros valores; este ya está medido, en el archivo de resultados."),
+    ("Now a question you might have: if zero point three is good, isn't more even better? Let's try zero point seven.",
+     "Ahora una pregunta que quizá tengas: si cero coma tres está bien, ¿más no será mejor? Probemos cero coma siete."),
+    ("Notice it only took about three seconds: ComfyUI remembers stage one, so only stage two runs again.",
+     "Fíjate en que solo ha tardado unos tres segundos: ComfyUI recuerda la etapa uno, así que solo se vuelve a ejecutar la etapa dos."),
+    ("Same pose, same clothes, same light. But look at the face: it's wider, the nose is different, the skin is darker. It's turning into another man.",
+     "Misma pose, misma ropa, misma luz. Pero mira la cara: es más ancha, la nariz es distinta, la piel más oscura. Se está convirtiendo en otro hombre."),
+    ("The face-recognition score against Base's man drops from zero point eight eight at zero point three, to zero point six eight here.",
+     "La puntuación de reconocimiento facial frente al hombre de Base baja de cero coma ochenta y ocho a 0,3, a cero coma sesenta y ocho aquí."),
+    ("That's the trade: the higher the denoise, the more SFT you get, and the less of Base's person you keep. Raise it for more of SFT, lower it to keep more of Base.",
+     "Ese es el intercambio: cuanto más alto el denoise, más SFT tienes y menos conservas de la persona de Base. Súbelo para más SFT, bájalo para conservar más de Base.",
+     "That's the trade: the higher the denoise, the more S F T you get, and the less of Base's person you keep. Raise it for more of S F T, lower it to keep more of Base."),
+    ("Let's recap. One: Base composes the picture and chooses the person; SFT redraws it and adds the finish.",
+     "Repasemos. Uno: Base compone la imagen y elige la persona; SFT la redibuja y pone el acabado.",
+     "Let's recap. One: Base composes the picture and chooses the person; S F T redraws it and adds the finish."),
+    ("Two: each model with its own turbo, and the text encoder loaded only once.",
+     "Dos: cada modelo con su propio turbo, y el text encoder cargado una sola vez."),
+    ("Three: denoise zero point three in exact mode keeps the person; measure before you raise it.",
+     "Tres: denoise cero coma tres en modo exact conserva a la persona; mide antes de subirlo."),
+    ("And one tip: if you want a specific kind of person, name it in the prompt. That's still the most reliable way.",
+     "Y un consejo: si quieres un tipo de persona concreto, nómbralo en el prompt. Sigue siendo la forma más fiable."),
+    ("You can download this workflow for free from GitHub. The link is in the description.",
+     "Puedes descargar este workflow gratis desde GitHub. El enlace está en la descripción."),
+    ("If you've made it to the end and enjoyed the video, and you'd like to see more content like this, leave a like and subscribe. It's free!",
+     "Si has llegado hasta el final del vídeo, te ha gustado y quieres ver más contenido de este tipo, dale un buen like y suscríbete. ¡Es gratis!"),
+    ("Thanks for watching, and see you in the next one.",
+     "Gracias por verlo, y nos vemos en el próximo."),
+]
+
+
+def ts_view(name):
+    return f"/view?filename={name}&subfolder={TS_SHOTS}&type=output"
+
+
+def ts_crops_html(urls, labels, top=40):
+    """512 x 512 face crops at 100 % (512 image px = 512 video px), side by side, a label over each."""
+    side = 512 * 1920 / W
+    x, y = TS_CROP
+    cells = "".join(f'<div style="text-align:center"><div style="color:#fff;font:600 26px Segoe UI,sans-serif;margin-bottom:12px">{t}</div>'
+                    f'<div style="width:{side}px;height:{side}px;overflow:hidden;border-radius:6px;position:relative">'
+                    f'<img src="{u}" style="position:absolute;max-width:none;width:{1024 * side / 512}px;height:{1024 * side / 512}px;'
+                    f'left:{-x * side / 512}px;top:{-y * side / 512}px"></div></div>' for u, t in zip(urls, labels))
+    return f'<div style="display:flex;gap:30px;margin-top:{top}px">{cells}</div>'
+
+
+def ts_pair_html(urls, labels, height=760):
+    """Two full images side by side, a label under each."""
+    cells = "".join(f'<div style="text-align:center"><img src="{u}" style="height:{height}px;border-radius:6px">'
+                    f'<div style="color:#fff;font:700 30px Segoe UI,sans-serif;margin-top:14px">{t}</div></div>' for u, t in zip(urls, labels))
+    return f'<div style="display:flex;gap:40px;margin-top:40px">{cells}</div>'
+
+
+def ts_models_card(es, step):
+    """Step 0: Base and SFT; 1: what each gives, with the café counts; 2: the plan, Base then SFT."""
+    col = lambda name, colour, rows: (f'<div style="width:560px;border-radius:18px;background:#1d1d24;padding:30px 34px;text-align:left">'
+                                      f'<div style="font:800 56px Segoe UI,sans-serif;color:{colour};margin-bottom:18px">{name}</div>'
+                                      + "".join(f'<div style="font:600 32px Segoe UI,sans-serif;color:#e6e6ea;margin:14px 0">{r}</div>' for r in rows) + '</div>')
+    if step < 2:
+        base = ([("más variedad de personas" if es else "more variety in the people"), ("caras más lisas" if es else "softer faces"),
+                 ("café: ~4 / 16 asiáticas" if es else "café: ~4 / 16 East Asian")] if step else [])
+        sft = ([("textura de piel, poros, arrugas" if es else "skin texture, pores, wrinkles"), ("repite el mismo tipo de cara" if es else "repeats the same kind of face"),
+                ("café: ~14 / 16 asiáticas" if es else "café: ~14 / 16 East Asian")] if step else [("Base, entrenado un poco más" if es else "Base, trained further")])
+        return (f'<div style="display:flex;gap:60px;justify-content:center;margin-top:200px;color:#fff">'
+                f'{col("Base", "#7fbf7f", base)}{col("SFT", "#7fa6e6", sft)}</div>')
+    box = lambda t, sub, c: (f'<div style="width:420px;border-radius:16px;background:{c};padding:30px;text-align:center">'
+                             f'<div style="font:800 50px Segoe UI,sans-serif">{t}</div><div style="font:600 30px Segoe UI,sans-serif;margin-top:12px;color:#e6e6ea">{sub}</div></div>')
+    return (f'<div style="display:flex;gap:40px;align-items:center;justify-content:center;margin-top:260px;color:#fff">'
+            f'{box("1 · Base", "la imagen y la persona" if es else "the picture and the person", "#2f4a2f")}'
+            f'<div style="font:800 70px Segoe UI,sans-serif;color:#ffcc33">→</div>'
+            f'{box("2 · SFT", "el acabado" if es else "the finish", "#2e4a7a")}</div>')
+
+
+def ts_identity_html(es, mark=None):
+    """The measured identity table (ArcFace against Base's face, 16 seeds x 2 prompts); mark: the row to frame."""
+    rows = [("0.3", "0.80", "0.90", "32 / 32"), ("0.5", "0.66", "0.85", "29 / 32"), ("0.7", "0.51", "0.73", "19 / 32")]
+    head = (("denoise", "café", "retrato" if es else "portrait", "≥ 0.6"))
+    cell = lambda t, w, c="#e6e6ea", b=600: f'<div style="width:{w}px;font:{b} 36px Segoe UI,sans-serif;color:{c};text-align:center">{t}</div>'
+    body = "".join(f'<div style="display:flex;padding:16px 0;border-radius:10px;{"background:#3a3214;" if r[0] == mark else ""}">'
+                   + cell(r[0], 220, "#ffcc33", 800) + cell(r[1], 260) + cell(r[2], 260) + cell(r[3], 260) + "</div>" for r in rows)
+    title = ("Misma persona que en Base (reconocimiento facial, 2 prompts × 16 semillas)" if es else
+             "Same person as Base's (face recognition, 2 prompts × 16 seeds)")
+    return (f'<div style="margin-top:200px;color:#fff;text-align:center"><div style="font:600 32px Segoe UI,sans-serif;color:#c9c9d1;margin-bottom:26px">{title}</div>'
+            f'<div style="display:inline-block;background:#15151b;border-radius:14px;padding:20px 30px">'
+            f'<div style="display:flex;padding-bottom:10px;border-bottom:2px solid #333">{"".join(cell(h, w, "#c9c9d1", 700) for h, w in zip(head, (220, 260, 260, 260)))}</div>'
+            f'{body}</div></div>')
+
+
+def ts_report_html(report, es):
+    """The take's Telemetry report: the nodes it read and its one note."""
+    import re as _re
+    nodes = _re.search(r"Nodes read: ([^\n]*)", report)
+    note = _re.search(r"\*\*NOTE\*\* ([^\n]*)", report)
+    esc = lambda t: t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return (f'<div style="margin-top:220px;width:1600px;text-align:left;background:#15151b;border-radius:12px;padding:34px 44px;color:#e6e6ea">'
+            f'<div style="font:700 34px Segoe UI,sans-serif;color:#ffcc33;margin-bottom:18px">HaDeS MOSS Suite Telemetry</div>'
+            f'<div style="font:500 30px Consolas,monospace;line-height:1.5">Nodes read: {esc(nodes.group(1) if nodes else "")}</div>'
+            f'<div style="font:500 30px Consolas,monospace;line-height:1.5;margin-top:18px;color:#ffcc33">NOTE {esc(note.group(1) if note else "")}</div></div>')
+
+
+async def ts_group(d, title, bounding, color):
+    """A group drawn around the stage, like the example's."""
+    await d.js("""([t, b, c]) => { const g = new window.LGraphGroup(t); g.pos = [b[0], b[1]]; g.size = [b[2], b[3]]; g.color = c; g.font_size = 24;
+        const a = window.__hv.app(); a.graph.add(g); a.graph.setDirtyCanvas(true, true); }""", [title, bounding, color])
+
+
+async def ts_outputs(d, ids):
+    """The last run: stage 1's preview url, the saved image's url, Telemetry's report."""
+    run = next(iter((await d.js("() => fetch('/history?max_items=1').then(r => r.json())")).values()))
+    out = run["outputs"]
+    view = lambda im: f"/view?filename={im['filename']}&subfolder={im['subfolder']}&type={im['type']}"
+    return view(out[str(ids["stage1"])]["images"][0]), view(out[str(ids["save"])]["images"][0]), out[str(ids["report"])]["text"][0]
+
+
+def ts_check(page_url, url, measured):
+    """The take's image against the measured one (MAE at 512, 0-255): the take stops if it is another picture."""
+    import io
+    import urllib.parse
+    import urllib.request
+    from PIL import Image
+    import numpy as np
+    base = urllib.parse.urlsplit(page_url)
+    got = Image.open(io.BytesIO(urllib.request.urlopen(f"{base.scheme}://{base.netloc}{url}").read())).convert("RGB").resize((512, 512))
+    ref = Image.open(Path(r"I:/HaDeS_MOSS/videos/advanced/adv_two_stage/measure") / measured).convert("RGB").resize((512, 512))
+    mae = float(np.abs(np.asarray(got, dtype=np.float32) - np.asarray(ref, dtype=np.float32)).mean())
+    print(f"take vs {measured}: MAE {mae:.2f}", flush=True)
+    if mae > 2.0:
+        raise SystemExit(f"the take's image is not the measured {measured} (MAE {mae:.2f})")
+
+
+async def ts_prepare(page):
+    """Off camera: the finished example once with another seed (1001), so both models and both LoRAs are loaded."""
+    import copy
+    import urllib.parse
+    import make_examples as mx
+    base = urllib.parse.urlsplit(page.url)
+    info = mx.fetch(f"{base.scheme}://{base.netloc}", "/object_info")
+    g = {k: v for k, v in copy.deepcopy(mx.EXAMPLES["HaDeS MOSS Suite - Two Stages, Two Models"]).items() if k != "note"}
+    g["latent"][1]["seed"] = TS_SEED + 1
+    g["save"][1]["filename_prefix"] = "MOSS/warmup_two_stage"
+    local = {mx.BASE: "mossImage_base_bf16.safetensors", mx.SFT: "mossImage_sft_bf16.safetensors",
+             mx.TURBO_V10: TS_LORA_BASE, mx.TURBO_8STEPS: TS_LORA_SFT}
+    print("warm-up run:", await page.evaluate(UP_WARM_JS, mx.to_api(g, info, local)), flush=True)
+
+
+async def two_stage(d: Director):
+    """Advanced workflow #3 as a lesson: why two models, stage 1 (Base) and stage 2 (SFT over Base's latent) built node by node,
+    denoise explained with the measured identity table, a run with crops, denoise 0.7 on camera, a recap."""
+    P = TS_POS
+    es = d.language == "es"
+    say_after = d._after_voice
+    await d.camera({"box": [-60, -80, 1400, 1000]}, 10, pad=60, top=60)
+    await d.move(W * 0.97, H * 0.55, 10)
+    lab = (("Base sola", "+ SFT a 0,3", "+ SFT a 0,7") if es else ("Base alone", "+ SFT at 0.3", "+ SFT at 0.7"))
+
+    # 1. what we'll learn
+    await d.js("(h) => window.__hv.show(h, 10)",
+               ts_crops_html([ts_view("d03_stage1_00001_.png"), ts_view("d03_00001_.png")], lab[:2], top=60) +
+               '<div style="position:fixed;left:0;right:0;bottom:90px;text-align:center;color:#fff">'
+               '<div style="font:900 72px Segoe UI Black,sans-serif">HaDeS MOSS Suite</div>'
+               f'<div style="font:600 36px Segoe UI,sans-serif;color:#ffcc33;margin-top:14px">{"Workflow avanzado n.º 3" if es else "Advanced workflow #3"}'
+               ' · Two Stages, Two Models</div></div>')
+    await d.hold(0.8)
+    for i in range(4):
+        await d.say(i)
+
+    # 2. why two models
+    await say_after(0.25)
+    await d.js("(h) => window.__hv.show(h)", ts_models_card(es, 0))
+    await d.say(4)
+    await d.say(5)
+    await say_after(0.25)
+    await d.js("(h) => window.__hv.show(h)", ts_models_card(es, 1))
+    await d.say(6)
+    await d.say(7)
+    await d.say(8)
+    await say_after(0.25)
+    await d.js("(h) => window.__hv.show(h)", ts_models_card(es, 2))
+    await d.say(9)
+    await say_after(1.0)
+    await d.js("() => window.__hv.hide()")
+
+    # 3. stage 1: Base, the prompt, the latent
+    load = await ap_add(d, "HaDeSMossLoader", "MOSS Loader", P["load"])
+    await up_set(d, load, BASIC_LOADER)
+    await d.camera([load], 900, pad=140, top=60)
+    await d.say(10)
+    await say_after(0.25)
+    await basic_point(d, load, "unet_name")
+    await d.say(11)
+    await d.hold(1.6)
+    await basic_point(d, load, "clip_name")
+    await d.hold(1.4)
+    await basic_point(d, load, "vae_name")
+    await say_after(0.25)
+    await d.camera({"box": [-60, -80, 1000, 900]}, 1000, pad=60, top=60)
+    enh = await ap_add(d, "HaDeSMossPromptEnhancer", "MOSS Prompt Enhancer", P["enh"])
+    await up_set(d, enh, {"mode": "as written", "width": 1024, "height": 1024, "seed": 1, "negative": ""})
+    await d.say(12)
+    async with d.fast(2.0):
+        await basic_link(d, load, "CLIP", enh, "clip", 700)
+        await pe_type(d, enh, "idea", TS_PROMPT, paste=True)
+    await say_after(0.25)
+    await ml_zoom(d, enh, ["mode"])
+    await basic_point(d, enh, "mode")
+    await d.say(13)
+    await say_after(0.25)
+    await d.camera({"box": [880, -80, 1400, 900]}, 1000, pad=60, top=60)
+    latent = await ap_add(d, "HaDeSMossLatent", "MOSS Latent", P["latent"])
+    await up_set(d, latent, {"aspect_ratio": "1:1", "megapixels": 1.0, "seed": TS_SEED, "control_after_generate": "fixed"})
+    await ml_zoom(d, latent, ["seed"])
+    await basic_point(d, latent, "seed")
+    await d.say(14)
+
+    # 4. stage 1: the sampler and its turbo
+    await say_after(0.25)
+    await d.camera({"box": [-60, -80, 1850, 1000]}, 1000, pad=60, top=60)
+    ks = await ap_add(d, "HaDeSMossKSampler", "MOSS KSampler", P["ks"])
+    await up_set(d, ks, {"denoise": 1.0, "denoise_mode": "steps / denoise (core)"})
+    await d.say(15)
+    async with d.fast(3.0):
+        for a, out, inp in ((load, "MODEL", "model"), (enh, "positive", "positive"), (enh, "negative", "negative"),
+                            (latent, "latent", "latent_image"), (latent, "seed", "seed"), (load, "VAE", "vae")):
+            await basic_link(d, a, out, ks, inp, 600)
+    await say_after(0.25)
+    t1 = await ap_add(d, "HaDeSMossTurbo", "MOSS Turbo", P["t1"])
+    await up_set(d, t1, {"lora_name": TS_LORA_BASE, "strength": 1.0, "steps": 8, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple"})
+    async with d.fast(1.6):
+        await basic_link(d, t1, "turbo", ks, "turbo", 700)
+    await ml_zoom(d, t1, ["lora_name"])
+    await basic_point(d, t1, "lora_name")
+    await d.say(16)
+    await say_after(0.25)
+    await ml_zoom(d, t1, ["steps", "cfg"])
+    await basic_point(d, t1, "steps")
+    await d.say(17)
+    await d.hold(1.2)
+    await basic_point(d, t1, "cfg")
+    await say_after(0.25)
+    await d.camera({"box": [-60, -80, 1850, 1000]}, 900, pad=60, top=60)
+    prev = await ap_add(d, "PreviewImage", "Preview Image", P["stage1"])
+    async with d.fast(1.6):
+        await basic_link(d, ks, "image", prev, "images", 700)
+    await d.say(18)
+    await say_after(0.25)
+    await ts_group(d, "1. Base composes", [-30, -80, 1840, 960], "#335533")
+    await d.say(19)
+
+    # 5. stage 2: SFT
+    await say_after(0.5)
+    await d.camera({"box": [-60, -80, 1000, 900]}, 900, pad=60, top=60)
+    await d.say(20)
+    sft = await ap_add(d, "UNETLoader", "Load Diffusion Model", P["sft"])
+    await up_set(d, sft, {"unet_name": "mossImage_sft_bf16.safetensors", "weight_dtype": "default"})
+    await say_after(0.25)
+    await d.camera([sft], 900, pad=140, top=60)
+    await basic_point(d, sft, "unet_name")
+    await d.say(21)
+
+    # 6. stage 2: the second sampler and denoise
+    await say_after(0.25)
+    await d.camera({"box": [-60, -120, 2750, 1050]}, 1000, pad=60, top=60)
+    ks2 = await ap_add(d, "HaDeSMossKSampler", "MOSS KSampler", P["ks2"])
+    await up_set(d, ks2, {"denoise": 1.0, "denoise_mode": "steps / denoise (core)"})
+    await d.say(22)
+    async with d.fast(3.0):
+        for a, out, inp in ((sft, "MODEL", "model"), (enh, "positive", "positive"), (enh, "negative", "negative"),
+                            (latent, "seed", "seed"), (load, "VAE", "vae")):
+            await basic_link(d, a, out, ks2, inp, 600)
+    await say_after(0.25)
+    await d.camera({"box": [1350, -80, 2750, 700]}, 900, pad=60, top=60)
+    await d.say(23)
+    await basic_link(d, ks, "latent", ks2, "latent_image", 1800)
+    await say_after(0.25)
+    await d.camera({"box": [1350, -80, 2750, 1050]}, 900, pad=60, top=60)
+    t2 = await ap_add(d, "HaDeSMossTurbo", "MOSS Turbo", P["t2"])
+    await up_set(d, t2, {"lora_name": TS_LORA_SFT, "strength": 1.0, "steps": 8, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple"})
+    async with d.fast(1.6):
+        await basic_link(d, t2, "turbo", ks2, "turbo", 700)
+    await ml_zoom(d, t2, ["lora_name"])
+    await basic_point(d, t2, "lora_name")
+    await d.say(24)
+    await say_after(0.25)
+    await ml_zoom(d, ks2, ["denoise"])
+    await basic_point(d, ks2, "denoise")
+    await d.say(25)
+    await d.say(26)
+    await d.say(27)
+    await say_after(1.0)
+    await ml_zoom(d, ks2, ["denoise_mode"])
+    await basic_point(d, ks2, "denoise_mode")
+    await d.hold(0.4)
+    await up_set(d, ks2, {"denoise_mode": "exact"})
+    await d.say(28)
+    await say_after(0.25)
+    await d.js("(h) => window.__hv.show(h)", ts_identity_html(es))
+    await d.say(29)
+    await say_after(0.25)
+    await d.js("(h) => window.__hv.show(h)", ts_identity_html(es, mark="0.3"))
+    await d.say(30)
+    await say_after(0.25)
+    await d.js("() => window.__hv.hide()")
+    await ml_zoom(d, ks2, ["denoise"])
+    await basic_point(d, ks2, "denoise")
+    await d.hold(0.4)
+    await up_set(d, ks2, {"denoise": 0.3})
+    await d.say(31)
+    await say_after(1.0)
+
+    # 7. save and check
+    await d.camera({"box": [2200, -80, 3640, 1050]}, 1000, pad=60, top=60)
+    save = await ap_add(d, "HaDeSMossImageSaver", "MOSS Image Saver", P["save"])
+    await up_set(d, save, {"filename_prefix": "MOSS/HaDeS_MOSS_two_stage_%seed%"})
+    async with d.fast(1.6):
+        await basic_link(d, ks2, "image", save, "images", 700)
+    await d.say(32)
+    await say_after(0.25)
+    tel = await ap_add(d, "HaDeSMossSuiteTelemetry", "MOSS Suite Telemetry", P["tel"])
+    await d.say(33)
+    async with d.fast(4.0):
+        await d.camera({"box": TS_BOX}, 600, pad=60, top=60)
+        for i, a in enumerate((load, enh, latent, t1, ks, t2, ks2), 1):
+            await basic_link(d, a, "info", tel, f"info_{i}", 600)
+        await d.camera({"box": [2200, -80, 3640, 1050]}, 600, pad=60, top=60)
+        await basic_link(d, tel, "json", save, "metadata", 600)
+        rep = await ap_add(d, "PreviewAny", "Preview Any", P["report"])
+        await basic_link(d, tel, "report", rep, "source", 600)
+    await say_after(0.25)
+    await d.camera({"box": TS_BOX}, 1000, pad=60, top=60)
+    await ts_group(d, "2. SFT redraws at 0.3", [-30, -120, 3640, 1090], "#334466")
+    await d.say(34)
+    await say_after(0.25)
+
+    # 8. the run
+    ids = {"stage1": prev, "save": save, "report": rep}
+    final, secs = await basic_run(d, save)
+    stage1, final, report = await ts_outputs(d, ids)
+    ts_check(d.page.url, final, "full_d03.png")
+    await d.move(W * 0.97, H * 0.55)
+    await d.js("(h) => window.__hv.show(h)", ap_card([f'{secs:.1f} s · RTX 5090', ("2 etapas · 8 + 8 pasos" if es else "2 stages · 8 + 8 steps")], top=360))
+    await d.say(35)
+    await say_after(0.25)
+    await d.js("(h) => window.__hv.show(h)", ts_pair_html([stage1, final], lab[:2]))
+    await d.say(36)
+    await say_after(1.5)
+    await d.js("(h) => window.__hv.show(h)", ts_crops_html([stage1, final], lab[:2], top=120))
+    await d.say(37)
+    await say_after(1.0)
+    await d.js("(h) => window.__hv.show(h)", ts_report_html(report, es))
+    await d.say(38)
+    await say_after(0.5)
+    await d.js("() => window.__hv.hide()")
+
+    # 9. what if I raise denoise?
+    await ml_zoom(d, ks2, ["denoise"])
+    await basic_point(d, ks2, "denoise")
+    await d.say(39)
+    await d.hold(1.0)
+    await up_set(d, ks2, {"denoise": 0.7})
+    await say_after(0.25)
+    await d.camera({"box": TS_BOX}, 900, pad=60, top=60)
+    _, secs7 = await basic_run(d, save)
+    _, final7, _ = await ts_outputs(d, ids)
+    ts_check(d.page.url, final7, "full_d07.png")
+    if secs7 > 5.0:
+        raise SystemExit(f"the 0.7 run took {secs7:.1f} s: stage 1 was not cached, line 41 would be wrong")
+    await d.move(W * 0.97, H * 0.55)
+    await d.js("(h) => window.__hv.show(h)", ap_card([f'{secs7:.1f} s', ("solo la etapa 2" if es else "stage 2 only")], top=360))
+    await d.say(40)
+    await say_after(0.25)
+    await d.js("(h) => window.__hv.show(h)", ts_crops_html([stage1, final, final7], lab, top=120))
+    await d.say(41)
+    await say_after(0.25)
+    await d.js("(h) => window.__hv.show(h)", ts_crops_html([stage1, final, final7], lab, top=120) +
+               '<div style="position:fixed;left:0;right:0;bottom:120px;text-align:center;font:700 40px Segoe UI,sans-serif;color:#ffcc33">'
+               f'{"Reconocimiento facial frente a Base" if es else "Face recognition against Base"}: 0.88 → 0.68</div>')
+    await d.say(42)
+    await say_after(0.25)
+    await d.js("() => window.__hv.hide()")
+    await ml_zoom(d, ks2, ["denoise"])
+    await basic_point(d, ks2, "denoise")
+    await d.say(43)
+    await d.hold(1.5)
+    await up_set(d, ks2, {"denoise": 0.3})
+    await say_after(1.0)
+
+    # 10. recap and closing
+    recap = (["1 · Base compone, SFT termina", "2 · cada modelo con su turbo", "3 · denoise 0,3 en exact"] if es else
+             ["1 · Base composes, SFT finishes", "2 · each model with its own turbo", "3 · denoise 0.3, exact"])
+    await d.js("(h) => window.__hv.show(h)", ap_card(recap[:1]))
+    await d.say(44)
+    await say_after(0.25)
+    await d.js("(h) => window.__hv.show(h)", ap_card(recap[:2]))
+    await d.say(45)
+    await say_after(0.25)
+    await d.js("(h) => window.__hv.show(h)", ap_card(recap))
+    await d.say(46)
+    await say_after(0.25)
+    await d.js("(h) => window.__hv.show(h)", ap_card(recap + [("Consejo: nombra en el prompt a quien quieres" if es else "Tip: name who you want in the prompt")]))
+    await d.say(47)
+    await say_after(0.25)
+    await d.js("() => window.__hv.hide()")
+    await d.camera({"box": TS_BOX}, 1200, pad=60, top=60)
+    await d.js("(h) => window.__hv.show(h)",
+               '<div style="color:#fff;text-align:center;max-width:1300px;margin-top:300px">'
+               f'<div style="font:600 30px Segoe UI,sans-serif;color:#c9c9d1">{"Descarga gratis (enlace en la descripción)" if es else "Free download (link in the description)"}</div>'
+               '<div style="font:700 44px Segoe UI,sans-serif;margin-top:22px">examples/advanced/HaDeS MOSS Suite - Two Stages, Two Models.json</div></div>')
+    await d.say(48)
+    await say_after(0.25)
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }",
+               ts_crops_html([stage1, final], lab[:2], top=60) +
+               '<div style="position:fixed;left:0;right:0;bottom:90px;text-align:center;color:#fff">'
+               '<div style="font:900 72px Segoe UI Black,sans-serif">HaDeS MOSS Suite</div>'
+               f'<div style="font:400 28px Segoe UI,sans-serif;color:#c9c9d1;margin-top:18px">{"Workflow, Suite y modelos: enlaces en la descripción" if es else "Workflow, Suite and models: links in the description"}</div></div>')
+    await d.say(49)
+    await d.say(50)
+    await d.end(1.5)
+
+
+two_stage.prepare = ts_prepare
+
+
 SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "layout_test": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_test, LAYOUT_TEST_LINES),
           "layout_sentence": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_sentence, LAYOUT_SENTENCE_LINES),
@@ -6147,7 +6683,8 @@ SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "img2img": (None, img2img_video, I2I_LINES),
           "hms_v1": (None, hms_v1_video, HMS_LINES),
           "adv_poster": (AP_FILE, adv_poster, AP_LINES),
-          "adv_merge_lab": (ML_FILE, merge_lab, ML_LINES)}
+          "adv_merge_lab": (ML_FILE, merge_lab, ML_LINES),
+          "adv_two_stage": (TS_FILE, two_stage, TS_LINES)}
 
 # spoken forms where the written caption reads badly aloud
 SPOKEN = {"DRAFT LAYOUT": "Draft layout"}
