@@ -731,7 +731,7 @@ Mean absolute pixel difference (0–255) over the 9 images, mean / worst image:
 - Against PyTorch SDPA it changes details, not the image: in the worst pair (a café collage) the same layout, person and scene, with
   a different head turn, cup and chairs (layout distance 3.0 at 1024, against ~20 between two seeds). The change is about 3/4 of what
   int8 quantization does. A seed shared between machines with different attention backends will not reproduce exactly.
-- int8 is slower than bf16 on this GPU: +57% at 1024 and +49% at 2048 with SageAttention. With the same int8 weights, comfy-kitchen
+- (October 2026, superseded: on 2026-11-27 Comfy-Org's int8 file rendered 2.2-2.5x faster than BF16 on this GPU, see "HMS v1 against int8 ConvRot") int8 is slower than bf16 on this GPU: +57% at 1024 and +49% at 2048 with SageAttention. With the same int8 weights, comfy-kitchen
   int8 attention runs at SageAttention's speed (+2%), so the cost is in the int8 layers, not the attention. int8 saves VRAM (5162 MB
   staged against 9693 MB for bf16); on a GPU where bf16 does not fit, the trade-off was not measured.
 - Community int8 files checked here (`pornmasterMoss_sftV1`, `realismByStableYogi_v15INT8_MOSS`) carry no attention setting and use the
@@ -3193,6 +3193,35 @@ Clean ComfyUI on port 8189 (`--use-sage-attention`, RTX 5090), `qwen3.5_9b_int8_
 - **Single-model sampling times** (warm runs, seeds 1013 / 1014): `BF16` **13.83 s / 13.83 s**; `HMS v1` **6.22 s / 6.24 s** (**2.22× faster**).
 - **Fisherman similarity** (`MAE / 255` at 512 x 512 between BF16 and HMS v1): **9.0** (seed 1013) and **8.0** (seed 1014).
 - **Compare Sampler sheets** (both models in one node, seed 1013): fisherman `21.00 s`; harbor sign (`"HARBOR COFFEE"` / `"OPEN DAILY"`) `21.64 s`, every word spelled right in both `BF16` and `HMS v1`.
+
+## HMS v1 against int8 ConvRot and BF16 (Base, 2026-11-27)
+
+A Civitai comment measured Comfy-Org's int8 file faster than HMS v1 (RTX 5090 without Sage: BF16 15.04 s, int8 5.80 s, HMS 7.34 s;
+RTX 5060 laptop 8 GB: 83.35 / 28.16 / 36.29 s) and pointed at the October line above. Measured here with the commenter's settings:
+1024 x 1024, 25 steps, CFG 2.5, `er_sde / simple`, no SLG, `qwen3.5_9b_int8_convrot`, `flux2-vae`, seed 1001, the ten quality prompts
+of the Turbo v2.0 evaluation, one warm-up render per model. Files: `mossImage_base_bf16` (10.2 GB), Comfy-Org's
+`moss_image_base_int8_convrot` (5.41 GB, SHA256 `f601c1e1...8e6f`, matching the Hugging Face listing), `MOSS-Image_Base_HMS_v1`
+(3.96 GB). Clean ComfyUI instances; scripts, logs and sheets in `I:/HaDeS_MOSS/hms_vs_int8`.
+
+| Warm median, 10 prompts | SageAttention | PyTorch attention (no Sage) |
+|---|---|---|
+| BF16 | 14.04 s | 15.16 s |
+| int8 ConvRot | 6.50 s | 6.17 s |
+| HMS v1 | 6.65 s | 7.74 s |
+| int8 against HMS | 1.02x faster | 1.25x faster |
+
+- The commenter's ratio reproduces without Sage (1.25x here, 1.27x theirs). With SageAttention, HMS gains (7.74 -> 6.65 s) and int8
+  does not (6.17 -> 6.50 s), so the two are within 2 %. Every HMS timing in this file before today was taken with SageAttention.
+- **Against BF16** (same prompt and seed, median of 10): int8 MAE at 512 px 7.1 (Sage) / 6.2 (PyTorch), L1@64 2.41 / 2.19 %;
+  HMS v1 13.9 / 15.5, L1@64 5.04 / 5.48 %. int8 stays about twice as close to BF16 as HMS v1.
+- **Peak VRAM** (nvidia-smi memory.used minus the idle baseline, polled every 100 ms, one clean server per file, a first render then
+  three new prompts, PyTorch attention): whole card BF16 19.1 GB, int8 14.3 GB, HMS v1 13.0 GB (the text encoder stays loaded with the
+  model). With about 8 GB left to ComfyUI (`--reserve-vram 24`, an emulation, not a real 8 GB card) all three ran, ComfyUI moving
+  weights between RAM and VRAM: peaks 8.5 / 9.1 / 8.8 GB, new prompt 16.17 / 7.56 / 8.98 s.
+- What HMS v1 gives over int8, measured: 1.45 GB less on disk (-27 %) and 1.3 GB less peak VRAM on the whole card. What it costs:
+  about twice int8's distance from BF16, and about 25 % more time without SageAttention (on the emulated 8 GB card 1.19x; the
+  commenter's real 8 GB laptop 1.29x).
+- Not measured: a real 8-12 GB card here, the SFT files, text accuracy of int8 (HMS v1 was checked against BF16 only).
 
 ## Turbo v2.0 (Base, 2048 prompts and 2048 regression pairs, 2026-11-25)
 
