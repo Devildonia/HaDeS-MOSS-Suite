@@ -7,6 +7,8 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-28
+
 ### Added
 - **MOSS Text Check `strict`** (advanced, off by default): `passed` then also needs case and punctuation to match, for a check used as a typography acceptance (audit 0.9.9 M8).
 
