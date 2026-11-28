@@ -7202,6 +7202,440 @@ async def lora_surgery(d: Director):
 lora_surgery.prepare = ls_prepare
 
 
+# ---- advanced workflow #5: Fixed Pose (a lesson) ----
+FP_FILE = None  # built on camera (a lesson); the finished example is the download
+FP_SEED = 1013  # the example's seed; measured: the knight equals the example's render (videos/advanced/adv_fixed_pose/MEDIDAS.md)
+FP_MAP = "depth_map.png"  # the fisherman's depth map (plain attention), in the recording input folder
+FP_KNIGHT = ("Oil painting of a medieval knight in weathered steel armor mending a chainmail cloak on a stone castle parapet at sunset, "
+             "warm torches, sea in the background.")
+FP_POTTER = ("Photograph of a woman in her thirties, a potter in a linen apron, shaping clay with both hands at a workbench in a sunlit "
+             "studio, shelves of vases behind her.")
+FP_CTRL = "MOSS\\moss-color-depth-control.safetensors"
+FP_TURBO = "MOSS\\turbo_v10\\HaDeS-MOSS-Turbo-8steps-v1.0.safetensors"
+FP_CROP = (300, 40)  # 512 x 512 on the knight's visor and beard (1024 image)
+FP_POS = {"load": (0, 0), "loras": (0, 380), "depth": (950, 420), "enh": (450, 0), "latent": (950, 0), "ctrl": (1400, 0),
+          "turbo": (1400, 620), "ks": (1850, 0), "stage1": (1850, 600), "ks2": (2300, 0), "stage2": (2300, 600), "upmodel": (2750, 0),
+          "up": (2750, 150), "enc": (2750, 300), "ks3": (3150, 0), "save": (3600, 0), "tel": (3600, 480), "report": (4050, 480)}
+FP_BOX = [-60, -120, 4500, 1100]
+FP_S1 = [-60, -120, 2300, 1100]
+FP_MEASURE = Path(r"I:/HaDeS_MOSS/videos/advanced/adv_fixed_pose/measure")
+
+FP_LINES = [
+    ("Hi, I'm HaDeS, and welcome to advanced workflow number five: fixed pose.",
+     "Hola, soy HaDeS, y bienvenido al workflow avanzado número cinco: pose fija."),
+    ("Today you'll learn how to take the pose from one photo, and give it to any character you want, just by changing the prompt.",
+     "Hoy vas a aprender a sacar la pose de una foto y dársela a cualquier personaje que quieras, solo cambiando el prompt."),
+    ("You'll also see why the image the control gives you is soft, and how a second pass brings the detail back.",
+     "También verás por qué la imagen que da el control sale suave, y cómo una segunda pasada devuelve el detalle."),
+    ("As always, we build it together from an empty canvas, everything is free, and all the links are in the description.",
+     "Como siempre, lo montamos juntos desde el lienzo vacío, todo es gratis y tienes todos los enlaces en la descripción."),
+    ("It all starts with a depth map. This is my fisherman, and this is his depth map: near things are white, far things are dark.",
+     "Todo empieza con un mapa de profundidad. Este es mi pescador, y este es su mapa: lo cercano es blanco y lo lejano, oscuro."),
+    ("The map keeps the shape of the body, the head and the hands. It doesn't keep the colours or the clothes. That's what we'll change.",
+     "El mapa guarda la forma del cuerpo, la cabeza y las manos. No guarda los colores ni la ropa. Eso es lo que vamos a cambiar."),
+    ("One warning before we start. On my install, the Depth Anything preprocessor gave this: a blur, with no outline.",
+     "Un aviso antes de empezar. En mi instalación, el preprocesador Depth Anything me dio esto: un borrón, sin contorno."),
+    ("With a map like that, the control only follows the rough layout. So always look at your map first. It must show the silhouette.",
+     "Con un mapa así, el control solo sigue la composición a grandes rasgos. Así que mira siempre tu mapa primero. Tiene que verse la silueta."),
+    ("Let's build it. The MOSS Loader with Base, the text encoder and the VAE.",
+     "Vamos a montarlo. El MOSS Loader con Base, el text encoder y el VAE.",
+     "Let's build it. The MOSS Loader with Base, the text encoder and the V A E."),
+    ("Then a MOSS Multi-LoRA with the control adapter. It's a LoRA that teaches the model to read a depth map. Keep it at one.",
+     "Después, un MOSS Multi-LoRA con el adaptador de control. Es una LoRA que enseña al modelo a leer un mapa de profundidad. Déjala a uno.",
+     "Then a MOSS Multi Lora with the control adapter. It's a Lora that teaches the model to read a depth map. Keep it at one."),
+    ("A Load Image node with our depth map.",
+     "Un nodo Load Image con nuestro mapa de profundidad."),
+    ("The Prompt Enhancer, as written: an oil painting of a medieval knight mending a chainmail cloak on a castle parapet at sunset.",
+     "El Prompt Enhancer, en modo \"as written\": un óleo de un caballero medieval remendando una capa de cota de malla en una muralla al atardecer."),
+    ("The MOSS Latent: one megapixel, seed one thousand thirteen.",
+     "El MOSS Latent: un megapíxel, semilla mil trece."),
+    ("Now the key node: MOSS Control. It takes the prompt and the map, and adds the map to the conditioning.",
+     "Ahora el nodo clave: MOSS Control. Toma el prompt y el mapa, y añade el mapa al condicionamiento."),
+    ("Color mode off, so it uses the depth only. Strength one, from the first step to the last.",
+     "Color mode en off, así que solo usa la profundidad. Fuerza uno, desde el primer paso hasta el último."),
+    ("The MOSS Turbo with Turbo 8-steps v1.0: eight steps, CFG one.",
+     "El MOSS Turbo con la Turbo 8-steps v1.0: ocho pasos, CFG uno.",
+     "The MOSS Turbo with Turbo eight steps, version one: eight steps, C F G one."),
+    ("And the MOSS KSampler, with the model from the Multi-LoRA and the prompt from the Control. A Preview Image to see stage one.",
+     "Y el MOSS KSampler, con el modelo del Multi-LoRA y el prompt del Control. Un Preview Image para ver la etapa uno.",
+     "And the MOSS K Sampler, with the model from the Multi Lora and the prompt from the Control. A Preview Image to see stage one."),
+    ("That's stage one: the pose from the depth map.",
+     "Esa es la etapa uno: la pose sacada del mapa."),
+    ("Stage two fixes a problem. The adapter's image is soft: smooth skin, blurred metal. So we redraw it without the adapter.",
+     "La etapa dos arregla un problema. La imagen del adaptador sale suave: piel lisa, metal borroso. Así que la redibujamos sin el adaptador."),
+    ("A second MOSS KSampler. Its model comes straight from the Loader, without the adapter. Its prompt comes straight from the Prompt Enhancer, without the control.",
+     "Un segundo MOSS KSampler. Su modelo viene directo del Loader, sin el adaptador. Su prompt viene directo del Prompt Enhancer, sin el control.",
+     "A second MOSS K Sampler. Its model comes straight from the Loader, without the adapter. Its prompt comes straight from the Prompt Enhancer, without the control."),
+    ("And its latent is stage one's picture. Denoise zero point three, in exact mode.",
+     "Y su latent es la imagen de la etapa uno. Denoise cero coma tres, en modo exact."),
+    ("Why zero point three? Zero point four looked the same, and zero point five changed the picture more. Zero point three keeps the most.",
+     "¿Por qué cero coma tres? Cero coma cuatro se veía igual, y cero coma cinco cambiaba más la imagen. Cero coma tres es la que más conserva."),
+    ("Stage three: twice the size. An Upscale Model Loader with RealESRGAN x2, and Upscale Image using Model.",
+     "Etapa tres: el doble de tamaño. Un Upscale Model Loader con RealESRGAN x2, y Upscale Image using Model.",
+     "Stage three: twice the size. An Upscale Model Loader with Real E S R GAN times two, and Upscale Image using Model."),
+    ("A VAE Encode turns it back into a latent, and a third MOSS KSampler cleans it at denoise zero point two five.",
+     "Un VAE Encode lo vuelve a convertir en latent, y un tercer MOSS KSampler lo limpia a denoise cero coma dos cinco.",
+     "A V A E Encode turns it back into a latent, and a third MOSS K Sampler cleans it at denoise zero point two five."),
+    ("To finish, the MOSS Image Saver and Suite Telemetry, so the PNG keeps the prompt, the settings and the workflow.",
+     "Para terminar, el MOSS Image Saver y Suite Telemetry, para que el PNG guarde el prompt, los ajustes y el workflow.",
+     "To finish, the MOSS Image Saver and Suite Telemetry, so the P N G keeps the prompt, the settings and the workflow."),
+    ("Run. The first time it loads the models, so it takes longer.",
+     "Lanzamos. La primera vez carga los modelos, así que tarda más."),
+    ("Here's the fisherman's map, and here's the knight. Same build, same head, same hands mending the net. But a knight, in oil paint.",
+     "Aquí está el mapa del pescador, y aquí el caballero. La misma complexión, la misma cabeza, las mismas manos remendando la red. Pero un caballero, al óleo."),
+    ("How close is the pose? I measured it: I took the depth of each result and compared it with the map. One means the same depth.",
+     "¿Cuánto se parece la pose? Lo medí: saqué la profundidad de cada resultado y la comparé con el mapa. Uno significa la misma profundidad."),
+    ("Without control, zero point six two. With control, zero point nine seven seven. After stage two and the x2, it stays at zero point nine seven six.",
+     "Sin control, cero coma sesenta y dos. Con control, cero coma novecientos setenta y siete. Tras la etapa dos y el x2, se queda en cero coma novecientos setenta y seis."),
+    ("Now stage one against stage two, at one hundred percent. Stage one is soft. Stage two has the chainmail, the beard strands, the rust on the helmet. Same face, same pose.",
+     "Ahora la etapa uno contra la etapa dos, al cien por cien. La uno es suave. La dos tiene la cota de malla, los pelos de la barba, el óxido del casco. La misma cara, la misma pose."),
+    ("Now the best part. The pose stays; only the prompt changes.",
+     "Y ahora lo mejor. La pose se queda; solo cambia el prompt."),
+    ("A potter, a woman in her thirties, shaping clay at her workbench. Run again: the models are loaded now, so it's quicker.",
+     "Una alfarera, una mujer de unos treinta años, dando forma al barro en su mesa de trabajo. Lanzamos otra vez: los modelos ya están cargados, así que va más rápido."),
+    ("The same pose: the head, the shoulders, both hands on the clay.",
+     "La misma pose: la cabeza, los hombros, las dos manos sobre el barro."),
+    ("But look at her face. I asked for a woman in her thirties, and she looks older. The map carries more than the pose: the build, the head, even the age of the fisherman.",
+     "Pero mira su cara. Pedí una mujer de unos treinta, y parece mayor. El mapa lleva más que la pose: la complexión, la cabeza, incluso la edad del pescador."),
+    ("It happened on all four seeds I tested. And the knight got the fisherman's beard under his visor. Choose a map close to the character you want.",
+     "Pasó en las cuatro semillas que probé. Y el caballero sacó la barba del pescador bajo el casco. Elige un mapa parecido al personaje que quieres."),
+    ("Let's recap. One: the depth map holds the pose. Look at it first: it must show the silhouette.",
+     "Repasemos. Uno: el mapa de profundidad guarda la pose. Míralo primero: tiene que verse la silueta."),
+    ("Two: the control adapter and MOSS Control give the pose, at eight steps with the turbo.",
+     "Dos: el adaptador de control y MOSS Control dan la pose, a ocho pasos con la turbo."),
+    ("Three: redraw without the adapter at zero point three, to bring the detail back.",
+     "Tres: redibuja sin el adaptador a cero coma tres, para recuperar el detalle."),
+    ("Four: change only the prompt for a new character, and choose a map that looks like them.",
+     "Cuatro: cambia solo el prompt para un personaje nuevo, y elige un mapa que se le parezca."),
+    ("You can download this workflow for free from GitHub, with the depth map I used. The link is in the description.",
+     "Puedes descargar este workflow gratis desde GitHub, con el mapa de profundidad que usé. El enlace está en la descripción."),
+    ("If this helped you, leave a like and subscribe: it's free and it helps me keep making these. See you in the next one!",
+     "Si te ha servido, deja un like y suscríbete: es gratis y me ayuda a seguir haciendo estos vídeos. ¡Nos vemos en el siguiente!"),
+]
+
+
+def fp_data(path):
+    return "data:image/png;base64," + base64.b64encode(Path(path).read_bytes()).decode()
+
+
+def fp_cols(items, side=520, top=150):
+    cells = "".join(f'<div style="text-align:center"><img src="{u}" style="width:{side}px;height:{side}px;border-radius:6px;object-fit:cover">'
+                    f'<div style="color:#fff;font:700 26px Segoe UI,sans-serif;margin-top:12px">{t}</div></div>' for u, t in items)
+    return f'<div style="display:flex;gap:30px;margin-top:{top}px">{cells}</div>'
+
+
+def fp_crops(urls, labels, top=140):
+    """512 x 512 crops at 100 % on the knight's visor (1024 images)."""
+    side = 512 * 1920 / W
+    x, y = FP_CROP
+    cells = "".join(f'<div style="text-align:center"><div style="color:#fff;font:600 26px Segoe UI,sans-serif;margin-bottom:12px">{t}</div>'
+                    f'<div style="width:{side}px;height:{side}px;overflow:hidden;border-radius:6px;position:relative">'
+                    f'<img src="{u}" style="position:absolute;max-width:none;width:{1024 * side / 512}px;height:{1024 * side / 512}px;'
+                    f'left:{-x * side / 512}px;top:{-y * side / 512}px"></div></div>' for u, t in zip(urls, labels))
+    return f'<div style="display:flex;gap:30px;margin-top:{top}px">{cells}</div>'
+
+
+def fp_pose_html(es, mark=None):
+    rows = [("sin control" if es else "no control", "0.62"), ("con control" if es else "with control", "0.977"),
+            ("+ etapa 2 + x2" if es else "+ stage 2 + x2", "0.976")]
+    cell = lambda t, w, c="#e6e6ea", b=600: f'<div style="width:{w}px;font:{b} 40px Segoe UI,sans-serif;color:{c};text-align:center">{t}</div>'
+    body = "".join(f'<div style="display:flex;padding:16px 0;border-radius:10px;{"background:#3a3214;" if r[1] == mark else ""}">'
+                   + cell(r[0], 440, "#ffcc33", 800) + cell(r[1], 260) + "</div>" for r in rows)
+    title = ("Pose: profundidad del resultado frente al mapa (3 personajes × 4 semillas)" if es else
+             "Pose: the result's depth against the map (3 characters × 4 seeds)")
+    return (f'<div style="margin-top:220px;color:#fff;text-align:center"><div style="font:600 32px Segoe UI,sans-serif;color:#c9c9d1;margin-bottom:26px">{title}</div>'
+            f'<div style="display:inline-block;background:#15151b;border-radius:14px;padding:20px 40px">{body}</div>'
+            f'<div style="font:600 28px Segoe UI,sans-serif;color:#c9c9d1;margin-top:22px">{"1 = la misma profundidad" if es else "1 = the same depth"}</div></div>')
+
+
+async def fp_outputs(d, ids):
+    run = next(iter((await d.js("() => fetch('/history?max_items=1').then(r => r.json())")).values()))
+    out = run["outputs"]
+    view = lambda im: f"/view?filename={im['filename']}&subfolder={im['subfolder']}&type={im['type']}"
+    return {k: view(out[str(v)]["images"][0]) for k, v in ids.items()}
+
+
+def fp_check(page_url, url, measured):
+    import io
+    import urllib.parse
+    import urllib.request
+    from PIL import Image
+    import numpy as np
+    base = urllib.parse.urlsplit(page_url)
+    got = Image.open(io.BytesIO(urllib.request.urlopen(f"{base.scheme}://{base.netloc}{url}").read())).convert("RGB").resize((512, 512))
+    ref = Image.open(FP_MEASURE / measured).convert("RGB").resize((512, 512))
+    mae = float(np.abs(np.asarray(got, dtype=np.float32) - np.asarray(ref, dtype=np.float32)).mean())
+    print(f"take vs {measured}: MAE {mae:.2f}", flush=True)
+    if mae > 2.0:
+        raise SystemExit(f"the take's image is not the measured {measured} (MAE {mae:.2f})")
+
+
+async def fp_prepare(page):
+    for f in ("knight_save.png", "potter_save.png", "knight_stage1.png", "knight_stage2.png"):
+        if not (FP_MEASURE / f).exists():
+            raise SystemExit(f"measured image {f} missing")
+    if not (Path(r"I:/HaDeS_MOSS/videos/comfy_input") / FP_MAP).exists():
+        raise SystemExit("the depth map is missing from the recording input folder")
+
+
+async def fixed_pose(d: Director):
+    """Advanced workflow #5 as a lesson: the depth map (and a faulty one), stage 1 with the control adapter and MOSS Control, stage 2
+    without the adapter at 0.3, stage 3 x2, a run with the measured pose and 100 % crops, the prompt changed to a potter, a recap."""
+    P = FP_POS
+    es = d.language == "es"
+    say_after = d._after_voice
+    fisher = fp_data(r"I:/HaDeS_MOSS/videos/comfy_input/fisherman_video1.png")
+    dmap = fp_data(r"I:/HaDeS_MOSS/videos/comfy_input/depth_map.png")
+    blur = fp_data(r"I:/HaDeS_MOSS/advanced_workflows/fixed_pose/depth_installed.png")
+    knight = fp_data(FP_MEASURE / "knight_stage1.png")
+    potter = fp_data(FP_MEASURE / "potter_save.png")
+    await d.camera({"box": [-60, -80, 1400, 1000]}, 10, pad=60, top=60)
+    await d.move(W * 0.97, H * 0.55, 10)
+
+    # 1. what we'll learn
+    await d.js("(h) => window.__hv.show(h, 10)",
+               fp_cols([(dmap, "depth map" if not es else "mapa de profundidad"), (knight, "knight" if not es else "caballero"),
+                        (potter, "potter" if not es else "alfarera")], side=460, top=60) +
+               '<div style="position:fixed;left:0;right:0;bottom:90px;text-align:center;color:#fff">'
+               '<div style="font:900 72px Segoe UI Black,sans-serif">HaDeS MOSS Suite</div>'
+               f'<div style="font:600 36px Segoe UI,sans-serif;color:#ffcc33;margin-top:14px">{"Workflow avanzado n.º 5" if es else "Advanced workflow #5"}'
+               ' · Fixed Pose</div></div>')
+    await d.hold(0.8)
+    for i in range(4):
+        await d.say(i)
+
+    # 2. the depth map
+    await say_after(0.25)
+    lab = (("la foto", "su mapa", "mapa defectuoso") if es else ("the photo", "its depth map", "a faulty map"))
+    await d.js("(h) => window.__hv.show(h)", fp_cols([(fisher, lab[0]), (dmap, lab[1])], side=620))
+    await d.say(4)
+    await d.say(5)
+    await say_after(0.25)
+    await d.js("(h) => window.__hv.show(h)", fp_cols([(dmap, lab[1]), (blur, lab[2])], side=620))
+    await d.say(6)
+    await d.say(7)
+    await say_after(1.0)
+    await d.js("() => window.__hv.hide()")
+
+    # 3. stage 1
+    load = await ap_add(d, "HaDeSMossLoader", "MOSS Loader", P["load"])
+    await up_set(d, load, BASIC_LOADER)
+    await d.camera([load], 900, pad=140, top=60)
+    await basic_point(d, load, "unet_name")
+    await d.say(8)
+    await say_after(0.25)
+    await d.camera({"box": [-60, -80, 900, 900]}, 900, pad=60, top=60)
+    loras = await ap_add(d, "HaDeSMossMultiLora", "MOSS Multi-LoRA", P["loras"])
+    await up_set(d, loras, {"enabled": True, "loras": json.dumps([{"name": FP_CTRL, "on": True, "strength": 1.0}])})
+    async with d.fast(1.6):
+        await basic_link(d, load, "MODEL", loras, "model", 700)
+    await d.camera([loras], 900, pad=140, top=60)
+    await basic_point(d, loras, "hades_multilora_list")
+    await d.say(9)
+    await say_after(0.25)
+    await d.camera({"box": [380, -80, 1400, 1000]}, 900, pad=60, top=60)
+    depth = await ap_add(d, "LoadImage", "Load Image", P["depth"])
+    await up_set(d, depth, {"image": FP_MAP})
+    await d.camera([depth], 900, pad=140, top=60)
+    await d.say(10)
+    await say_after(0.25)
+    await d.camera({"box": [-60, -80, 1400, 1000]}, 900, pad=60, top=60)
+    enh = await ap_add(d, "HaDeSMossPromptEnhancer", "MOSS Prompt Enhancer", P["enh"])
+    await up_set(d, enh, {"mode": "as written", "width": 1024, "height": 1024, "seed": 1, "negative": "worst quality, low quality"})
+    async with d.fast(2.0):
+        await basic_link(d, load, "CLIP", enh, "clip", 700)
+        await pe_type(d, enh, "idea", FP_KNIGHT, paste=True)
+    await ml_zoom(d, enh, ["mode"])
+    await basic_point(d, enh, "mode")
+    await d.say(11)
+    await say_after(0.25)
+    await d.camera({"box": [880, -80, 1400, 900]}, 900, pad=60, top=60)
+    latent = await ap_add(d, "HaDeSMossLatent", "MOSS Latent", P["latent"])
+    await up_set(d, latent, {"aspect_ratio": "1:1", "megapixels": 1.0, "seed": FP_SEED, "control_after_generate": "fixed"})
+    await ml_zoom(d, latent, ["seed"])
+    await basic_point(d, latent, "seed")
+    await d.say(12)
+    await say_after(0.25)
+    await d.camera({"box": [-60, -80, 1850, 1100]}, 900, pad=60, top=60)
+    ctrl = await ap_add(d, "HaDeSMossControl", "MOSS Control", P["ctrl"])
+    await up_set(d, ctrl, {"color_mode": "off (depth only)", "strength": 1.0, "start_percent": 0.0, "end_percent": 1.0})
+    async with d.fast(3.0):
+        for a, out, inp in ((enh, "positive", "positive"), (enh, "negative", "negative"), (load, "VAE", "vae"),
+                            (latent, "latent", "latent"), (depth, "IMAGE", "depth_map")):
+            await basic_link(d, a, out, ctrl, inp, 600)
+    await d.camera([ctrl], 900, pad=140, top=60)
+    await d.say(13)
+    await say_after(0.25)
+    await ml_zoom(d, ctrl, ["color_mode", "strength"])
+    await basic_point(d, ctrl, "color_mode")
+    await d.say(14)
+    await say_after(0.25)
+    await d.camera({"box": [1350, 500, 1850, 1100]}, 900, pad=60, top=60)
+    turbo = await ap_add(d, "HaDeSMossTurbo", "MOSS Turbo", P["turbo"])
+    await up_set(d, turbo, {"lora_name": FP_TURBO, "strength": 1.0, "steps": 8, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple"})
+    await ml_zoom(d, turbo, ["lora_name", "steps", "cfg"])
+    await basic_point(d, turbo, "lora_name")
+    await d.say(15)
+    await say_after(0.25)
+    await d.camera({"box": FP_S1}, 900, pad=60, top=60)
+    ks = await ap_add(d, "HaDeSMossKSampler", "MOSS KSampler", P["ks"])
+    await up_set(d, ks, {"denoise": 1.0, "denoise_mode": "steps / denoise (core)"})
+    s1 = await ap_add(d, "PreviewImage", "Preview Image", P["stage1"])
+    async with d.fast(3.0):
+        for a, out, inp in ((loras, "MODEL", "model"), (ctrl, "positive", "positive"), (ctrl, "negative", "negative"),
+                            (latent, "latent", "latent_image"), (latent, "seed", "seed"), (load, "VAE", "vae"), (turbo, "turbo", "turbo")):
+            await basic_link(d, a, out, ks, inp, 600)
+        await basic_link(d, ks, "image", s1, "images", 600)
+    await d.say(16)
+    await say_after(0.25)
+    await ts_group(d, "1. The pose from the depth map (control, 8 steps)", [-30, -80, 2290, 1130], "#335533")
+    await d.say(17)
+    await say_after(0.5)
+
+    # 4. stage 2
+    await d.camera({"box": [1800, -80, 2750, 1000]}, 900, pad=60, top=60)
+    await d.say(18)
+    ks2 = await ap_add(d, "HaDeSMossKSampler", "MOSS KSampler", P["ks2"])
+    await up_set(d, ks2, {"denoise": 0.3, "denoise_mode": "exact"})
+    s2 = await ap_add(d, "PreviewImage", "Preview Image", P["stage2"])
+    async with d.fast(3.0):
+        await d.camera({"box": [-60, -120, 2750, 1100]}, 600, pad=60, top=60)
+        for a, out, inp in ((load, "MODEL", "model"), (enh, "positive", "positive"), (enh, "negative", "negative"),
+                            (latent, "seed", "seed"), (load, "VAE", "vae"), (turbo, "turbo", "turbo"), (ks, "latent", "latent_image")):
+            await basic_link(d, a, out, ks2, inp, 600)
+        await basic_link(d, ks2, "image", s2, "images", 600)
+    await d.camera([ks2], 900, pad=140, top=60)
+    await d.say(19)
+    await say_after(0.25)
+    await ml_zoom(d, ks2, ["denoise", "denoise_mode"])
+    await basic_point(d, ks2, "denoise")
+    await d.say(20)
+    await say_after(0.25)
+    await d.say(21)
+    await say_after(0.25)
+    await ts_group(d, "2. Redraw without control at 0.3", [2270, -80, 440, 930], "#334466")
+
+    # 5. stage 3
+    await d.camera({"box": [2700, -80, 4500, 1100]}, 1000, pad=60, top=60)
+    upm = await ap_add(d, "UpscaleModelLoader", "Load Upscale Model", P["upmodel"])
+    await up_set(d, upm, {"model_name": "RealESRGAN_x2plus.pth"})
+    up = await ap_add(d, "ImageUpscaleWithModel", "Upscale Image (using Model)", P["up"])
+    async with d.fast(2.0):
+        await d.camera({"box": [1800, -80, 4500, 1100]}, 600, pad=60, top=60)
+        await basic_link(d, upm, "UPSCALE_MODEL", up, "upscale_model", 600)
+        await basic_link(d, ks2, "image", up, "image", 600)
+    await d.say(22)
+    await say_after(0.25)
+    enc = await ap_add(d, "VAEEncode", "VAE Encode", P["enc"])
+    ks3 = await ap_add(d, "HaDeSMossKSampler", "MOSS KSampler", P["ks3"])
+    await up_set(d, ks3, {"denoise": 0.25, "denoise_mode": "steps / denoise (core)"})
+    async with d.fast(3.0):
+        await d.camera({"box": FP_BOX}, 600, pad=60, top=60)
+        await basic_link(d, up, "IMAGE", enc, "pixels", 600)
+        await basic_link(d, load, "VAE", enc, "vae", 600)
+        for a, out, inp in ((load, "MODEL", "model"), (enh, "positive", "positive"), (enh, "negative", "negative"),
+                            (enc, "LATENT", "latent_image"), (latent, "seed", "seed"), (load, "VAE", "vae"), (turbo, "turbo", "turbo")):
+            await basic_link(d, a, out, ks3, inp, 600)
+    await d.camera([ks3], 900, pad=140, top=60)
+    await ml_zoom(d, ks3, ["denoise"])
+    await basic_point(d, ks3, "denoise")
+    await d.say(23)
+    await say_after(0.25)
+    await d.camera({"box": [2700, -80, 4500, 1100]}, 900, pad=60, top=60)
+    save = await ap_add(d, "HaDeSMossImageSaver", "MOSS Image Saver", P["save"])
+    await up_set(d, save, {"filename_prefix": "MOSS/HaDeS_MOSS_fixed_pose_%seed%"})
+    tel = await ap_add(d, "HaDeSMossSuiteTelemetry", "MOSS Suite Telemetry", P["tel"])
+    async with d.fast(4.0):
+        await d.camera({"box": FP_BOX}, 600, pad=60, top=60)
+        await basic_link(d, ks3, "image", save, "images", 600)
+        for i, a in enumerate((load, loras, enh, latent, ctrl, ks, ks2, ks3), 1):
+            await basic_link(d, a, "info", tel, f"info_{i}", 600)
+        await basic_link(d, tel, "json", save, "metadata", 600)
+        rep = await ap_add(d, "PreviewAny", "Preview Any", P["report"])
+        await basic_link(d, tel, "report", rep, "source", 600)
+    await d.say(24)
+    await say_after(0.25)
+    await ts_group(d, "3. x2", [2720, -80, 1740, 1050], "#553355")
+
+    # 6. the run
+    await d.camera({"box": FP_BOX}, 900, pad=60, top=60)
+    ids = {"stage1": s1, "stage2": s2, "save": save}
+    await d.say(25)
+    _, secs = await basic_run(d, save)
+    outs = await fp_outputs(d, ids)
+    fp_check(d.page.url, outs["save"], "knight_save.png")
+    await d.move(W * 0.97, H * 0.55)
+    await d.js("(h) => window.__hv.show(h)", ap_card([f'{secs:.1f} s · RTX 5090', ("3 etapas · 2048 × 2048" if es else "3 stages · 2048 × 2048")], top=360))
+    await say_after(0.8)
+    await d.js("(h) => window.__hv.show(h)", fp_cols([(dmap, lab[1]), (outs["save"], "caballero · 2048" if es else "knight · 2048")], side=640))
+    await d.say(26)
+    await say_after(0.25)
+    await d.js("(h) => window.__hv.show(h)", fp_pose_html(es))
+    await d.say(27)
+    await say_after(0.25)
+    await d.js("(h) => window.__hv.show(h)", fp_pose_html(es, mark="0.977"))
+    await d.say(28)
+    await say_after(0.5)
+    await d.js("(h) => window.__hv.show(h)", fp_crops([outs["stage1"], outs["stage2"]],
+               (("etapa 1 · con el adaptador", "etapa 2 · sin él, a 0,3") if es else ("stage 1 · with the adapter", "stage 2 · without it, at 0.3"))))
+    await d.say(29)
+    await say_after(1.0)
+    await d.js("() => window.__hv.hide()")
+
+    # 7. another character
+    await d.camera([enh], 900, pad=140, top=60)
+    await d.say(30)
+    await say_after(0.25)
+    async with d.fast(2.0):
+        await pe_type(d, enh, "idea", FP_POTTER, paste=True)
+    await d.say(31)
+    await d.camera({"box": FP_BOX}, 900, pad=60, top=60)
+    _, secs2 = await basic_run(d, save)
+    outs2 = await fp_outputs(d, ids)
+    fp_check(d.page.url, outs2["save"], "potter_save.png")
+    await d.move(W * 0.97, H * 0.55)
+    await d.js("(h) => window.__hv.show(h)", ap_card([f'{secs2:.1f} s', ("mismo mapa, otro prompt" if es else "same map, new prompt")], top=360))
+    await say_after(0.8)
+    await d.js("(h) => window.__hv.show(h)", fp_cols([(dmap, lab[1]), (outs["save"], "caballero" if es else "knight"),
+                                                       (outs2["save"], "alfarera" if es else "potter")], side=560))
+    await d.say(32)
+    await say_after(0.25)
+    await d.js("(h) => window.__hv.show(h)", fp_cols([(fisher, "el pescador" if es else "the fisherman"),
+                                                       (outs2["save"], "«en sus treinta»" if es else "\u201cin her thirties\u201d")], side=640))
+    await d.say(33)
+    await d.say(34)
+    await say_after(0.8)
+    await d.js("() => window.__hv.hide()")
+
+    # 8. recap and closing
+    recap = (["1 · el mapa guarda la pose: míralo primero", "2 · adaptador + MOSS Control, 8 pasos", "3 · redibuja sin adaptador a 0,3",
+              "4 · cambia solo el prompt; elige un mapa parecido"] if es else
+             ["1 · the map holds the pose: look at it first", "2 · adapter + MOSS Control, 8 steps", "3 · redraw without the adapter at 0.3",
+              "4 · change only the prompt; pick a similar map"])
+    for i in range(4):
+        await d.js("(h) => window.__hv.show(h)", ap_card(recap[:i + 1]))
+        await d.say(35 + i)
+        await say_after(0.25)
+    await d.js("() => window.__hv.hide()")
+    await d.camera({"box": FP_BOX}, 1200, pad=60, top=60)
+    await d.js("(h) => window.__hv.show(h)",
+               '<div style="color:#fff;text-align:center;max-width:1300px;margin-top:300px">'
+               f'<div style="font:600 30px Segoe UI,sans-serif;color:#c9c9d1">{"Descarga gratis (enlace en la descripción)" if es else "Free download (link in the description)"}</div>'
+               '<div style="font:700 44px Segoe UI,sans-serif;margin-top:22px">examples/advanced/HaDeS MOSS Suite - Fixed Pose.json</div></div>')
+    await d.say(39)
+    await say_after(0.25)
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }",
+               fp_cols([(dmap, lab[1]), (outs["save"], "caballero" if es else "knight"), (outs2["save"], "alfarera" if es else "potter")], side=460, top=60) +
+               '<div style="position:fixed;left:0;right:0;bottom:90px;text-align:center;color:#fff">'
+               '<div style="font:900 72px Segoe UI Black,sans-serif">HaDeS MOSS Suite</div>'
+               f'<div style="font:400 28px Segoe UI,sans-serif;color:#c9c9d1;margin-top:18px">{"Workflow, Suite y modelos: enlaces en la descripción" if es else "Workflow, Suite and models: links in the description"}</div></div>')
+    await d.say(40)
+    await d.end(1.5)
+
+
+fixed_pose.prepare = fp_prepare
+
+
 SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "layout_test": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_test, LAYOUT_TEST_LINES),
           "layout_sentence": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_sentence, LAYOUT_SENTENCE_LINES),
@@ -7220,7 +7654,8 @@ SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "adv_poster": (AP_FILE, adv_poster, AP_LINES),
           "adv_merge_lab": (ML_FILE, merge_lab, ML_LINES),
           "adv_two_stage": (TS_FILE, two_stage, TS_LINES),
-          "adv_lora_surgery": (LS_FILE, lora_surgery, LS_LINES)}
+          "adv_lora_surgery": (LS_FILE, lora_surgery, LS_LINES),
+          "adv_fixed_pose": (FP_FILE, fixed_pose, FP_LINES)}
 
 # spoken forms where the written caption reads badly aloud
 SPOKEN = {"DRAFT LAYOUT": "Draft layout"}
