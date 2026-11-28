@@ -64,6 +64,16 @@ def _read_header(path):
     meta = header.pop("__metadata__", None) or {}
     if not isinstance(meta, dict):
         meta = {}
+    # every tensor entry must have the fields the report reads, or the file is reported as invalid instead of failing inside the
+    # report with an internal error (audit 0.9.9 B3)
+    for k, t in header.items():
+        shape, offsets = t.get("shape") if isinstance(t, dict) else None, t.get("data_offsets") if isinstance(t, dict) else None
+        if not (isinstance(t, dict) and isinstance(t.get("dtype"), str)
+                and isinstance(shape, list) and all(isinstance(d, int) and not isinstance(d, bool) and d >= 0 for d in shape)
+                and isinstance(offsets, list) and len(offsets) == 2
+                and all(isinstance(o, int) and not isinstance(o, bool) for o in offsets) and 0 <= offsets[0] <= offsets[1]):
+            raise ValueError(f"HaDeS MOSS Metadata Reader: '{os.path.basename(path)}' has an invalid safetensors header "
+                             f"(tensor {str(k)[:80]!r} lacks a valid dtype, shape or data_offsets).")
     return {str(k): str(v) for k, v in meta.items()}, header, 8 + n
 
 

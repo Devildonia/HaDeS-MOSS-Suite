@@ -7,6 +7,29 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **MOSS Text Check `strict`** (advanced, off by default): `passed` then also needs case and punctuation to match, for a check used as a typography acceptance (audit 0.9.9 M8).
+
+### Fixed
+Audit 0.9.9, 19 findings, all checked and fixed, each with a regression test (`tools/RESULTS.md`):
+- **A LoRA whose factors do not fit the model is an error** (A1). Multi-LoRA, LoRA Block Weight and the KSampler's turbo input counted such a LoRA as applied while ComfyUI kept the weight unchanged with only a console error. Every factor is now checked against its weight (or the q / k / v slice of a fused `qkv`); a control adapter may widen `video_embedder`. The published LoRAs pass.
+- **The PNG never credits a replaced model file** (A2). Two signatures of the same file that disagree (the Loader read one, the KSampler saw another) now leave the hash out with a note, whatever the order of the metadata; the MOSS Loader loads again when one of its files is replaced under the same name.
+- **PCM and DMD seal `--steps`** (A3): resuming a run with other steps (other phases / another sigma schedule) stops; more updates are still allowed. An older `run_identity.json` gets the option added with a note.
+- **PCM checks its data** (A4): an untagged regression cache is used only when the data run's own report shows the same draw; every pair's prompt must have an embedding before training; the pairs used are written to `data_manifest.json` and a resume must read the same ones.
+- **KSampler stops when MOSS Control has no adapter** (M1): the control map was dropped in silence by a model with a 128-channel `video_embedder`.
+- **Telemetry checks a few-step LoRA only against the KSampler that sampled with it** (M2): each KSampler and Compare Sampler branch records the LoRAs its model carries; a two-stage workflow no longer gets a false warning.
+- **MOSS Depth Map** (M3-M5): the attention is fixed on the node's own model only (the pack's class is untouched), with a single-scale attention that uses about half the VRAM on a panorama; a weights file replaced under the same name is loaded again; the file checked is the one loaded; the `resolution` tooltip says the inference runs at 518 px on the short side.
+- **Mergers and the Extractor refuse a model missing a weight** (M6) instead of skipping it, and the Block Merger compares weights after the fp16-fixed rescale, so an equal raw weight is still rescaled.
+- **Layout Editor: one queue hook for every editor** (M7); two DRAFT LAYOUT runs each get their own request, and a request that never reaches the queue stops waiting after 15 s.
+- **Text Check keeps a sign that reads `NONE` or `TEXT: ...`** (M8) when that is the text asked for.
+- **Image Saver hashes nothing and validates nothing when it writes no metadata** (M9).
+- **PCM: a non-finite gradient skips only the optimizer step** (M10); the last update still saves the checkpoint and the LoRA, the report counts optimizer steps and skipped steps, and 20 in a row stop the run with the checkpoint saved.
+- **Compare Sheet, blind:** its own footer shows only the prompt, and `write_metadata` off writes no Suite chunk (B1).
+- **Multi-LoRA's few-step badge** is read again after a minute, and after 10 s when the first read failed (B2).
+- **Metadata Reader** reports a corrupt tensor entry as an invalid file (B3).
+- README's Control example points to MOSS Depth Map (B4); KSampler no longer rebuilds a core schedule of more than 4096 steps just to report the start sigma (B5).
+- Telemetry's int8 note gives the measured numbers of 2026-11-27.
+
 ## [0.9.9] - 2026-11-28
 
 ### Added

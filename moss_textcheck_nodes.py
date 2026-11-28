@@ -55,10 +55,19 @@ def similarity(expected, read):
     return 1.0 - levenshtein(a, b) / max(len(a), len(b))
 
 
-def clean_answer(answer):
+def clean_answer(answer, expected=()):
+    """The model's answer as text read: its thinking, quotes and a leading "Text:" / "Answer:" label removed, and NONE (no legible
+    text) as empty. A label or a NONE that is the very text asked for is kept (audit 0.9.9 M8: a sign reading "NONE" or
+    "TEXT: OPEN" was lost)."""
+    asked = [literal(e).casefold() for e in expected if e]
     answer = re.sub(r"<think>.*?(</think>|$)", "", answer, flags=re.DOTALL).strip().strip("`").strip()
-    answer = re.sub(r"^(text|answer)\s*:\s*", "", answer, flags=re.I).strip().strip('"').strip()
-    return "" if answer.upper().rstrip(".") == "NONE" else answer
+    label = re.match(r"^(text|answer)\s*:\s*", answer, flags=re.I)
+    if label and not any(a.startswith(label.group(1).casefold()) for a in asked):
+        answer = answer[label.end():]
+    answer = answer.strip().strip('"').strip()
+    if answer.upper().rstrip(".") == "NONE" and "none" not in asked:
+        return ""
+    return answer
 
 
 def best_line(expected, lines):
@@ -134,7 +143,7 @@ def read(clip, image, question, max_tokens):
     with decode_fallback():
         ids = clip.generate(tokens, do_sample=False, max_length=max_tokens, temperature=0.01, top_k=1, top_p=1.0, min_p=0.0,
                             repetition_penalty=1.0, seed=0)
-    return clean_answer(clip.decode(ids))
+    return clip.decode(ids)
 
 
 def check(clip, image, layout="", expected_text="", max_tokens=96, reader=read):
@@ -148,7 +157,7 @@ def check(clip, image, layout="", expected_text="", max_tokens=96, reader=read):
         cw, chh, items = parsed
         for text, box in items:
             crop, pix = crop_box(image, box, (cw, chh))
-            got = reader(clip, crop, READ_BOX, max_tokens)
+            got = clean_answer(reader(clip, crop, READ_BOX, max_tokens), [text])
             # the box may hold other text too: the best read line (or the whole answer) counts
             sim, got = max(best_line(text, [ln.strip() for ln in got.splitlines() if ln.strip()]), (similarity(text, got), got))
             rows.append({"text": text, "read": got, "similarity": round(sim, 3), "verdict": verdict(sim), "box": list(box),
@@ -159,8 +168,12 @@ def check(clip, image, layout="", expected_text="", max_tokens=96, reader=read):
         expected += [q for q in quoted_texts(layout) if q not in expected]
     if not rows and not expected:  # no text asked for: nothing to read, and the workflow goes on
         return [], mask, []
-    whole = reader(clip, image, READ_ALL, max_tokens * 2) if (expected or any(r["verdict"] != "exact" for r in rows)) else ""
-    lines = [ln.strip(" -*•\t") for ln in whole.splitlines() if ln.strip(" -*•\t")]
+    asked = [r["text"] for r in rows] + expected
+    whole = (clean_answer(reader(clip, image, READ_ALL, max_tokens * 2), asked)
+             if (expected or any(r["verdict"] != "exact" for r in rows)) else "")
+    none_asked = any(literal(a).casefold() == "none" for a in asked)
+    lines = [ln.strip(" -*•\t") for ln in whole.splitlines() if ln.strip(" -*•\t")
+             and (none_asked or ln.strip(" -*•\t").upper().rstrip(".") != "NONE")]
     for r, pix in zip(rows, boxes):
         if r["verdict"] != "exact":
             sim, line = best_line(r["text"], lines)
@@ -203,6 +216,10 @@ class HaDeSMossTextCheck:
                 "expected_text": ("STRING", {"default": "", "multiline": True, "tooltip": "Texts to look for anywhere in the image, one "
                                                                                             "per line (for prompts without a layout)."}),
                 "max_tokens": ("INT", {"default": 96, "min": 16, "max": 512, "tooltip": "Longest answer per reading, in tokens."}),
+                "strict": ("BOOLEAN", {"default": False, "advanced": True,
+                                       "tooltip": "On: passed needs every text literally the same, case and punctuation included "
+                                                  "('OPEN!' against 'OPEN' fails). Off: exact folds case and punctuation, and the "
+                                                  "report says when the literal text differs."}),
             },
         }
 
@@ -224,7 +241,7 @@ class HaDeSMossTextCheck:
                    "folded; the report says when the literal text differs), close (some letters differ), missing, or outside its box. Measured: 75 of 75 right verdicts on text drawn in common fonts (28-110 px), 19 of 20 on "
                    "text MOSS painted itself; a word cut by the image edge can be read as whole (tools/RESULTS.md).")
 
-    def run(self, image, clip, layout="", expected_text="", max_tokens=96):
+    def run(self, image, clip, layout="", expected_text="", max_tokens=96, strict=False):
         if not hasattr(clip, "generate"):
             raise ValueError("MOSS Text Check: this CLIP cannot generate text; use MOSS-Image's text encoder (type moss_image)")
         layout, expected_text = layout or "", expected_text or ""
@@ -238,7 +255,7 @@ class HaDeSMossTextCheck:
         results = [first] + [check(clip, image[i:i + 1], layout, expected_text, max_tokens) for i in range(1, int(image.shape[0]))]
         best = pick_best(results)
         rows, mask, lines = results[best]
-        passed = all(r["verdict"] == "exact" for r in rows)
+        passed = all(r["verdict"] == "exact" and (r.get("literal", True) or not strict) for r in rows)
         # exact compares letters and digits with case and punctuation folded; the report says when the literal text differs
         report = "\n".join(f"[{r['verdict']}] {r['text']!r} -> read {r['read']!r} ({r['similarity']:.2f})"
                            + ("; case or punctuation differ" if r["verdict"] == "exact" and not r.get("literal", True) else "")
@@ -254,7 +271,7 @@ class HaDeSMossTextCheck:
                                + "".join(f"; {x['text']!r} {x['verdict']}" for x in b["not_exact"])
                                + (" <- best" if b["image"] == best + 1 else "") for b in batch) + "\n\n" + report
         text += "\n" + report
-        info = format_info(text, "text_check", passed=passed, items=rows, read_whole=lines, best_image=best + 1, batch=batch)
+        info = format_info(text, "text_check", passed=passed, strict=bool(strict), items=rows, read_whole=lines, best_image=best + 1, batch=batch)
         return {"ui": {"text": [text]}, "result": (report, mask, passed, info, image[best:best + 1])}
 
 

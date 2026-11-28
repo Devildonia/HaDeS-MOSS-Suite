@@ -16,7 +16,7 @@ from comfy.cli_args import args
 import comfy.samplers
 
 from .moss_common import format_info, parse_info_meta, save_png
-from .moss_sampler_nodes import DENOISE_CORE, SLG_MODES, HaDeSMossKSampler, model_files
+from .moss_sampler_nodes import DENOISE_CORE, SLG_MODES, HaDeSMossKSampler, model_files, model_loras
 
 SLOTS = "ABCD"
 GAP, PAD = 16, 12
@@ -264,7 +264,9 @@ class HaDeSMossCompareSheet:
                            "prompts differ between branches" if len(prompts) > 1 else "")
             if same_model:
                 common.insert(0, next(iter(known_models)))
-            footer = " | ".join(common + ([prompt_text] if prompt_text else []))
+            # a blind sheet's own footer names nothing the reviewer could use (model, LoRAs, settings): the prompt only
+            # (audit 0.9.9 B1); a footer typed by hand is the user's choice and is kept
+            footer = (prompt_text if blind else " | ".join(common + ([prompt_text] if prompt_text else [])))
         batch = min(im.shape[0] for _, im in images)
         order, key = list(range(len(images))), {}
         shown = labels
@@ -296,7 +298,7 @@ class HaDeSMossCompareSheet:
                         pnginfo.add_text("prompt", json.dumps(prompt))
                     for k, v in (extra_pnginfo or {}).items():
                         pnginfo.add_text(k, json.dumps(v))
-            elif not args.disable_metadata:
+            elif not args.disable_metadata and write_metadata:  # write_metadata off writes nothing, blind or not (audit 0.9.9 B1)
                 pnginfo.add_text("hades_moss_compare", json.dumps({"blind": True, "footer": footer.strip()}, ensure_ascii=False))
         for b in range(batch):
             if b:
@@ -445,6 +447,9 @@ class HaDeSMossCompareSampler:
             ks_meta = parse_info_meta(ks_info)
             if files and isinstance(ks_meta, dict) and not ks_meta.get("model_files"):
                 ks_meta["model_files"] = files
+            used = model_loras(prompt, unique_id, f"model_{s}")
+            if used is not None and isinstance(ks_meta, dict):  # each branch's own LoRAs, so Telemetry never crosses branches (audit 0.9.9 M2)
+                ks_meta["model_loras"] = used
             # LoRAs in the order they were applied, then the KSampler (its turbo goes last on the label), the model, the prompt
             head = loras[::-1] + [ks_meta]
             branches[s] = head + ([base] if base else []) + extra  # the nodes' own trailers, for Suite Telemetry

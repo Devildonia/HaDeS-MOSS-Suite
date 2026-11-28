@@ -1,3 +1,4 @@
+import json
 import copy
 
 import torch
@@ -59,6 +60,83 @@ def model_files(prompt, node_id, input_name="model"):
     return out
 
 
+def model_loras(prompt, node_id, input_name="model"):
+    """The LoRA files applied on the way to a node's MODEL input (Multi-LoRA rows switched on with a strength, LoRA loaders and
+    LoRA Block Weight), found by walking up the workflow like model_files: Suite Telemetry pairs a Multi-LoRA's few-step LoRA only
+    with the KSampler that sampled it (audit 0.9.9 M2). None when there is no workflow to read."""
+    if not prompt or str(node_id) not in prompt:
+        return None
+    out, seen = [], set()
+
+    def add(name):
+        if isinstance(name, str) and name and name not in out:
+            out.append(name)
+
+    def walk(link, depth):
+        if not (isinstance(link, list) and len(link) == 2) or depth > 64 or (str(link[0]), link[1]) in seen:
+            return
+        seen.add((str(link[0]), link[1]))
+        src = prompt.get(str(link[0]))
+        if src is None:
+            return
+        types = getattr(nodes.NODE_CLASS_MAPPINGS.get(src.get("class_type")), "RETURN_TYPES", None)
+        if isinstance(types, (tuple, list)) and (not isinstance(link[1], int) or link[1] >= len(types) or types[link[1]] != "MODEL"):
+            return
+        inputs = src.get("inputs", {})
+        if src.get("class_type") == "HaDeSMossMultiLora" and inputs.get("enabled", True) is not False:
+            try:
+                rows = json.loads(inputs.get("loras") or "[]")
+            except (TypeError, ValueError):
+                rows = []
+            for r in rows if isinstance(rows, list) else []:
+                if isinstance(r, dict) and r.get("on", True) and float(r.get("strength", 1.0) or 0.0) != 0.0:
+                    add(r.get("name"))
+        elif "lora_name" in inputs and float(inputs.get("strength_model", 1.0) or 0.0) != 0.0:
+            add(inputs.get("lora_name"))
+        for value in inputs.values():
+            walk(value, depth + 1)
+
+    walk(prompt[str(node_id)].get("inputs", {}).get(input_name), 0)
+    return out
+
+
+EMBEDDER_KEY = "diffusion_model.video_embedder.weight"
+
+
+def embedder_width(model):
+    """Input channels MOSS-Image's video_embedder will have when this model samples: its own weight's, or a control adapter's
+    widened weight still pending as a patch (the adapter loads as a LoRA whose set / diff patch replaces the embedder). A patch at
+    strength 0 is not applied. None when the model has no video_embedder (not MOSS-Image)."""
+    emb = getattr(getattr(getattr(model, "model", None), "diffusion_model", None), "video_embedder", None)
+    weight = getattr(emb, "weight", None)
+    if weight is None or weight.ndim != 2:
+        return None
+    width = int(weight.shape[1])
+    for patch in getattr(model, "patches", {}).get(EMBEDDER_KEY, []):
+        data = patch[1] if len(patch) > 1 else None
+        if patch[0] == 0 or not (isinstance(data, tuple) and len(data) > 1 and data[0] in ("set", "diff")):
+            continue
+        t = data[1][0] if isinstance(data[1], (tuple, list)) and data[1] else None
+        if isinstance(t, torch.Tensor) and t.ndim == 2:
+            width = max(width, int(t.shape[1]))
+    return width
+
+
+def check_control_adapter(model, positive, negative):
+    """MOSS Control adds its maps as concat_latent_image; without the control adapter (a 128-channel video_embedder) ComfyUI's
+    MOSS-Image drops them and samples as if there were no control, with no error (audit 0.9.9 M1). Stop with the cause instead."""
+    extra = 0
+    for c in list(positive or []) + list(negative or []):
+        opts = c[1] if isinstance(c, (list, tuple)) and len(c) > 1 and isinstance(c[1], dict) else {}
+        if isinstance(opts.get("concat_latent_image"), torch.Tensor):
+            extra = max(extra, int(opts["concat_latent_image"].shape[1]))
+    width = embedder_width(model)
+    if extra and width is not None and width < 128 + extra:
+        raise ValueError(f"HaDeS MOSS KSampler: the conditioning carries a control map ({extra} channels, from MOSS Control), but the model's "
+                         f"video_embedder takes {width} channels, so the map would be ignored. Load the control adapter "
+                         "(e.g. moss-color-depth-control) at strength 1.0 on this model, in a Multi-LoRA or a LoRA loader.")
+
+
 def with_shift(model, shift):
     """The model with its own sampling object at another shift (multiplier and type kept); unchanged when shift is 0 or equal."""
     ms = model.get_model_object("model_sampling")
@@ -109,11 +187,16 @@ def exact_sigmas(model_sampling, sampler_name, scheduler, steps, denoise):
     return torch.tensor(out, dtype=sigmas.dtype)
 
 
+START_SIGMA_MAX_SCHEDULE = 4096
+
+
 def start_sigma(model_sampling, sampler_name, scheduler, steps, denoise, mode):
     """The first sigma the sampler runs from, in either mode (exact: the first sigma of exact_sigmas, which is below the
     requested point when the scheduler's own schedule starts below sigma max, e.g. ddim_uniform)."""
     if mode == DENOISE_EXACT and 0.0 < denoise < 0.9999:
         return float(exact_sigmas(model_sampling, sampler_name, scheduler, steps, denoise)[0])
+    if core_schedule_steps(steps, denoise) > START_SIGMA_MAX_SCHEDULE:
+        return None  # a tiny denoise makes the core build a huge schedule; the report does not build it a second time (audit 0.9.9 B5)
     return float(full_sigmas(model_sampling, sampler_name, scheduler, core_schedule_steps(steps, denoise))[-(steps + 1)])
 
 
@@ -258,6 +341,7 @@ class HaDeSMossKSampler:
             load_lora_patches(turbo["lora_name"], model)
             model = nodes.LoraLoaderModelOnly().load_lora_model_only(model, turbo["lora_name"], turbo["strength"])[0]
             steps, cfg, sampler_name, scheduler, slg = turbo["steps"], turbo["cfg"], turbo["sampler_name"], turbo["scheduler"], "off"
+        check_control_adapter(model, positive, negative)
         m = with_shift(model, flow_shift)
         if SLG_MODES[slg] is not None:
             layers, start, end = SLG_MODES[slg]
@@ -279,8 +363,8 @@ class HaDeSMossKSampler:
         shift = float(ms.shift)
         h, w = out["samples"].shape[-2] * 16, out["samples"].shape[-1] * 16
         text = (f"HaDeS MOSS KSampler | {w}x{h} | {sampler_name} / {scheduler} | {steps} steps | CFG {cfg:.2f} | shift {shift:g} | "
-                f"denoise {denoise:.2f}{' exact' if exact else ''} (start sigma {sigma0:.3f}) | SLG {slg} | seed {seed}")
-        extra = {"denoise_mode": "exact" if exact else "core", "start_sigma": round(sigma0, 4)}
+                f"denoise {denoise:.2f}{' exact' if exact else ''} (start sigma {'not computed' if sigma0 is None else f'{sigma0:.3f}'}) | SLG {slg} | seed {seed}")
+        extra = {"denoise_mode": "exact" if exact else "core", "start_sigma": None if sigma0 is None else round(sigma0, 4)}
         if ran != steps:
             extra["steps_run"] = ran  # e.g. a scheduler that merges duplicate sigmas, or denoise 0 (the latent passes through)
         if not exact and 0.0 < denoise < 0.9999:
@@ -292,6 +376,9 @@ class HaDeSMossKSampler:
         if files:  # the files this model comes from, for the Image Saver's Model field (a merge made here lists its sources)
             extra["model_files"] = files
             text += " | model " + " + ".join(f["file"] for f in files)
+        used = model_loras(prompt, unique_id)
+        if used is not None:  # the LoRAs this KSampler's model carries, so Telemetry checks each stage against its own LoRAs
+            extra["model_loras"] = used
         return (out, image, format_info(text, "ksampler", width=w, height=h, steps=int(steps), cfg=float(cfg), flow_shift=shift,
                                         sampler=sampler_name, scheduler=scheduler, seed=int(seed), denoise=float(denoise), slg=slg, **extra))
 

@@ -47,24 +47,58 @@ from moss_dmd_train import PREVIEW_PROMPTS, LoRASet, layer_names  # noqa: E402
 from moss_train_guard import prompt_tag, run_lock, seal_run  # noqa: E402
 
 
+MAX_RUN_SKIPS = 20  # non-finite gradients in a row before the run stops (with its checkpoint saved) instead of spinning
+
+
+def untagged_draw_ok(run, seed, pairs, steps, size):
+    """An untagged regression cache (written before the prompt tag, e.g. Turbo v2.0's, 2026-11-25) does not say which prompt each
+    pair was made for. It is accepted only when the data run's own report_dmd.json shows it was drawn with this seed, this number
+    of pairs, these teacher steps and this size, so the draw rebuilt here is the one that made it (audit 0.9.9 A4). Returns the
+    reason it is not, or None."""
+    path = os.path.join(run, "report_dmd.json")
+    try:
+        a = json.load(open(path, encoding="utf-8")).get("args", {})
+    except (OSError, ValueError):
+        return f"{path} is missing or unreadable"
+    want = {"seed": seed, "reg_pairs": pairs, "reg_teacher_steps": steps, "size": size}
+    bad = [f"{k} {a.get(k)!r} (asked {v!r})" for k, v in want.items() if a.get(k) != v]
+    return f"{path} records " + ", ".join(bad) if bad else None
+
+
 def load_data(run, n_prompts, seed, pairs, steps, size):
     """(prompt, latent) pairs of a moss_dmd_train run's regression cache, with that run's prompt embeddings; the prompt order is
-    rebuilt the way the trainer drew it and checked against the tag in each key."""
+    rebuilt the way the trainer drew it and checked against the tag in each key. Returns (data, cache, manifest): the manifest
+    records where every pair came from (index, prompt tag, key, tagged or verified untagged)."""
     prompts = json.load(open(os.path.join(run, "prompts.json"), encoding="utf-8"))
     if len(prompts) != n_prompts:
         raise SystemExit(f"{run}: {len(prompts)} prompts, expected {n_prompts}")
     reg_prompts = random.Random(seed + 7).sample(prompts, pairs)
     done = torch.load(os.path.join(run, "reg_pairs.pt"))
-    data = []
-    for i, prompt in enumerate(reg_prompts):
-        key = f"{i}_{steps}_{size}_{prompt_tag(prompt)}"
-        if key not in done:  # caches written before the prompt tag (e.g. Turbo v2.0's, 2026-11-25) use the same draw untagged
-            key = f"{i}_{steps}_{size}"
-        if key not in done:
-            raise SystemExit(f"{run}: pair {i} missing ({key})")
-        data.append((prompt, done[key]))
     cache = torch.load(os.path.join(run, "prompts.pt"))
-    return data, cache
+    data, rows, untagged = [], [], []
+    for i, prompt in enumerate(reg_prompts):
+        tag = prompt_tag(prompt)
+        key = f"{i}_{steps}_{size}_{tag}"
+        tagged = key in done
+        if not tagged:
+            key = f"{i}_{steps}_{size}"
+            untagged.append(i)
+        if key not in done:
+            raise SystemExit(f"{run}: pair {i} missing ({i}_{steps}_{size}_{tag})")
+        if prompt not in cache:
+            raise SystemExit(f"{run}/prompts.pt has no embedding for pair {i}'s prompt {prompt[:80]!r}")
+        data.append((prompt, done[key]))
+        rows.append([i, tag, key, tagged])
+    if untagged:
+        why = untagged_draw_ok(run, seed, pairs, steps, size)
+        if why:
+            raise SystemExit(f"{run}: {len(untagged)} regression pairs have no prompt tag and their draw cannot be verified ({why}); "
+                             "their targets may belong to other prompts. Rebuild the cache with moss_dmd_train or pass the run's own "
+                             "--data-seed / --data-pairs / --data-steps / --size")
+    manifest = {"data_run": os.path.abspath(run), "pairs": len(data), "tagged": len(data) - len(untagged),
+                "untagged_verified": len(untagged), "draw": {"seed": seed, "pairs": pairs, "steps": steps, "size": size},
+                "rows": rows}
+    return data, cache, manifest
 
 
 def main():
@@ -95,16 +129,27 @@ def main():
     os.makedirs(args.out, exist_ok=True)
     with run_lock(args.out):
         seal_run(args.out, args, {"unet": folder_paths.get_full_path_or_raise("diffusion_models", args.unet),
-                                  "vae": folder_paths.get_full_path_or_raise("vae", args.vae), "data_run": args.data_run})
+                                  "vae": folder_paths.get_full_path_or_raise("vae", args.vae), "data_run": args.data_run}, structural=("steps",))
         train(args)
 
 
 def train(args):
-    data, cache = load_data(args.data_run, args.data_prompts, args.data_seed, args.data_pairs, args.data_steps, args.size)
+    data, cache, manifest = load_data(args.data_run, args.data_prompts, args.data_seed, args.data_pairs, args.data_steps, args.size)
+    man_path = os.path.join(args.out, "data_manifest.json")
+    if os.path.exists(man_path):  # a resume must read the same pairs it was trained on
+        with open(man_path, encoding="utf-8") as f:
+            if json.load(f).get("rows") != manifest["rows"]:
+                raise SystemExit(f"{man_path}: the data run now gives other pairs than this run was trained on; use a new --out")
+    else:
+        tmp = f"{man_path}.{os.getpid()}.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=0, ensure_ascii=False)
+        os.replace(tmp, man_path)
     for pr in [""] + PREVIEW_PROMPTS:
         if pr not in cache:
             raise SystemExit(f"{args.data_run}/prompts.pt has no embedding for {pr!r}")
-    print(f"{len(data)} data latents from {args.data_run}", flush=True)
+    print(f"{len(data)} data latents from {args.data_run} ({manifest['tagged']} tagged, {manifest['untagged_verified']} untagged with "
+          "a verified draw)", flush=True)
     patcher = comfy.sd.load_diffusion_model(folder_paths.get_full_path_or_raise("diffusion_models", args.unet))
     vae = comfy.sd.VAE(sd=comfy.utils.load_torch_file(folder_paths.get_full_path_or_raise("vae", args.vae)))
     bm = patcher.model
@@ -171,7 +216,7 @@ def train(args):
     opt = torch.optim.Adam(gen.parameters(), lr=args.lr)
     rng = random.Random(args.seed)
     noise_gen = torch.Generator(device=device).manual_seed(args.seed + 1)
-    log, start = [], 1
+    log, start, skipped, run_skips = [], 1, 0, 0
     ckpt_path = os.path.join(args.out, "ckpt.pt")
     if os.path.exists(ckpt_path):
         ck = torch.load(ckpt_path, map_location=device, weights_only=False)
@@ -181,7 +226,7 @@ def train(args):
             ema = {k: v.to(device) for k, v in ck["ema"].items()}
         rng.setstate(ck["rng"])
         noise_gen.set_state(ck["noise_gen"].cpu())
-        log, start = ck["log"], ck["update"] + 1
+        log, start, skipped = ck["log"], ck["update"] + 1, ck.get("skipped", 0)
         print(f"resumed from update {ck['update']}", flush=True)
 
     ctx = lambda prompt: cache[prompt].to(device)
@@ -242,35 +287,52 @@ def train(args):
                 return loss.detach()
             losses.append(float(with_grad(student)))
         grads = [q.grad for q in gen.parameters() if q.grad is not None]
-        if any(not torch.isfinite(g).all() for g in grads):
-            print(f"u{update}: non-finite gradient, step skipped", flush=True)
-            continue
-        gn = torch.nn.utils.clip_grad_norm_(list(gen.parameters()), 1.0)
-        opt.step()
-        if ema is not None:
-            with torch.no_grad():
-                for k, v in gen.named_parameters():
-                    ema[k].mul_(args.ema_decay).add_(v.detach(), alpha=1 - args.ema_decay)
-        log.append({"u": update, "loss": round(float(np.mean(losses)), 6), "grad_norm": round(float(gn), 4), "edge": edge_hits,
+        finite = all(torch.isfinite(g).all() for g in grads)
+        # a non-finite gradient skips the optimizer step only: the update still counts as an attempt and still reaches the
+        # checkpoint / LoRA / preview saves below, so the last update always leaves a coherent final file (audit 0.9.9 M10)
+        if finite:
+            run_skips = 0
+            gn = torch.nn.utils.clip_grad_norm_(list(gen.parameters()), 1.0)
+            opt.step()
+            if ema is not None:
+                with torch.no_grad():
+                    for k, v in gen.named_parameters():
+                        ema[k].mul_(args.ema_decay).add_(v.detach(), alpha=1 - args.ema_decay)
+        else:
+            skipped += 1
+            run_skips += 1
+            opt.zero_grad(set_to_none=True)
+            print(f"u{update}: non-finite gradient, optimizer step skipped ({skipped} so far)", flush=True)
+        log.append({"u": update, "loss": round(float(np.mean(losses)), 6) if np.isfinite(np.mean(losses)) else None,
+                    "grad_norm": round(float(gn), 4) if finite else None, "edge": edge_hits, "skipped": not finite,
                     "up_norm": round(sum(q.detach().square().sum().item() for q in gen.up.values()) ** 0.5, 5)})
+        stop = run_skips >= MAX_RUN_SKIPS
         if update % 10 == 0 or update == start:
             el = time.time() - t0
-            print(f"u{update}: loss {np.mean([e['loss'] for e in log[-10:]]):.5f} grad_norm {log[-1]['grad_norm']:.3g} up_norm {log[-1]['up_norm']:.4f} "
+            fin = [e["loss"] for e in log[-10:] if e["loss"] is not None]
+            gtxt = f"{log[-1]['grad_norm']:.3g}" if finite else "skipped"
+            print(f"u{update}: loss {np.mean(fin) if fin else float('nan'):.5f} grad_norm {gtxt} up_norm {log[-1]['up_norm']:.4f} "
                   f"({el / (update - start + 1):.2f} s/update, {torch.cuda.max_memory_allocated() / 2**30:.1f} GB peak)", flush=True)
-        if update % args.save_every == 0 or update == args.updates:
+        if update % args.save_every == 0 or update == args.updates or stop:
             tmp = ckpt_path + ".tmp"
             torch.save({"update": update, "gen": gen.state_dict(), "opt": opt.state_dict(), "ema": ema, "rng": rng.getstate(),
-                        "noise_gen": noise_gen.get_state(), "log": log, "args": vars(args)}, tmp)
+                        "noise_gen": noise_gen.get_state(), "log": log, "skipped": skipped, "args": vars(args)}, tmp)
             os.replace(tmp, ckpt_path)
             save_lora(os.path.join(args.out, "lora_last.safetensors"))
             with open(os.path.join(args.out, "report_pcm.json"), "w", encoding="utf-8") as f:
-                json.dump({"args": vars(args), "update": update, "log": log}, f, indent=0)
+                json.dump({"args": vars(args), "update": update, "optimizer_steps": update - skipped, "skipped": skipped,
+                           "log": log}, f, indent=0)
+        if stop:
+            for h in handles:
+                h.remove()
+            raise SystemExit(f"u{update}: {run_skips} non-finite gradients in a row; stopped with the checkpoint and lora_last saved at "
+                             f"u{update} ({update - skipped} optimizer steps, {skipped} skipped). Lower --lr or check the data.")
         if update % args.sample_every == 0 or update == args.updates:
             save_lora(os.path.join(args.out, f"lora_u{update:05d}.safetensors"), ema)
             preview(update)
     for h in handles:
         h.remove()
-    print(f"done: {args.updates} updates", flush=True)
+    print(f"done: {args.updates} updates ({args.updates - skipped} optimizer steps, {skipped} skipped for a non-finite gradient)", flush=True)
 
 
 if __name__ == "__main__":

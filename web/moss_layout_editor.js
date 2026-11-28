@@ -133,6 +133,38 @@ function upstreamImageUrl(node) {
 // prompt (a job already in the queue, an earlier run of this editor) neither imports nor cancels it (audit 0.8.1 #4).
 const sameNode = (detail, node) => [detail?.display_node, detail?.node].some((id) => id != null && (String(id) === String(node.id) || String(id).endsWith(`:${node.id}`)));
 
+// One wrapper around api.queuePrompt for every Layout Editor, installed once and never removed: each DRAFT LAYOUT registers the
+// editor it waits for, and the request whose partial targets name that editor hands it its prompt_id. Two editors drafting at
+// once no longer stack wrappers that restore each other out of order (audit 0.9.9 M7).
+export const draftWaiters = new Map(); // editor node id -> { onQueued(prompt_id), timer }
+let hookedApi = null;
+export function hookDraftQueue(api) {
+    if (hookedApi === api) return;
+    hookedApi = api;
+    const orig = api.queuePrompt;
+    api.queuePrompt = async function (number, data, options) {
+        const res = await orig.apply(this, arguments);
+        if (res?.prompt_id && draftWaiters.size) {
+            const targets = (options?.partialExecutionTargets || []).map(String);
+            for (const [id, w] of [...draftWaiters]) {
+                if (targets.some((t) => t === id || t.endsWith(`:${id}`))) {
+                    draftWaiters.delete(id);
+                    clearTimeout(w.timer);
+                    w.onQueued(res.prompt_id);
+                }
+            }
+        }
+        return res;
+    };
+}
+
+function waitForDraft(id, onQueued) {
+    clearTimeout(draftWaiters.get(id)?.timer);
+    // a request queued behind another frontend batch: stop waiting for it after 15 s
+    const timer = setTimeout(() => { if (draftWaiters.get(id)?.timer === timer) draftWaiters.delete(id); }, 15000);
+    draftWaiters.set(id, { onQueued, timer });
+}
+
 export function attachDraftRun(node, importDraftIn) {
     if (node._hadesDraftRun) return node._hadesDraftRun;
     let pending = null; // the prompt_id of this editor's DRAFT LAYOUT run, until it ends
@@ -174,24 +206,15 @@ export function attachDraftRun(node, importDraftIn) {
     };
     const draftLayout = async () => {
         // the prompt_id of the request whose partial targets are this editor, read from the API while the command queues it
-        const orig = api.queuePrompt;
-        let restored = false;
-        const restore = () => { if (!restored) { restored = true; api.queuePrompt = orig; } };
-        api.queuePrompt = async function (number, data, options) {
-            const res = await orig.apply(this, arguments);
-            const targets = (options?.partialExecutionTargets || []).map(String);
-            if (res?.prompt_id && targets.some((t) => t === String(node.id) || t.endsWith(`:${node.id}`))) {
-                restore();
-                setPending(res.prompt_id);
-            }
-            return res;
-        };
-        setTimeout(restore, 15000); // a request queued behind another frontend batch: give up waiting for it
+        hookDraftQueue(api);
+        const id = String(node.id);
+        waitForDraft(id, setPending);
         try {
             app.canvas.selectNode(node, false);
             await runCommand("Comfy.QueueSelectedOutputNodes");
         } catch (e) {
-            restore();
+            clearTimeout(draftWaiters.get(id)?.timer);
+            draftWaiters.delete(id);
             console.error("HaDeS MOSS Layout Editor: DRAFT LAYOUT could not queue", e);
         }
     };

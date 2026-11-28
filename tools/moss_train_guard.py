@@ -56,27 +56,43 @@ def run_lock(out):
             os.remove(lock)
 
 
-def run_identity(args, files):
-    structural = {k: v for k, v in sorted(vars(args).items()) if k not in OPERATIONAL}
+def run_identity(args, files, structural=()):
+    """`structural`: options in OPERATIONAL that this trainer must not let change on a resume (audit 0.9.9 A3: in PCM and DMD
+    `steps` defines the phases / the generator's sigma schedule, so resuming with other steps trained part of a run for another
+    target; in the edit trainer it is the run's length and may grow)."""
+    operational = OPERATIONAL - set(structural)
+    structural = {k: v for k, v in sorted(vars(args).items()) if k not in operational}
     return {"args": json.loads(json.dumps(structural, default=str)),
             "files": {k: file_identity(p) for k, p in sorted(files.items()) if p}}
 
 
-def seal_run(out, args, files):
-    """Writes or checks <out>/run_identity.json. Returns the identity. Stops with the differences when they do not match."""
-    ident = run_identity(args, files)
+def seal_run(out, args, files, structural=()):
+    """Writes or checks <out>/run_identity.json. Returns the identity. Stops with the differences when they do not match.
+    An option sealed now but not by an older identity file (it was operational then) is added to the file with a note."""
+    ident = run_identity(args, files, structural)
     path = os.path.join(out, "run_identity.json")
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
             old = json.load(f)
-        diffs = []
+        diffs, added = [], []
         for part in ("args", "files"):
             for k in sorted(set(old.get(part, {})) | set(ident[part])):
+                if part == "args" and k in structural and k not in old.get("args", {}):
+                    added.append(k)
+                    continue
                 if old.get(part, {}).get(k) != ident[part].get(k):
                     diffs.append(f"{part}.{k}: {old.get(part, {}).get(k)!r} -> {ident[part].get(k)!r}")
         if diffs:
             raise SystemExit(f"{out} holds a run with another recipe; its checkpoint and caches would be mixed with this one. "
                              "Use a new --out. Differences:\n  " + "\n  ".join(diffs))
+        if added:
+            print(f"note: {out}'s run_identity.json did not seal {', '.join(added)} (an older guard); sealed now as "
+                  + ", ".join(f"{k}={ident['args'][k]!r}" for k in added) + ": make sure the checkpoint was trained with it", flush=True)
+            old.setdefault("args", {}).update({k: ident["args"][k] for k in added})
+            tmp = f"{path}.{os.getpid()}.tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(old, f, indent=1, ensure_ascii=False)
+            os.replace(tmp, path)
         return ident
     if any(os.path.exists(os.path.join(out, n)) for n in ("ckpt.pt", "prompts.pt", "reg_pairs.pt", "pairs.pt")):
         print(f"note: {out} has a checkpoint or caches from before run_identity.json existed; they cannot be checked and are "

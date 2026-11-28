@@ -191,7 +191,7 @@ def main():
     # one run per folder, and only the run it was started with (audit 0.9.6 F01 / F09: tools/moss_train_guard.py)
     with run_lock(args.out):
         seal_run(args.out, args, {"unet": folder_paths.get_full_path_or_raise("diffusion_models", args.unet), "clip": folder_paths.get_full_path_or_raise("text_encoders", args.clip),
-                                  "vae": folder_paths.get_full_path_or_raise("vae", args.vae), "prompts_file": args.prompts_file, "init_lora": args.init_lora})
+                                  "vae": folder_paths.get_full_path_or_raise("vae", args.vae), "prompts_file": args.prompts_file, "init_lora": args.init_lora}, structural=("steps",))
         train(args)
 
 

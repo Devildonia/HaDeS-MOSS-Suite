@@ -1,4 +1,5 @@
 from collections import Counter
+import json
 import os
 
 import torch
@@ -83,6 +84,13 @@ class HaDeSMossLoader:
     DESCRIPTION = ("Loads the three MOSS-Image files in one node: diffusion model, text encoder (always as type moss_image) and VAE, "
                    "the same as the core Load Diffusion Model, Load CLIP and Load VAE. Checks that each one is the MOSS-Image kind and "
                    "writes their names and precision to info for Suite Telemetry.")
+
+    @classmethod
+    def IS_CHANGED(cls, unet_name, clip_name, vae_name, weight_dtype="default", clip_device="default"):
+        """The three files' [size, mtime]: a file replaced under the same name loads again instead of reusing the cached model, so
+        the signature this node records (and the hash the Image Saver writes) is the file the image was made with (audit 0.9.9 A2)."""
+        return json.dumps([file_sig("diffusion_models", unet_name), file_sig("text_encoders", clip_name), file_sig("vae", vae_name),
+                           weight_dtype, clip_device])
 
     def load(self, unet_name, clip_name, vae_name, weight_dtype="default", clip_device="default"):
         model = nodes.UNETLoader().load_unet(unet_name, weight_dtype)[0]

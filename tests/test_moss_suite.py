@@ -1183,7 +1183,7 @@ class TestLoader(unittest.TestCase):
         info = common.format_info("x", "loader", model="m.safetensors", precision=q, weight_dtype="default", attention="comfy_kitchen_int8",
                                   layers=LAYERS, text_encoder="te.safetensors", vae="flux2-vae.safetensors")
         findings = json.loads(telemetry.HaDeSMossSuiteTelemetry().audit("T", info_1=info)["result"][1])["findings"]
-        self.assertTrue(any("57% slower" in f["message"] for f in findings))
+        self.assertTrue(any("2.2x faster than bf16" in f["message"] for f in findings))
 
 
 class TestCompareSheet(unittest.TestCase):
@@ -2148,8 +2148,9 @@ class TestMetadataReader(unittest.TestCase):
 
 
 class DepthMapTest(unittest.TestCase):
-    """MOSS Depth Map with a stand-in for comfyui_controlnet_aux: the attention is single-scaled during the call only and restored
-    after (also on an error), missing weights and a missing pack give clear errors, and nothing is downloaded."""
+    """MOSS Depth Map with a stand-in for comfyui_controlnet_aux: its own detector's attention blocks get the single-scale forward
+    (the pack's classes and other models stay unchanged, audit 0.9.9 M3), the detector reloads when the file changes (M4), missing
+    weights and a missing pack give clear errors, and nothing is downloaded."""
 
     def setUp(self):
         import types
@@ -2157,7 +2158,11 @@ class DepthMapTest(unittest.TestCase):
         self.depth._MODELS.clear()
         att = types.ModuleType("att")
 
-        class Attention:
+        class Attention(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.num_heads, self.qkv, self.proj, self.proj_drop = 2, torch.nn.Linear(8, 24), torch.nn.Identity(), torch.nn.Identity()
+
             def forward(self, x):
                 return "plain"
 
@@ -2166,27 +2171,26 @@ class DepthMapTest(unittest.TestCase):
                 return "double"
         att.Attention, att.MemEffAttention = Attention, MemEffAttention
         self.att = att
-        seen = self.seen = []
         test = self
+        self.loads = []
 
         class Detector:
-            loads = 0
-
             @classmethod
             def from_pretrained(cls, pretrained_model_or_path=None, filename=None):
-                cls.loads += 1
-                return cls()
+                test.loads.append(pretrained_model_or_path)
+                d = cls()
+                d.model = torch.nn.Sequential(MemEffAttention())
+                return d
 
             def to(self, device):
                 return self
 
             def __call__(self, img, detect_resolution=512, max_depth=20.0):
-                seen.append(MemEffAttention().forward(None))
+                test.seen = self.model[0](torch.zeros(1, 3, 8))
                 if test.fail:
                     raise RuntimeError("boom")
                 import numpy
                 return numpy.full((detect_resolution, detect_resolution, 3), 200, dtype=numpy.uint8)
-        self.Detector = Detector
         self.fail = False
         da = types.ModuleType("da")
         da.DepthAnythingV2Detector = Detector
@@ -2203,37 +2207,54 @@ class DepthMapTest(unittest.TestCase):
     def tearDown(self):
         self.depth.aux_modules, self.depth.importlib.import_module = self.saved
 
-    def weights(self, ckpt="depth_anything_v2_vitl.pth"):
+    def weights(self, ckpt="depth_anything_v2_vitl.pth", data=b""):
         d = os.path.join(self.ckpts, "depth-anything", "X")
         os.makedirs(d, exist_ok=True)
-        open(os.path.join(d, ckpt), "wb").close()
+        with open(os.path.join(d, ckpt), "wb") as f:
+            f.write(data)
+        return d
 
-    def test_single_scale_during_call_only(self):
-        self.weights()
-        before = self.att.MemEffAttention.forward
+    def test_single_scale_on_its_own_model_only(self):
+        folder = self.weights()
         img = torch.zeros(2, 32, 48, 3)
         out, info = self.depth.HaDeSMossDepthMap().make(img, "depth_anything_v2_vitl.pth", 64)
-        self.assertEqual(self.seen, ["plain", "plain"])
-        self.assertIs(self.att.MemEffAttention.forward, before)
+        self.assertIsInstance(self.seen, torch.Tensor)  # our forward ran, not the pack's "double" / "plain"
+        self.assertEqual(self.att.MemEffAttention()(torch.zeros(1, 3, 8)), "double")  # the pack's class is unchanged
+        self.assertEqual(os.path.normcase(self.loads[0]), os.path.normcase(folder))  # loaded from the path checked, never resolved again
         self.assertEqual(tuple(out.shape), (2, 64, 64, 3))
         self.assertAlmostEqual(float(out[0, 0, 0, 0]), 200 / 255, places=5)
         meta = common.parse_info_meta(info)
         self.assertEqual((meta["node"], meta["ckpt"], meta["images"], meta["attention"]), ("depth_map", "depth_anything_v2_vitl.pth", 2, "single scale"))
         self.depth.HaDeSMossDepthMap().make(img[:1], "depth_anything_v2_vitl.pth", 64)
-        self.assertEqual(self.Detector.loads, 1)  # kept between runs
+        self.assertEqual(len(self.loads), 1)  # kept between runs
 
-    def test_restored_after_an_error(self):
+    def test_forward_matches_one_scale(self):
+        a = self.att.MemEffAttention()
+        self.depth.fix_attention(torch.nn.Sequential(a), self.att)
+        x = torch.randn(1, 5, 8)
+        q, k, v = a.qkv(x).reshape(1, 5, 3, 2, 4).permute(2, 0, 3, 1, 4)
+        ref = ((q * 4 ** -0.5) @ k.transpose(-2, -1)).softmax(-1) @ v
+        self.assertTrue(torch.allclose(a(x), ref.transpose(1, 2).reshape(1, 5, 8), atol=1e-5))
+
+    def test_reloads_when_the_file_changes(self):
+        self.weights(data=b"a")
+        self.depth.HaDeSMossDepthMap().make(torch.zeros(1, 8, 8, 3), "depth_anything_v2_vitl.pth", 64)
+        self.weights(data=b"bb")  # another file under the same name
+        self.depth.HaDeSMossDepthMap().make(torch.zeros(1, 8, 8, 3), "depth_anything_v2_vitl.pth", 64)
+        self.assertEqual(len(self.loads), 2)
+        self.assertEqual(len(self.depth._MODELS), 1)  # the old detector is dropped
+
+    def test_error_leaves_the_pack_alone(self):
         self.weights()
-        before = self.att.MemEffAttention.forward
         self.fail = True
         with self.assertRaisesRegex(RuntimeError, "boom"):
             self.depth.HaDeSMossDepthMap().make(torch.zeros(1, 8, 8, 3), "depth_anything_v2_vitl.pth", 64)
-        self.assertIs(self.att.MemEffAttention.forward, before)
+        self.assertEqual(self.att.MemEffAttention()(torch.zeros(1, 3, 8)), "double")
 
     def test_missing_weights_are_not_downloaded(self):
         with self.assertRaisesRegex(RuntimeError, "depth_anything_v2_vitb.pth is not in"):
             self.depth.HaDeSMossDepthMap().make(torch.zeros(1, 8, 8, 3), "depth_anything_v2_vitb.pth", 64)
-        self.assertEqual(self.Detector.loads, 0)
+        self.assertEqual(self.loads, [])
 
     def test_missing_pack(self):
         self.depth.aux_modules = self.saved[0]
@@ -2254,6 +2275,227 @@ class DepthMapTest(unittest.TestCase):
 
     def test_telemetry_names_it(self):
         self.assertEqual(telemetry.NODE_NAMES["depth_map"], "Depth Map")
+
+class TestAudit099(unittest.TestCase):
+    """Regression tests of the 0.9.9 audit's findings (A = high, M = medium, B = low)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.sd = tiny_state_dict(9)
+        cls.model = load(cls.sd)
+
+    def test_a1_a_lora_whose_factors_do_not_fit_is_an_error(self):
+        g = torch.Generator().manual_seed(1)
+        bad = {"diffusion_model.layers.0.proj.o.lora_A.weight": torch.randn(4, DIM + 8, generator=g),  # a key of the model, wrong width
+               "diffusion_model.layers.0.proj.o.lora_B.weight": torch.randn(DIM, 4, generator=g)}
+        safetensors.torch.save_file(bad, os.path.join(TMP, "bad_shape.safetensors"))
+        with self.assertRaisesRegex(ValueError, "do not fit this model"):
+            loras.HaDeSMossMultiLora().apply(self.model, True, json.dumps([{"name": "bad_shape.safetensors"}]))
+        qkv = {"diffusion_model.layers.1.proj.qkv.lora_A.weight": torch.randn(4, DIM, generator=g),  # fused qkv, 2 x dim instead of 3
+               "diffusion_model.layers.1.proj.qkv.lora_B.weight": torch.randn(2 * DIM, 4, generator=g)}
+        safetensors.torch.save_file(qkv, os.path.join(TMP, "bad_qkv.safetensors"))
+        with self.assertRaisesRegex(ValueError, "proj.qkv"):
+            loras.load_lora_patches("bad_qkv.safetensors", self.model)
+        # a control adapter widening video_embedder is allowed; any other set / diff of another shape is not
+        w = self.sd["video_embedder.weight"]
+        state = {"diffusion_model.video_embedder.weight": w, "diffusion_model.layers.0.proj.o.weight": self.sd["layers.0.proj.o.weight"]}
+        wide = torch.zeros(w.shape[0], w.shape[1] * 3)
+        self.assertEqual(loras.patch_shape_errors({"diffusion_model.video_embedder.weight": ("set", (wide,))}, state), [])
+        self.assertEqual(len(loras.patch_shape_errors({"diffusion_model.layers.0.proj.o.weight": ("diff", (torch.zeros(DIM, DIM + 1),))}, state)), 1)
+
+    def test_a2_contradicting_signatures_get_no_hash_in_either_order(self):
+        isaver = importlib.import_module(f"{PACK}.moss_image_saver_nodes")
+        path = os.path.join(TMP, "a2_unet.safetensors")
+        safetensors.torch.save_file({"x": torch.ones(3)}, path)
+        st = os.stat(path)
+        now, old = [st.st_size, st.st_mtime_ns], [st.st_size, st.st_mtime_ns - 10**9]
+        f = common.format_info
+        loader = common.parse_info_meta(f("x", "loader", model="a2_unet", model_file="a2_unet.safetensors", model_sig=old,
+                                          vae="v.safetensors", text_encoder="te.safetensors"))
+        ks = common.parse_info_meta(f("x", "ksampler", width=64, height=64, steps=8, cfg=1.0, flow_shift=5.0, sampler="euler",
+                                      scheduler="simple", seed=1, denoise=1.0, slg="off",
+                                      model_files=[{"file": "a2_unet.safetensors", "folder": "diffusion_models", "sig": now}]))
+        self.assertEqual(isaver.recorded_sigs([loader, ks]), isaver.recorded_sigs([ks, loader]))
+        self.assertEqual(isaver.recorded_sigs([loader, ks])[("diffusion_models", "a2_unet.safetensors")], isaver.CONFLICT)
+        with patch.object(isaver.folder_paths, "get_full_path", side_effect=lambda folder, name: path):
+            for metas in ([loader, ks], [ks, loader]):
+                params, notes = isaver.a1111_parameters(metas, "A cat.", "", True)
+                self.assertNotIn("Model hash", params)
+            same = dict(loader, model_sig=now)
+            self.assertIn("Model hash", isaver.a1111_parameters([same, ks], "A cat.", "", True)[0])
+
+    def test_a2_the_loader_reloads_a_file_replaced_under_the_same_name(self):
+        loader = importlib.import_module(f"{PACK}.moss_loader_nodes")
+        path = os.path.join(TMP, "a2_loader.safetensors")
+        safetensors.torch.save_file({"x": torch.ones(3)}, path)
+        with patch.object(folder_paths, "get_full_path", side_effect=lambda folder, name: path):
+            first = loader.HaDeSMossLoader.IS_CHANGED("u", "c", "v")
+            self.assertEqual(first, loader.HaDeSMossLoader.IS_CHANGED("u", "c", "v"))
+            safetensors.torch.save_file({"x": torch.zeros(5)}, path)
+            os.utime(path, ns=(os.stat(path).st_mtime_ns + 10**9,) * 2)
+            self.assertNotEqual(first, loader.HaDeSMossLoader.IS_CHANGED("u", "c", "v"))
+
+    def test_a4_an_untagged_cache_needs_a_verified_draw(self):
+        import random
+        sys.path.insert(0, os.path.join(PACK_DIR, "tools"))
+        argv = sys.argv
+        try:
+            pcm = importlib.import_module("moss_pcm_train")
+        finally:
+            sys.argv = argv
+        run = tempfile.mkdtemp(prefix="hades_pcm_data_")
+        prompts = ["a cat", "a dog", "a horse", "a fox"]
+        with open(os.path.join(run, "prompts.json"), "w", encoding="utf-8") as fh:
+            json.dump(prompts, fh)
+        drawn = random.Random(0 + 7).sample(prompts, 4)
+        torch.save({f"{i}_25_64": torch.full((1, 128, 4, 4), float(prompts.index(p))) for i, p in enumerate(drawn)},
+                   os.path.join(run, "reg_pairs.pt"))
+        torch.save({p: torch.zeros(1, 2, 8) for p in prompts}, os.path.join(run, "prompts.pt"))
+        with self.assertRaisesRegex(SystemExit, "cannot be verified"):  # no report_dmd.json: nothing proves the draw
+            pcm.load_data(run, 4, 0, 4, 25, 64)
+        with open(os.path.join(run, "report_dmd.json"), "w", encoding="utf-8") as fh:
+            json.dump({"args": {"seed": 0, "reg_pairs": 4, "reg_teacher_steps": 25, "size": 64}}, fh)
+        data, _, manifest = pcm.load_data(run, 4, 0, 4, 25, 64)
+        self.assertEqual([float(x.flatten()[0]) for _, x in data], [float(prompts.index(p)) for p, _ in data])  # each latent its prompt
+        self.assertEqual((manifest["tagged"], manifest["untagged_verified"]), (0, 4))
+        with self.assertRaisesRegex(SystemExit, "seed 0 \\(asked 1\\)"):  # the audit's case: another selection seed
+            pcm.load_data(run, 4, 1, 4, 25, 64)
+        torch.save({p: torch.zeros(1, 2, 8) for p in prompts[:3]}, os.path.join(run, "prompts.pt"))
+        with self.assertRaisesRegex(SystemExit, "no embedding"):
+            pcm.load_data(run, 4, 0, 4, 25, 64)
+
+    def test_m10_a_skipped_step_still_reaches_the_final_save(self):
+        """The update loop has no `continue` (a non-finite gradient used to skip the save of the last update) and the report
+        counts optimizer steps and skipped steps apart."""
+        import ast
+        src = open(os.path.join(PACK_DIR, "tools", "moss_pcm_train.py"), encoding="utf-8").read()
+        train = next(n for n in ast.walk(ast.parse(src)) if isinstance(n, ast.FunctionDef) and n.name == "train")
+        loop = next(n for n in train.body if isinstance(n, ast.For) and ast.unparse(n.target) == "update")
+        own = [n for n in ast.walk(loop) if isinstance(n, ast.Continue)]
+        inner = [c for f in ast.walk(loop) if isinstance(f, (ast.For, ast.While)) and f is not loop for c in ast.walk(f) if isinstance(c, ast.Continue)]
+        self.assertEqual(len(own), len(inner))
+        self.assertIn('"optimizer_steps": update - skipped', src)
+        self.assertIn('"skipped": skipped', src)
+
+    def test_m1_control_without_the_adapter_is_an_error(self):
+        width = self.sd["video_embedder.weight"].shape[1]
+        self.assertEqual(sampler.embedder_width(self.model), width)
+        cond = [[torch.zeros(1, 4, 8), {"concat_latent_image": torch.zeros(1, 256, 4, 4)}]]
+        with self.assertRaisesRegex(ValueError, "control adapter"):
+            sampler.check_control_adapter(self.model, cond, cond)
+        sampler.check_control_adapter(self.model, [[torch.zeros(1, 4, 8), {}]], [])  # no map: nothing to check
+        adapted = self.model.clone()
+        wide = torch.zeros(self.sd["video_embedder.weight"].shape[0], width + 256)
+        adapted.add_patches({sampler.EMBEDDER_KEY: ("set", (wide,))}, 1.0)
+        self.assertEqual(sampler.embedder_width(adapted), width + 256)
+        sampler.check_control_adapter(adapted, cond, cond)
+        off = self.model.clone()
+        off.add_patches({sampler.EMBEDDER_KEY: ("set", (wide,))}, 0.0)  # the adapter at strength 0 is not applied
+        with self.assertRaises(ValueError):
+            sampler.check_control_adapter(off, cond, cond)
+
+    def test_m2_a_few_step_lora_is_checked_only_against_its_own_sampler(self):
+        rows = json.dumps([{"name": "turbo8.safetensors", "on": True, "strength": 1.0}, {"name": "off.safetensors", "on": False}])
+        graph = {"1": {"class_type": "UNETLoader", "inputs": {"unet_name": "base.safetensors"}},
+                 "2": {"class_type": "HaDeSMossMultiLora", "inputs": {"model": ["1", 0], "enabled": True, "loras": rows}},
+                 "3": {"class_type": "HaDeSMossKSampler", "inputs": {"model": ["2", 0]}},
+                 "4": {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["1", 0], "lora_name": "zero.safetensors", "strength_model": 0.0}},
+                 "5": {"class_type": "HaDeSMossKSampler", "inputs": {"model": ["4", 0]}}}
+        self.assertEqual(sampler.model_loras(graph, "3"), ["turbo8.safetensors"])
+        self.assertEqual(sampler.model_loras(graph, "5"), [])
+        self.assertIsNone(sampler.model_loras(None, "3"))
+        f = common.format_info
+        ml = f("x", "multi_lora", enabled=True, loras=[{"name": "turbo8.safetensors", "strength": 1.0}],
+               turbo=[{"name": "turbo8.safetensors", "steps": 8}])
+        ks = lambda steps, carried: f("x", "ksampler", width=64, height=64, steps=steps, cfg=1.0, flow_shift=5.0, sampler="euler",
+                                      scheduler="simple", seed=1, denoise=1.0, slg="off", model_loras=carried)
+        audit = telemetry.HaDeSMossSuiteTelemetry().audit
+        two_stage = json.loads(audit("T", info_1=ml, info_2=ks(8, ["turbo8.safetensors"]), info_3=ks(25, []))["result"][1])
+        self.assertFalse([x for x in two_stage["findings"] if "trained for 8 steps" in x["message"]])
+        wrong = json.loads(audit("T", info_1=ml, info_2=ks(25, ["turbo8.safetensors"]))["result"][1])
+        self.assertTrue([x for x in wrong["findings"] if "trained for 8 steps" in x["message"]])
+
+    def test_m6_a_missing_weight_is_an_error_and_the_rescale_comes_first(self):
+        names = [("a", dict(self.sd)), ("b", {k: v for k, v in self.sd.items() if k != "layers.3.proj.o.weight"})]
+        with self.assertRaisesRegex(ValueError, "layers.3.proj.o.weight"):
+            common.check_compatible(names)
+        # fp16-fixed model2 (residual writes x 1/16) where one writer is still equal in raw values: it must be rescaled too
+        sd = {k: v.clone() for k, v in self.sd.items()}
+        kept = "text_embedder.blocks.1.ffn_down.weight"
+        for k in sd:
+            if common._RESIDUAL_WRITER_RE.match(k):
+                if k == kept:
+                    continue
+                sd[k] = (sd[k].float() / 16).to(torch.bfloat16)
+            elif k.startswith("shared_block_modulation."):
+                rows = sd[k].float().clone()
+                for c in common._MODULATION_GATES:
+                    rows.view(6, -1, *rows.shape[1:])[c] /= 16
+                sd[k] = rows.to(torch.bfloat16)
+        m, _, _, _, scale = common.apply_block_merge(self.model, load(sd), [1.0] * LAYERS, dict.fromkeys(common.PARTS, 1.0))
+        self.assertAlmostEqual(scale, 16.0, places=1)
+        torch.testing.assert_close(patched_weight(m, kept), self.sd[kept].float() * 16, rtol=0, atol=2e-2)
+
+    def test_m8_literal_none_and_labels_are_kept(self):
+        tc = importlib.import_module(f"{PACK}.moss_textcheck_nodes")
+        self.assertEqual(tc.clean_answer("NONE", ["NONE"]), "NONE")
+        self.assertEqual(tc.clean_answer("NONE", ["OPEN"]), "")
+        self.assertEqual(tc.clean_answer("TEXT: OPEN", ["TEXT: OPEN"]), "TEXT: OPEN")
+        self.assertEqual(tc.clean_answer("Text: OPEN", ["OPEN"]), "OPEN")
+        self.assertEqual(tc.clean_answer("<think>x</think> \"OPEN!\"", ["OPEN!"]), "OPEN!")
+        clip = type("C", (), {"generate": None})()
+        check = tc.check
+        with patch.object(tc, "check", lambda clip, image, layout, expected, mt: check(clip, image, layout, expected, mt, lambda *a: "12 50")):
+            loose = tc.HaDeSMossTextCheck().run(torch.rand(1, 64, 64, 3), clip, expected_text="12.50")
+            strict = tc.HaDeSMossTextCheck().run(torch.rand(1, 64, 64, 3), clip, expected_text="12.50", strict=True)
+        self.assertTrue(loose["result"][2])
+        self.assertFalse(strict["result"][2])  # strict: case and punctuation must match too
+        self.assertTrue(common.parse_info_meta(strict["result"][3])["strict"])
+
+    def test_m9_nothing_is_hashed_when_nothing_is_written(self):
+        isaver = importlib.import_module(f"{PACK}.moss_image_saver_nodes")
+        f = common.format_info
+        tel = telemetry.HaDeSMossSuiteTelemetry().audit("T", info_1=f("x", "loader", model="m", model_file="m.safetensors",
+                                                                 vae="v.safetensors", text_encoder="te.safetensors"),
+                                                        info_2=f("x", "multi_lora", enabled=True, turbo=[],
+                                                                 loras=[{"name": "style.safetensors", "strength": 1.0}]))["result"][1]
+        def boom(*a, **k):
+            raise AssertionError("hashed a file for a PNG that gets no metadata")
+        with patch.object(isaver, "file_sha256", boom):
+            isaver.HaDeSMossImageSaver().save(torch.rand(1, 8, 8, 3), "tests/m9_off", False, False, metadata=tel, write_metadata=False)
+            with patch.object(isaver.args, "disable_metadata", True):
+                isaver.HaDeSMossImageSaver().save(torch.rand(1, 8, 8, 3), "tests/m9_disabled", True, False, metadata=tel)
+
+    def test_b1_a_blind_footer_names_only_the_prompt(self):
+        from PIL import Image
+        cmp = importlib.import_module(f"{PACK}.moss_compare_nodes")
+        f = common.format_info
+        ks = common.parse_info_meta(f("x", "ksampler", seed=1, steps=15, cfg=2.5, sampler="euler", scheduler="simple", width=64, height=64))
+        info = json.dumps({"nodes": [ks, common.parse_info_meta(f("x", "loader", model_file="secretbase.safetensors"))]})
+        out = cmp.HaDeSMossCompareSheet().compare(torch.rand(1, 32, 32, 3), "tests/b1_blind", True, False, image_B=torch.rand(1, 32, 32, 3),
+                                                   info_A=info, info_B=info, footer="", blind=True, blind_seed=1, write_metadata=False)
+        meta = common.parse_info_meta(out["result"][1])
+        self.assertNotIn("secretbase", meta["footer"])
+        self.assertNotIn("15 steps", meta["footer"])
+        with Image.open(os.path.join(TMP, meta["files"][0])) as im:
+            self.assertNotIn("hades_moss_compare", im.text)
+
+    def test_b3_a_corrupt_tensor_entry_is_an_invalid_file(self):
+        import struct
+        path = os.path.join(TMP, "b3_corrupt.safetensors")
+        header = json.dumps({"w": {"dtype": "F32", "shape": "4"}}).encode("utf-8")
+        with open(path, "wb") as fh:
+            fh.write(struct.pack("<Q", len(header)) + header)
+        with self.assertRaisesRegex(ValueError, "invalid safetensors header"):
+            metadata._read_header(path)
+
+    def test_b5_a_huge_core_schedule_is_not_rebuilt_for_the_report(self):
+        import time
+        ms = self.model.get_model_object("model_sampling")
+        t0 = time.time()
+        self.assertIsNone(sampler.start_sigma(ms, "euler", "simple", 200, 0.001, sampler.DENOISE_CORE))
+        self.assertLess(time.time() - t0, 1.0)
+        self.assertIsNotNone(sampler.start_sigma(ms, "euler", "simple", 20, 0.5, sampler.DENOISE_CORE))
 
 
 if __name__ == "__main__":

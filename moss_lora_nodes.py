@@ -132,7 +132,42 @@ def load_lora_patches(lora_name, model):
     if not patches:
         raise ValueError(f"HaDeS MOSS LoRA: '{lora_name}' changes no weight of this MOSS-Image model (none of its keys match); "
                          "it is probably a LoRA for another model.")
+    bad = patch_shape_errors(patches, model.model.state_dict())
+    if bad:
+        raise ValueError(f"HaDeS MOSS LoRA: '{lora_name}' has {len(bad)} weight(s) whose shapes do not fit this model, so ComfyUI would "
+                         f"leave them unchanged with only a console error: " + "; ".join(bad[:4]) + (" ..." if len(bad) > 4 else ""))
     return patches
+
+
+def patch_shape_errors(patches, state):
+    """The patches whose factors cannot apply to their weight (audit 0.9.9 A1: ComfyUI catches the error, logs it and keeps the weight,
+    so a LoRA counted as applied changed nothing). LoRA up / down (and diff) are checked against the weight, or the q / k / v slice of
+    a fused weight; a control adapter may widen video_embedder's input channels. Other adapter kinds are left to the core."""
+    out = []
+    for k, patch in patches.items():
+        key, offset = (k[0], k[1]) if isinstance(k, tuple) else (k, None)
+        weight = state.get(key)
+        if weight is None or (isinstance(patch, tuple) and patch[0] == "config"):
+            continue
+        target = list(weight.shape)
+        if offset is not None:
+            target[offset[0]] = offset[2]
+        name = key.removeprefix("diffusion_model.")
+        widen = name.endswith("video_embedder.weight") or name.endswith("video_embedder.bias")
+        if isinstance(patch, tuple) and patch[0] in ("diff", "set") and isinstance(patch[1][0], torch.Tensor):
+            got = list(patch[1][0].shape)
+            ok = got == target or (widen and len(got) == len(target) and got[0] == target[0] and got[1:] >= target[1:])
+            if not ok and not (patch[0] == "diff" and len(patch[1]) > 1 and isinstance(patch[1][1], dict) and patch[1][1].get("pad_weight")):
+                out.append(f"{name} {patch[0]} {tuple(got)} against {tuple(target)}")
+        elif getattr(patch, "name", None) == "lora":
+            up, down, mid, reshape = patch.weights[0], patch.weights[1], patch.weights[3], patch.weights[5]
+            if reshape is not None or mid is not None:
+                continue
+            ok = (up.shape[0] == target[0] and up.shape[1] == down.shape[0]
+                  and int(torch.tensor(down.shape[1:]).prod()) == int(torch.tensor(target[1:]).prod()))
+            if not ok:
+                out.append(f"{name} up {tuple(up.shape)} down {tuple(down.shape)} against {tuple(target)}")
+    return out
 
 
 class HaDeSMossLoraBlockWeight:

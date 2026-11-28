@@ -60,7 +60,7 @@ def diagnose(metas):
         n = m.get("schedule_steps")
         if m.get("denoise_mode", "core") == "core" and n is not None and m.get("denoise", 1.0) < 0.9999:
             steps, d = m["steps"], m["denoise"]
-            sigma = f" (start sigma {m['start_sigma']:.3f})" if "start_sigma" in m else ""
+            sigma = f" (start sigma {m['start_sigma']:.3f})" if m.get("start_sigma") is not None else ""
             if n == steps:
                 out.append(("warning", f"KSampler denoise {d:.2f} at {steps} steps runs the full schedule from pure noise{sigma}: the input "
                                        "latent is ignored, as at denoise 1. Lower denoise, or use denoise_mode exact."))
@@ -95,15 +95,24 @@ def diagnose(metas):
 
     for m in by_node.get("loader", []):
         if m["precision"].startswith("int8"):
-            out.append(("note", f"Loader: {m['model']} is int8. Measured on an RTX 5090 with the whole model in VRAM: 57% slower than bf16 at "
-                                "1024 x 1024 and 49% at 2048 (SageAttention, PyTorch 2.8.0+cu129), for about half the VRAM (5.2 GB against 9.7 GB)."))
+            out.append(("note", f"Loader: {m['model']} is int8. Measured on an RTX 5090 (2026-11-27, Comfy-Org's int8 ConvRot Base, 1024 x 1024, "
+                                "25 steps): 2.2x faster than bf16 with SageAttention and 2.5x without, peak VRAM 14.3 GB against 19.1 GB with the "
+                                "text encoder loaded, and about twice as close to bf16's image as HMS v1 (tools/RESULTS.md)."))
         if m.get("weight_dtype", "default") != "default":
             out.append(("note", f"Loader: the model was loaded as {m['weight_dtype']}; that conversion was not measured."))
 
     # few-step LoRAs in a Multi-LoRA against the KSampler: the settings come from each file's own metadata
+    # each KSampler records the LoRAs its own model carries (model_loras): a few-step LoRA is checked only against the KSampler or
+    # Compare Sampler branch that sampled with it. Without that record the pair is checked only when it is the only one (audit 0.9.9 M2)
+    samplers = by_node.get("ksampler", [])
     for m in by_node.get("multi_lora", []):
         for t in m.get("turbo", []):
-            for k in by_node.get("ksampler", []):
+            for k in samplers:
+                if "model_loras" in k:
+                    if t["name"] not in k["model_loras"]:
+                        continue
+                elif len(samplers) > 1 or len(by_node.get("multi_lora", [])) > 1:
+                    continue
                 if k.get("turbo"):
                     out.append(("warning", f"Multi-LoRA holds the few-step LoRA {t['name']} and the KSampler's turbo input adds {k['turbo']}: "
                                            "two few-step LoRAs, never measured together."))

@@ -271,7 +271,9 @@ def is_quantized(ws):
 
 
 def check_compatible(names_ws):
-    """Same depth, same q/k/v layout and same shapes for every (name, weights) pair. Returns the number of layers."""
+    """Same depth, same q/k/v layout, the same weights and the same shapes for every (name, weights) pair. Returns the number of
+    layers. A weight present in one model only is an error: the mergers and the Extractor used to skip it without a word, so a
+    model missing a projection merged as if it were complete (audit 0.9.9 M6)."""
     (name0, ws0), rest = names_ws[0], names_ws[1:]
     n_layers = count_layers(ws0.keys())
     for name, ws in rest:
@@ -280,6 +282,11 @@ def check_compatible(names_ws):
         if ("layers.0.proj.qkv.weight" in ws0) != ("layers.0.proj.qkv.weight" in ws):
             raise ValueError(f"HaDeS MOSS Merger: {name0} and {name} store q/k/v differently (fused proj.qkv vs split proj.q/k/v); "
                              "load them from files of the same layout.")
+        only0, only = sorted(set(ws0) - set(ws)), sorted(set(ws) - set(ws0))
+        if only0 or only:
+            listed = ", ".join([f"{k} (only in {name0})" for k in only0[:3]] + [f"{k} (only in {name})" for k in only[:3]])
+            raise ValueError(f"HaDeS MOSS Merger: {name0} and {name} do not hold the same weights ({len(only0) + len(only)} differ: "
+                             f"{listed}{' ...' if len(only0) + len(only) > 6 else ''}); a file is incomplete or of another kind.")
         for k, w in ws.items():
             if k in ws0 and w.shape != ws0[k].shape:
                 raise ValueError(f"HaDeS MOSS Merger: shape mismatch on '{k}': {tuple(ws0[k].shape)} ({name0}) vs {tuple(w.shape)} ({name}).")
@@ -312,10 +319,11 @@ def apply_block_merge(model1, model2, layer_ratios, part_ratios):
             continue
         patch_key = f"diffusion_model.{k}"
         exact = not isinstance(w1, QuantizedTensor) and not isinstance(w2, QuantizedTensor)
-        if exact and patch_key not in m.patches and patch_key not in model2.patches and same_weight(w1, w2):
+        rescale = rescale_for(k, w2, scale) if scale is not None else None
+        # equal raw weights are skipped only when model2's weight is not rescaled: rescaled, it differs from model1's (audit 0.9.9 M6)
+        if exact and rescale is None and patch_key not in m.patches and patch_key not in model2.patches and same_weight(w1, w2):
             continue
         storage = torch.bfloat16 if isinstance(w1, QuantizedTensor) else w1.dtype
-        rescale = rescale_for(k, w2, scale) if scale is not None else None
         m.add_patches({patch_key: MossMergeAdapter(set(), (key_patches(m, patch_key), key_patches(model2, patch_key), ratio, storage, rescale))}, 1.0)
         merged += 1
     if quantized:

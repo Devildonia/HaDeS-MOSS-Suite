@@ -516,7 +516,8 @@
    ],
    "widgets_values": [
     "",
-    96
+    96,
+    false
    ],
    "properties": {
     "Node name for S&R": "HaDeSMossTextCheck"

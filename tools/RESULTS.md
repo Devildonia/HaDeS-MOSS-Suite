@@ -3409,3 +3409,34 @@ from its folder), the fisherman photo at 1024. Script and sheet: `I:/HaDeS_MOSS/
   `ckpt_name` and `resolution` edited, runs at 512 / 768 / 1024 with the info shown in a Preview as Text, the same after save / reload.
   The HaDeS row labels read MODEL and RES (RESOLUTION was cut). The example loads in the three views and is the same after save /
   reload. Not checked: manual resizing and zoom of the node in Nodes 2.0, the vitb / vits weights (not on this install).
+
+## Audit 0.9.9: the 19 findings checked and fixed (2026-11-28)
+
+Each finding of the 0.9.9 audit (4 high, 10 medium, 5 low) was checked against the code before it was fixed. All are real. A1 needs a
+LoRA whose factors do not fit the model (the published LoRAs below pass the new check); A2 a model file replaced under the same name
+while ComfyUI keeps it loaded; A3 a PCM / DMD run resumed with other `--steps` (not checked on the published runs: a resume leaves no
+trace in the files); A4 an untagged regression cache read with another selection
+seed (Turbo v2.0's cache is untagged, and its own `report_dmd.json` records the draw the PCM runs used: seed 0, 2048 pairs, 25 teacher
+steps, 512, so the new check accepts it; asked with seed 1 it is refused). Fixes and their regression tests are listed in CHANGELOG
+(Unreleased). Scripts and outputs: `I:/HaDeS_MOSS/audit_0.9.9/`.
+
+- **A1, LoRA shapes on real files:** the new check against each weight (or its q / k / v slice of a fused `qkv`) finds 0 bad patches
+  in the color / depth control adapter (264 patches, its widened `video_embedder` allowed), Turbo 8-steps v0.7, v1.0 and v2.0 and
+  HaDeS MOSS Detailer v0.1 (54 patches each); a copy of v1.0 with one `ffn_down` factor cut to half its rows is refused with that
+  weight named (`check_real_loras.py`, `results_real_loras.txt`).
+- **M3 / M5, MOSS Depth Map's attention:** now a per-instance single-scale `scaled_dot_product_attention` on the Suite's own detector
+  (the pack's class is no longer touched). On the fisherman at 1024 the map is 0.0015 / 255 MAE from the clean map of the Fixed Pose
+  measurements (largest pixel difference 1); a detector of the pack built after ours still gives the pack's own map (MAE 0.0 to
+  `depth_installed.png`). Peak extra VRAM of the pass on a 3072 x 1024 panorama: 1140 MB, against 2214 MB with the previous dense
+  attention (`check_depth_sdpa.py`, `results_depth_sdpa.txt`). Speed was not compared.
+- **Tests after the fixes:** `test_moss_suite.py` 147 (with the two CUDA checks run, `HADES_MOSS_TEST_CUDA=1`), `test_moss_dev_nodes.py`
+  15, `test_moss_edit_eval.py` 4, `test_moss_pair_check.py` 7, `test_moss_train_guard.py` 7, widgets 12. The M6 test fails on the 0.9.9
+  `moss_common.py`. M10 is checked on the code's structure (no `continue` left in the update loop, both counters in the report), not by a
+  training run with a forced non-finite gradient.
+- **Interface, clean 8189 (frontend 1.57.4):** Text Check's new `strict` row in the three views (classic with HaDeS widgets, classic with
+  standard widgets, Nodes 2.0), switched by a real click in each and kept after save / reload; Multi-LoRA shows the 8 STEPS badge for
+  Turbo 8-steps v1.0 in the three. Two Layout Editors on the "Layout from a Sentence" example with two ideas, DRAFT LAYOUT on both one
+  after the other: each got its own request and imported its own draft (NORTH SEA / HARBOR), twice, with one queue hook. MOSS Depth Map
+  run in that instance on the fisherman at 1024: 2.5 s, the same map as above (MAE 0.0015 / 255). The examples were regenerated
+  (`make_examples.py`): only the three Text Check nodes changed (`strict` false). Not checked here: the Registry zip (built by CI with
+  `comfy node pack`, not installed locally), the Layout Editor in Nodes 2.0, zoom and manual resizing.

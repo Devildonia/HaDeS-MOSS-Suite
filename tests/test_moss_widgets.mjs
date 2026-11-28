@@ -160,3 +160,81 @@ test("a size saved in the standard view survives a reload; a taller HaDeS size d
     context.keepLoadedSize(hadesSaved);
     assert.deepEqual(hadesSaved.size, [380, 216]);
 });
+
+function layoutQueue() {
+    const source = readFileSync(new URL("../web/moss_layout_editor.js", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+    const start = source.indexOf("export const draftWaiters"), end = source.indexOf("export function attachDraftRun");
+    const timers = [];
+    const ctx = vm.createContext({
+        setTimeout: (fn, ms) => { timers.push({ fn, ms, live: true }); return timers.length; },
+        clearTimeout: (t) => { if (t && timers[t - 1]) timers[t - 1].live = false; },
+    });
+    vm.runInContext("let hookedApi = null;\n" + source.slice(start, end).replace(/^export /gm, "").replace("let hookedApi = null;\n", "")
+        + "\nthis.draftWaiters = draftWaiters; this.hookDraftQueue = hookDraftQueue; this.waitForDraft = waitForDraft;", ctx);
+    let n = 0;
+    const api = { queuePrompt: async (number, data, options) => ({ prompt_id: `p${++n}` }) };
+    return { ctx, api, timers };
+}
+
+test("two DRAFT LAYOUT editors share one queue hook and each gets its own request (audit 0.9.9 M7)", async () => {
+    const { ctx, api } = layoutQueue();
+    const orig = api.queuePrompt;
+    ctx.hookDraftQueue(api);
+    const hooked = api.queuePrompt;
+    assert.notEqual(hooked, orig);
+    ctx.hookDraftQueue(api);  // a second editor: no second wrapper around the first
+    assert.equal(api.queuePrompt, hooked);
+    const got = [];
+    ctx.waitForDraft("3", (id) => got.push(["3", id]));
+    ctx.waitForDraft("7", (id) => got.push(["7", id]));
+    await api.queuePrompt(0, {}, { partialExecutionTargets: ["7"] });
+    await api.queuePrompt(0, {}, { partialExecutionTargets: ["12:3"] });  // a node inside a subgraph
+    await api.queuePrompt(0, {}, {});  // an ordinary run: no editor waits for it
+    assert.deepEqual(got, [["7", "p1"], ["3", "p2"]]);
+    assert.equal(ctx.draftWaiters.size, 0);
+});
+
+test("a DRAFT LAYOUT request that never reaches the queue stops waiting after 15 s", async () => {
+    const { ctx, api, timers } = layoutQueue();
+    ctx.hookDraftQueue(api);
+    const got = [];
+    ctx.waitForDraft("3", (id) => got.push(id));
+    assert.equal(timers.at(-1).ms, 15000);
+    timers.at(-1).fn();
+    assert.equal(ctx.draftWaiters.size, 0);
+    await api.queuePrompt(0, {}, { partialExecutionTargets: ["3"] });
+    assert.deepEqual(got, []);
+    ctx.waitForDraft("3", (id) => got.push(id));  // asked again: the older timer does not drop the new wait
+    timers[0].fn();
+    assert.equal(ctx.draftWaiters.size, 1);
+});
+
+test("Multi-LoRA's few-step badge is read again after a failure and after a minute (audit 0.9.9 B2)", async () => {
+    const source = readFileSync(new URL("../web/moss_multilora.js", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+    const code = source.slice(source.indexOf("const fewStepCache"), source.indexOf("// ---- searchable LoRA picker"));
+    let now = 1000, answer = { ok: false }, calls = 0;
+    const api = { fetchApi: async () => { calls++; return answer.ok ? { ok: true, json: async () => answer.meta } : { ok: false, status: 500 }; } };
+    const ctx = vm.createContext({ api, Date: { now: () => now } });
+    vm.runInContext(code.replace("export function", "function") + "\nthis.fewStepSteps = fewStepSteps;", ctx);
+    const node = { setDirtyCanvas() {} };
+    const settle = () => new Promise((r) => setImmediate(r));
+    assert.equal(ctx.fewStepSteps("t.safetensors", node), null);
+    await settle();
+    assert.equal(calls, 1);
+    assert.equal(ctx.fewStepSteps("t.safetensors", node), null);  // a failed read is kept for 10 s only
+    assert.equal(calls, 1);
+    now += 10001;
+    answer = { ok: true, meta: { settings: "8 steps, CFG 1, euler / simple" } };
+    ctx.fewStepSteps("t.safetensors", node);
+    await settle();
+    assert.equal(calls, 2);
+    assert.equal(ctx.fewStepSteps("t.safetensors", node), 8);
+    answer = { ok: true, meta: { settings: "a style LoRA" } };  // the file replaced under the same name
+    now += 30000;
+    assert.equal(ctx.fewStepSteps("t.safetensors", node), 8);  // still within the minute
+    now += 30001;
+    assert.equal(ctx.fewStepSteps("t.safetensors", node), 8);  // read again; the old answer meanwhile
+    await settle();
+    assert.equal(calls, 3);
+    assert.equal(ctx.fewStepSteps("t.safetensors", node), null);
+});

@@ -62,6 +62,25 @@ class TestTrainGuard(unittest.TestCase):
         guard.save_torch_atomic({"x": 1}, path)
         self.assertEqual(sorted(os.listdir(self.out)), ["cache.pt"])
 
+    def test_steps_can_be_sealed_by_the_trainer(self):
+        """Audit 0.9.9 A3: in PCM and DMD `steps` is the target (phases / sigma schedule), not the run's length."""
+        a, b = guard.run_identity(args(steps=4), {}), guard.run_identity(args(steps=8), {})
+        self.assertEqual(a, b)  # operational by default (the edit trainer's horizon may grow)
+        self.assertNotEqual(guard.run_identity(args(steps=4), {}, ("steps",)), guard.run_identity(args(steps=8), {}, ("steps",)))
+        guard.seal_run(self.out, args(steps=8), {}, structural=("steps",))
+        guard.seal_run(self.out, args(steps=8, updates=5000), {}, structural=("steps",))  # more updates: allowed
+        with self.assertRaisesRegex(SystemExit, "args.steps"):
+            guard.seal_run(self.out, args(steps=4), {}, structural=("steps",))
+
+    def test_an_older_identity_gets_the_newly_sealed_option(self):
+        old = tempfile.mkdtemp(prefix="hades_guard_old_")
+        guard.seal_run(old, args(steps=8), {})  # an identity written before steps was sealed
+        guard.seal_run(old, args(steps=8), {}, structural=("steps",))  # adds it, with a note
+        with open(os.path.join(old, "run_identity.json"), encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["args"]["steps"], 8)
+        with self.assertRaisesRegex(SystemExit, "args.steps"):
+            guard.seal_run(old, args(steps=4), {}, structural=("steps",))
+
 
 if __name__ == "__main__":
     unittest.main()

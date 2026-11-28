@@ -91,26 +91,34 @@ def resources(metas):
     return out
 
 
+CONFLICT = "conflict"
+
+
 def recorded_sigs(metas):
-    """{(folder, file): [size, mtime_ns]} as the nodes recorded them when they loaded or sampled with each file."""
-    out = {}
+    """{(folder, file): [size, mtime_ns]} as the nodes recorded them when they loaded or sampled with each file, or CONFLICT when two
+    nodes recorded different signatures for the same file (it was replaced between them): the result no longer depends on the
+    order of the metadata, and a contradiction is never resolved in favour of the file on disk (audit 0.9.9 A2)."""
+    seen = {}
     for m in metas:
         node = m.get("node")
+        found = []
         if node == "loader" and m.get("model_sig"):
-            out[("diffusion_models", m.get("model_file"))] = m["model_sig"]
+            found.append((("diffusion_models", m.get("model_file")), m["model_sig"]))
         elif node == "ksampler":
             for f in m.get("model_files") or []:
                 if isinstance(f, dict) and f.get("sig"):
-                    out[(f.get("folder", "diffusion_models"), f.get("file"))] = f["sig"]
+                    found.append(((f.get("folder", "diffusion_models"), f.get("file")), f["sig"]))
             if m.get("turbo_sig"):
-                out[("loras", m.get("turbo"))] = m["turbo_sig"]
+                found.append((("loras", m.get("turbo")), m["turbo_sig"]))
         elif node == "multi_lora":
             for r in m.get("loras") or []:
                 if isinstance(r, dict) and r.get("sig"):
-                    out[("loras", r.get("name"))] = r["sig"]
+                    found.append((("loras", r.get("name")), r["sig"]))
         elif node == "lora_block_weight" and m.get("lora_sig"):
-            out[("loras", m.get("lora"))] = m["lora_sig"]
-    return out
+            found.append((("loras", m.get("lora")), m["lora_sig"]))
+        for key, sig in found:
+            seen.setdefault(key, []).append(list(sig))
+    return {key: (sigs[0] if all(s == sigs[0] for s in sigs) else CONFLICT) for key, sigs in seen.items()}
 
 
 def a1111_parameters(metas, positive=None, negative=None, with_hashes=True):
@@ -141,7 +149,11 @@ def a1111_parameters(metas, positive=None, negative=None, with_hashes=True):
         path = folder_paths.get_full_path(folder, name)
         short = file_sha256(path)[:10] if (with_hashes and path) else None
         recorded = sigs.get((folder, name))
-        if short and recorded and recorded != file_sig(folder, name):
+        if short and recorded == CONFLICT:
+            # two nodes saw two different files under this name: the image's file cannot be told, so no hash names it
+            notes.append(f"{name} was recorded as two different files by the nodes (replaced during the run): hash not written")
+            short = None
+        elif short and recorded and recorded != file_sig(folder, name):
             # the file on disk changed after the pipeline loaded it: its hash would name another revision (audit 0.9.6 F08)
             notes.append(f"{name} changed on disk after it was loaded: hash not written")
             short = None
@@ -236,7 +248,12 @@ class HaDeSMossImageSaver:
              extra_pnginfo=None, primary_stage_metadata=None, write_metadata=True):
         metas = read_metas(metadata) if metadata else []
         primary = read_metas(primary_stage_metadata) if primary_stage_metadata else None
-        if primary is not None:
+        # nothing is written to the PNG: no file is hashed and the stage checks do not stop the save (audit 0.9.9 M9); the
+        # parameters output still carries the settings, without hashes
+        writing = not args.disable_metadata and bool(write_metadata)
+        if not writing:
+            hashes = False
+        if primary is not None and writing:
             for node in ("ksampler", "loader", "prompt_enhancer"):
                 count = sum(m.get("node") == node for m in primary)
                 if (node == "ksampler" and count != 1) or (node != "ksampler" and count > 1):

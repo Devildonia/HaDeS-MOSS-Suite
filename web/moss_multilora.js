@@ -25,29 +25,34 @@ const STRENGTH = { min: -10, max: 10, step: 0.05, visMin: 0, visMax: 2 };
 const GROUP_WEIGHT = { min: -2, max: 3, step: 0.05 };
 
 // ---- few-step LoRAs, read from the file's own metadata ("4 steps, CFG 1, ..."), as the backend does ----
-const fewStepCache = new Map(); // name -> steps | null | "pending"
+// name -> { v: steps | null, t: when read, pending, failed }. An answer is kept for a minute and a failed read for 10 s, so a file
+// replaced under the same name or a first request that failed shows its badge again without a reload (audit 0.9.9 B2)
+const fewStepCache = new Map();
+const FEW_STEP_TTL = 60000, FEW_STEP_RETRY = 10000;
 const STEPS_RE = /^\s*(\d+)\s+steps?\b/i;
 const CFG1_RE = /\bCFG 1(\.0+)?(?![.\d])/;
 // LoRA names come from the workflow's JSON, which may be someone else's: never insert them into the tooltip as HTML
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
-function fewStepSteps(name, node) {
+export function fewStepSteps(name, node) {
     if (!name) return null;
-    if (fewStepCache.has(name)) {
-        const v = fewStepCache.get(name);
-        return v === "pending" ? null : v;
-    }
-    fewStepCache.set(name, "pending");
+    const now = Date.now();
+    const hit = fewStepCache.get(name);
+    if (hit && (hit.pending || now - hit.t < (hit.failed ? FEW_STEP_RETRY : FEW_STEP_TTL))) return hit.pending ? (hit.v ?? null) : hit.v;
+    fewStepCache.set(name, { v: hit?.v ?? null, t: now, pending: true });
     api.fetchApi(`/view_metadata/loras?filename=${encodeURIComponent(name)}`)
-        .then((r) => (r.ok ? r.json() : null))
+        .then((r) => {
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.json();
+        })
         .then((meta) => {
             const settings = String(meta?.settings ?? "");
             const m = settings.match(STEPS_RE);
-            fewStepCache.set(name, m && CFG1_RE.test(settings) ? Number(m[1]) : null);
+            fewStepCache.set(name, { v: m && CFG1_RE.test(settings) ? Number(m[1]) : null, t: Date.now() });
             node.setDirtyCanvas(true, true);
         })
-        .catch(() => fewStepCache.set(name, null));
-    return null;
+        .catch(() => fewStepCache.set(name, { v: null, t: Date.now(), failed: true }));
+    return hit?.v ?? null;
 }
 
 // ---- searchable LoRA picker (DOM) ----
