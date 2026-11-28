@@ -49,9 +49,26 @@ def file_identity(path):
     return (os.path.normcase(os.path.abspath(path)), st.st_size, st.st_mtime_ns)
 
 
-def convert_state_dict(sd, layers):
+V5_ATTENTION = ((".attention.attention.query.", ".attention.q_proj."), (".attention.attention.key.", ".attention.k_proj."),
+                (".attention.attention.value.", ".attention.v_proj."), (".attention.output.dense.", ".attention.o_proj."))
+
+
+def convert_state_dict(sd, layers, target_keys=None):
     """The original Depth Anything V2 checkpoint's keys as transformers' DepthAnythingForDepthEstimation names them (fused q / k / v
-    split; the DPT fusion stages in transformers' order, deepest first)."""
+    split; the DPT fusion stages in transformers' order, deepest first). transformers 5 renamed DINOv2's attention (q_proj ... o_proj):
+    with the installed model's `target_keys` the names follow whichever it uses."""
+    out = _convert(sd)
+    if target_keys is not None and "backbone.encoder.layer.0.attention.q_proj.weight" in target_keys:
+        renamed = {}
+        for k, v in out.items():
+            for old, new in V5_ATTENTION:
+                k = k.replace(old, new)
+            renamed[k] = v
+        out = renamed
+    return out
+
+
+def _convert(sd):
     out = {}
     fusion = {1: 3, 2: 2, 3: 1, 4: 0}
     for k, v in sd.items():
@@ -118,7 +135,7 @@ def build_model(ckpt, path):
     config = DepthAnythingConfig(backbone_config=backbone, reassemble_hidden_size=hidden, patch_size=MULTIPLE, neck_hidden_sizes=neck,
                                  fusion_hidden_size=fusion, head_hidden_size=32, depth_estimation_type="relative")
     model = DepthAnythingForDepthEstimation(config)
-    sd = convert_state_dict(torch.load(path, map_location="cpu", weights_only=True), layers)
+    sd = convert_state_dict(torch.load(path, map_location="cpu", weights_only=True), layers, set(model.state_dict()))
     missing, unexpected = model.load_state_dict(sd, strict=False)
     if missing or unexpected:
         raise RuntimeError(f"MOSS Depth Map: {os.path.basename(path)} does not fit Depth Anything V2 {ARCH[ckpt][0]} "

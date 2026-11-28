@@ -3469,3 +3469,7 @@ RTX 5090, vitl, against the previous node (HEAD 0836edf: the pack's model with t
   standard widgets at 512, Nodes 2.0 at 1024), 6.0 s the first run (model load), 0.4 s after. Tests: `DepthMapTest` on a tiny Depth
   Anything (every original key converts, none missing or left over; map size, 8-bit steps, reload on a replaced file, errors); suite 146
   with the CUDA checks.
+- **transformers 5:** the Ubuntu CI installs transformers 5.24.1, which renamed DINOv2's attention (`attention.q_proj` ... `o_proj`)
+  and accepts only an int for `max_depth`; the first push failed there. The conversion now follows the installed model's names. With
+  5.24.1 installed apart (`I:/HaDeS_MOSS/tf5_site`, not in ComfyUI's venv): the fisherman's map is identical to the one on 4.57.3 (MAE
+  0, `sdpa` attention), and `test_moss_suite.py` passes (147).

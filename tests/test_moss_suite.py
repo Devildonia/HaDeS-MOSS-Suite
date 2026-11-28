@@ -2202,10 +2202,10 @@ class DepthMapTest(unittest.TestCase):
         sd = {}
         for n in names:
             if ".attn.qkv." in n:
-                mapped = self.depth.convert_state_dict({n: torch.zeros(3)}, layers)
+                mapped = self.depth.convert_state_dict({n: torch.zeros(3)}, layers, set(ref))
                 sd[n] = torch.cat([ref[k] for k in mapped])
             else:
-                (k,) = self.depth.convert_state_dict({n: torch.zeros(1)}, layers)
+                (k,) = self.depth.convert_state_dict({n: torch.zeros(1)}, layers, set(ref))
                 sd[n] = ref[k].clone()
         return sd, ref
 
@@ -2214,12 +2214,31 @@ class DepthMapTest(unittest.TestCase):
 
     def test_every_original_key_converts(self):
         sd, ref = self.original_checkpoint()
-        conv = self.depth.convert_state_dict(sd, 4)
+        conv = self.depth.convert_state_dict(sd, 4, set(ref))
         self.assertEqual(set(conv), set(ref))
         for k in ref:
             torch.testing.assert_close(conv[k], ref[k])
         with self.assertRaisesRegex(RuntimeError, "unexpected weight"):
             self.depth.convert_state_dict({"model.diffusion_model.x": torch.zeros(1)}, 4)
+
+    def test_both_transformers_attention_names(self):
+        """transformers 4 names DINOv2's attention attention.attention.{query,key,value} / attention.output.dense, transformers 5
+        attention.{q,k,v}_proj / attention.o_proj (the Ubuntu CI installs 5.x): the names follow the installed model's keys."""
+        sd = {"pretrained.blocks.0.attn.qkv.weight": torch.arange(6.0).reshape(6, 1),
+              "pretrained.blocks.0.attn.proj.bias": torch.zeros(2), "pretrained.blocks.0.mlp.fc1.weight": torch.zeros(1)}
+        v4 = self.depth.convert_state_dict(sd, 1, {"backbone.encoder.layer.0.attention.attention.query.weight"})
+        self.assertEqual(sorted(v4), sorted(["backbone.encoder.layer.0.attention.attention.query.weight",
+                                             "backbone.encoder.layer.0.attention.attention.key.weight",
+                                             "backbone.encoder.layer.0.attention.attention.value.weight",
+                                             "backbone.encoder.layer.0.attention.output.dense.bias",
+                                             "backbone.encoder.layer.0.mlp.fc1.weight"]))
+        v5 = self.depth.convert_state_dict(sd, 1, {"backbone.encoder.layer.0.attention.q_proj.weight"})
+        self.assertEqual(sorted(v5), sorted(["backbone.encoder.layer.0.attention.q_proj.weight",
+                                             "backbone.encoder.layer.0.attention.k_proj.weight",
+                                             "backbone.encoder.layer.0.attention.v_proj.weight",
+                                             "backbone.encoder.layer.0.attention.o_proj.bias",
+                                             "backbone.encoder.layer.0.mlp.fc1.weight"]))
+        torch.testing.assert_close(v5["backbone.encoder.layer.0.attention.k_proj.weight"], torch.tensor([[2.0], [3.0]]))
 
     def test_map_size_range_and_reload(self):
         sd, _ = self.original_checkpoint()
