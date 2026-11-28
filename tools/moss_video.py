@@ -6667,6 +6667,541 @@ async def two_stage(d: Director):
 two_stage.prepare = ts_prepare
 
 
+# ---- advanced workflow #4: LoRA Surgery (a lesson) ----
+LS_FILE = None  # built on camera (a lesson); the finished example is the download
+LS_SEED = 1013  # the example's seed; measured: the 8-step fisherman equals the measured render (videos/advanced/adv_lora_surgery/MEDIDAS.md)
+LS_OLD = "lora_surgery"  # the workflow's measured renders in comfy_output (advanced_workflows/lora_surgery/files.json)
+LS_CROP = (300, 150)  # 512 x 512 on the fisherman's face
+LS_PROMPT = ("Photograph of an old fisherman with a grey beard mending a net on a wooden dock at sunrise, his face and weathered hands in view, "
+             "thick wool sweater, seagulls in the background.")
+LS_TURBO = "MOSS\\turbo_v10\\HaDeS-MOSS-Turbo-8steps-v1.0.safetensors"
+LS_EXT, LS_STYLE, LS_ONE, LS_R32 = "bulle_extracted", "bulle_style", "bulle_style_turbo", "bulle_style_turbo_r32"
+LS_POS = {"load": (0, 0), "sft": (0, 420), "base_note": (0, 0), "bm": (460, 0), "bulle": (460, 620), "ext": (920, 0), "ext_text": (920, 470),
+          "merger": (1400, 0), "merger_text": (1400, 520), "ml": (460, 1180), "enh": (920, 1180), "latent": (1400, 1180), "ks": (1850, 1180),
+          "save": (2300, 1180), "tel": (2300, 1700), "rep": (2750, 1700), "merger2": (1880, 0), "m2_text": (1880, 520),
+          "resize": (2360, 0), "rs_text": (2360, 470)}
+LS_BOX = [-60, -120, 3250, 2250]
+LS_TOP = [-60, -120, 2850, 1000]
+
+LS_LINES = [
+    ("Hi, I'm HaDeS, and welcome to advanced workflow number four: LoRA surgery.",
+     "Hola, soy HaDeS, y bienvenido al workflow avanzado número cuatro: cirugía de LoRAs."),
+    ("Today you'll learn how to pull a LoRA out of a finished model, how to cut one LoRA out of another, and how to put them back together in one file.",
+     "Hoy vas a aprender a sacar una LoRA de un modelo terminado, a quitar una LoRA de dentro de otra, y a volver a juntarlas en un solo archivo.",
+     "Today you'll learn how to pull a Lora out of a finished model, how to cut one Lora out of another, and how to put them back together in one file."),
+    ("And you'll see why the obvious number is not always the right one, and how to find the right one by measuring.",
+     "Y vas a ver por qué el número obvio no siempre es el bueno, y cómo encontrar el bueno midiendo."),
+    ("As always, we build it together from an empty canvas, everything is free, and all the links are in the description.",
+     "Como siempre, lo montamos juntos desde el lienzo vacío, todo es gratis y tienes todos los enlaces en la descripción."),
+    ("Bulle d'Encre is my comic-style model. It isn't trained from zero: it's a recipe.",
+     "Bulle d'Encre es mi modelo de estilo cómic. No está entrenado desde cero: es una receta.",
+     "Bull Dahnkr is my comic style model. It isn't trained from zero: it's a recipe."),
+    ("SFT, with thirty percent of Base in six layers. On top, half of my Turbo v1.0. And on top of that, a style LoRA at zero point eight.",
+     "SFT, con un treinta por ciento de Base en seis capas. Encima, la mitad de mi Turbo v1.0. Y encima de eso, una LoRA de estilo a cero coma ocho.",
+     "S F T, with thirty percent of Base in six layers. On top, half of my Turbo version one. And on top of that, a style Lora at zero point eight."),
+    ("That style LoRA I keep private, so you won't see it in this video. But the model is public, and that's all we need.",
+     "Esa LoRA de estilo la guardo en privado, así que no la vas a ver en este vídeo. Pero el modelo es público, y es todo lo que necesitamos.",
+     "That style Lora I keep private, so you won't see it in this video. But the model is public, and that's all we need."),
+    ("Here's the question. What if you like the style, but you want the full turbo, or no turbo at all?",
+     "Aquí va la pregunta. ¿Y si te gusta el estilo, pero quieres la turbo entera, o ninguna turbo?"),
+    ("The style and the half turbo are baked into ten gigabytes of weights. Today we take them out, separate them, and put them back the way we want.",
+     "El estilo y la media turbo están cocinados dentro de diez gigas de pesos. Hoy los sacamos, los separamos y los volvemos a poner como queramos."),
+    ("To pull a LoRA out of a model, you need what the model was before. A LoRA is just the difference between two models.",
+     "Para sacar una LoRA de un modelo, necesitas lo que era el modelo antes. Una LoRA es solo la diferencia entre dos modelos.",
+     "To pull a Lora out of a model, you need what the model was before. A Lora is just the difference between two models."),
+    ("So first we rebuild Bulle's starting point. The MOSS Loader loads Base, with the text encoder and the VAE.",
+     "Así que primero reconstruimos el punto de partida de Bulle. El MOSS Loader carga Base, con el text encoder y el VAE.",
+     "So first we rebuild Bull's starting point. The MOSS Loader loads Base, with the text encoder and the V A E."),
+    ("Then a Load Diffusion Model node with SFT.",
+     "Después, un nodo Load Diffusion Model con SFT.",
+     "Then a Load Diffusion Model node with S F T."),
+    ("And the MOSS Model Block Merger mixes them layer by layer. Every slider is a group of layers.",
+     "Y el MOSS Model Block Merger los mezcla capa a capa. Cada deslizador es un grupo de capas."),
+    ("This slider is layers twenty-four to twenty-nine. At zero point three, it takes thirty percent of Base there and leaves SFT everywhere else. That's Bulle's recipe.",
+     "Este deslizador son las capas veinticuatro a veintinueve. A cero coma tres, toma un treinta por ciento de Base ahí y deja SFT en todo lo demás. Es la receta de Bulle.",
+     "This slider is layers twenty-four to twenty-nine. At zero point three, it takes thirty percent of Base there and leaves S F T everywhere else. That's Bull's recipe."),
+    ("Nothing is saved to disk: the merge lives in memory, just for this workflow.",
+     "No se guarda nada en disco: la mezcla vive en memoria, solo para este workflow."),
+    ("Now the finished model: a second Load Diffusion Model with Bulle d'Encre.",
+     "Ahora el modelo terminado: un segundo Load Diffusion Model con Bulle d'Encre.",
+     "Now the finished model: a second Load Diffusion Model with Bull Dahnkr."),
+    ("And the MOSS LoRA Extractor. It takes the finished model, subtracts the base, and squeezes the difference into a LoRA.",
+     "Y el MOSS LoRA Extractor. Toma el modelo terminado, le resta la base y comprime la diferencia en una LoRA.",
+     "And the MOSS Lora Extractor. It takes the finished model, subtracts the base, and squeezes the difference into a Lora."),
+    ("Rank is how much detail the LoRA keeps. I use sixty-four. Higher keeps more, but the file grows.",
+     "El rango es cuánto detalle guarda la LoRA. Uso sesenta y cuatro. Más alto guarda más, pero el archivo crece.",
+     "Rank is how much detail the Lora keeps. I use sixty-four. Higher keeps more, but the file grows."),
+    ("We call it bulle_extracted, and run. This one is heavy: three models at once, almost two minutes. I'll speed it up.",
+     "La llamamos bulle_extracted y lanzamos. Esta es pesada: tres modelos a la vez, casi dos minutos. La acelero.",
+     "We call it Bull extracted, and run. This one is heavy: three models at once, almost two minutes. I'll speed it up."),
+    ("The report says: rank sixty-four, two hundred fifty-two megabytes, and ninety-seven percent of the energy kept.",
+     "El informe dice: rango sesenta y cuatro, doscientos cincuenta y dos megas, y un noventa y siete por ciento de la energía conservada."),
+    ("Energy is a simple way to say: how much of the difference fits in the LoRA. Ninety-seven percent is very good.",
+     "La energía es una forma sencilla de decir cuánto de la diferencia cabe en la LoRA. Noventa y siete por ciento es muy bueno.",
+     "Energy is a simple way to say: how much of the difference fits in the Lora. Ninety-seven percent is very good."),
+    ("This LoRA has two things inside: the style, and half a turbo. Now we cut the turbo out.",
+     "Esta LoRA lleva dos cosas dentro: el estilo y media turbo. Ahora le quitamos la turbo.",
+     "This Lora has two things inside: the style, and half a turbo. Now we cut the turbo out."),
+    ("The MOSS LoRA Merger adds LoRAs with a weight each. And a weight can be negative. A negative weight subtracts.",
+     "El MOSS LoRA Merger suma LoRAs, cada una con su peso. Y un peso puede ser negativo. Un peso negativo resta.",
+     "The MOSS Lora Merger adds Loras with a weight each. And a weight can be negative. A negative weight subtracts."),
+    ("First LoRA: bulle_extracted, at one. Second: Turbo v1.0. And the weight?",
+     "Primera LoRA: bulle_extracted, a uno. Segunda: Turbo v1.0. ¿Y el peso?",
+     "First Lora: Bull extracted, at one. Second: Turbo version one. And the weight?"),
+    ("The recipe had half a turbo, so minus zero point five, right? That's what I tried first.",
+     "La receta tenía media turbo, así que menos cero coma cinco, ¿verdad? Es lo que probé primero."),
+    ("And it went wrong. At minus zero point five every image came out dark and muddy. Look at the café: the light is gone.",
+     "Y salió mal. A menos cero coma cinco todas las imágenes salían oscuras y embarradas. Mira la cafetería: la luz ha desaparecido."),
+    ("So I measured the weights. The extracted LoRA doesn't carry half a turbo. It carries about two thirds of that half.",
+     "Así que medí los pesos. La LoRA extraída no lleva media turbo. Lleva unos dos tercios de esa mitad.",
+     "So I measured the weights. The extracted Lora doesn't carry half a turbo. It carries about two thirds of that half."),
+    ("The rank-sixty-four squeeze and the way the model was saved lost some of it. So minus zero point five removed too much, and left a negative turbo behind.",
+     "La compresión a rango sesenta y cuatro y la forma en que se guardó el modelo perdieron parte. Así que menos cero coma cinco quitaba de más y dejaba una turbo negativa."),
+    ("Two thirds of zero point five is about zero point three three. I use minus zero point three.",
+     "Dos tercios de cero coma cinco son unos cero coma tres tres. Uso menos cero coma tres."),
+    ("That's the lesson of today: the recipe said zero point five, the measurement said zero point three. Trust the measurement.",
+     "Esa es la lección de hoy: la receta decía cero coma cinco, la medida decía cero coma tres. Fíate de la medida."),
+    ("Rank sixty-six, so nothing is lost: sixty-four plus the turbo's two. We call it bulle_style, and run. It takes about two seconds.",
+     "Rango sesenta y seis, para no perder nada: sesenta y cuatro más los dos de la turbo. La llamamos bulle_style y lanzamos. Tarda unos dos segundos.",
+     "Rank sixty-six, so nothing is lost: sixty-four plus the turbo's two. We call it Bull style, and run. It takes about two seconds."),
+    ("How do we know it worked? I compared it with the original style LoRA, the private one, on four prompts.",
+     "¿Cómo sabemos que ha funcionado? La comparé con la LoRA de estilo original, la privada, en cuatro prompts.",
+     "How do we know it worked? I compared it with the original style Lora, the private one, on four prompts."),
+    ("I measure the difference in seeds: one point zero means as different as changing the seed.",
+     "Mido la diferencia en semillas: uno coma cero significa tan distinto como cambiar de semilla."),
+    ("At minus zero point three, the distance is zero point one seven. At minus zero point five, zero point four six. Without surgery, zero point five five.",
+     "A menos cero coma tres, la distancia es cero coma diecisiete. A menos cero coma cinco, cero coma cuarenta y seis. Sin cirugía, cero coma cincuenta y cinco."),
+    ("So the surgery gives back the style, very close to the original, without the turbo.",
+     "Así que la cirugía devuelve el estilo, muy cerca del original, sin la turbo."),
+    ("Now let's use it. The MOSS Multi-LoRA loads several LoRAs in one node, each on its own row.",
+     "Ahora vamos a usarla. El MOSS Multi-LoRA carga varias LoRAs en un solo nodo, cada una en su fila.",
+     "Now let's use it. The MOSS Multi Lora loads several Loras in one node, each on its own row."),
+    ("First row: bulle_style at one. Second row: the full Turbo v1.0, also at one.",
+     "Primera fila: bulle_style a uno. Segunda fila: la Turbo v1.0 entera, también a uno.",
+     "First row: Bull style at one. Second row: the full Turbo version one, also at one."),
+    ("It goes on our rebuilt base, so the style sits on the same model it came from.",
+     "Va sobre nuestra base reconstruida, así que el estilo se apoya en el mismo modelo del que salió."),
+    ("The Prompt Enhancer, as written: an old fisherman mending a net on a dock at sunrise. The MOSS Latent, seed one thousand thirteen.",
+     "El Prompt Enhancer, en modo \"as written\": un pescador mayor remendando una red en un muelle al amanecer. El MOSS Latent, semilla mil trece."),
+    ("The MOSS KSampler with the turbo settings: eight steps, CFG one, euler, simple. And the Image Saver with Telemetry, so the PNG keeps everything.",
+     "El MOSS KSampler con los ajustes de la turbo: ocho pasos, CFG uno, euler, simple. Y el Image Saver con Telemetry, para que el PNG lo guarde todo.",
+     "The MOSS K Sampler with the turbo settings: eight steps, C F G one, oiler, simple. And the Image Saver with Telemetry, so the P N G keeps everything."),
+    ("Run. The first time it also loads the text encoder and the LoRAs, so it takes a little longer. After that, under four seconds an image.",
+     "Lanzamos. La primera vez también carga el text encoder y las LoRAs, así que tarda algo más. Después, menos de cuatro segundos por imagen.",
+     "Run. The first time it also loads the text encoder and the Loras, so it takes a little longer. After that, under four seconds an image."),
+    ("The style, with the full turbo, at eight steps. Measured against the original style with the same turbo: zero point one seven again.",
+     "El estilo, con la turbo entera, a ocho pasos. Medido contra el estilo original con la misma turbo: cero coma diecisiete otra vez."),
+    ("And for the style without any turbo, switch the turbo row off and use fifteen steps at CFG two point five.",
+     "Y para el estilo sin turbo, apaga la fila de la turbo y usa quince pasos a CFG dos coma cinco.",
+     "And for the style without any turbo, switch the turbo row off and use fifteen steps at C F G two point five."),
+    ("Two rows work, but maybe you want one file to share. A second LoRA Merger: bulle_style at one, plus the turbo at one.",
+     "Dos filas funcionan, pero a lo mejor quieres un solo archivo para compartir. Un segundo LoRA Merger: bulle_style a uno, más la turbo a uno.",
+     "Two rows work, but maybe you want one file to share. A second Lora Merger: Bull style at one, plus the turbo at one."),
+    ("Rank sixty-eight, two hundred fifty-nine megabytes. About one second.",
+     "Rango sesenta y ocho, doscientos cincuenta y nueve megas. Alrededor de un segundo."),
+    ("That's big. The MOSS LoRA Resize brings it down to rank thirty-two: one hundred twenty-six megabytes, and ninety-nine point eight percent of the energy.",
+     "Es grande. El MOSS LoRA Resize lo baja a rango treinta y dos: ciento veintiséis megas, y un noventa y nueve coma ocho por ciento de la energía.",
+     "That's big. The MOSS Lora Resize brings it down to rank thirty-two: one hundred twenty-six megabytes, and ninety-nine point eight percent of the energy."),
+    ("One honest note: the single file is not identical to the two rows. It's zero point two eight seeds away. Small details move at eight steps.",
+     "Una nota honesta: el archivo único no es idéntico a las dos filas. Está a cero coma veintiocho semillas. A ocho pasos se mueven detalles pequeños."),
+    ("Let's recap. A LoRA is the difference between two models. To extract it, rebuild the base and let the Extractor subtract.",
+     "Repasemos. Una LoRA es la diferencia entre dos modelos. Para extraerla, reconstruye la base y deja que el Extractor reste.",
+     "Let's recap. A Lora is the difference between two models. To extract it, rebuild the base and let the Extractor subtract."),
+    ("The LoRA Merger adds and subtracts LoRAs. Negative weights cut one LoRA out of another.",
+     "El LoRA Merger suma y resta LoRAs. Los pesos negativos quitan una LoRA de dentro de otra.",
+     "The Lora Merger adds and subtracts Loras. Negative weights cut one Lora out of another."),
+    ("Don't trust the recipe's number blindly: measure. Here it was minus zero point three, not minus zero point five.",
+     "No te fíes a ciegas del número de la receta: mide. Aquí era menos cero coma tres, no menos cero coma cinco."),
+    ("And the Resize makes the final file smaller, keeping almost all of it.",
+     "Y el Resize hace más pequeño el archivo final, conservando casi todo."),
+    ("The workflow is free to download, with the extraction already muted so it doesn't run by accident. Link in the description.",
+     "El workflow se descarga gratis, con la extracción ya silenciada para que no se lance sin querer. Enlace en la descripción."),
+    ("If this helped you, leave a like and subscribe: it's free and it helps me keep making these. See you in the next one!",
+     "Si te ha servido, deja un like y suscríbete: es gratis y me ayuda a seguir haciendo estos vídeos. ¡Nos vemos en el siguiente!"),
+]
+
+
+def ls_old(key, prompt="fisherman"):
+    return f"/view?filename={prompt}_{key}_00001_.png&subfolder={LS_OLD}&type=output"
+
+
+def ls_crops_html(urls, labels, top=120):
+    """512 x 512 crops at 100 % around the fisherman's face, side by side, a label over each."""
+    side = 512 * 1920 / W * 0.78
+    x, y = LS_CROP
+    cells = "".join(f'<div style="text-align:center"><div style="color:#fff;font:600 24px Segoe UI,sans-serif;margin-bottom:12px">{t}</div>'
+                    f'<div style="width:{side}px;height:{side}px;overflow:hidden;border-radius:6px;position:relative">'
+                    f'<img src="{u}" style="position:absolute;max-width:none;width:{1024 * side / 512}px;height:{1024 * side / 512}px;'
+                    f'left:{-x * side / 512}px;top:{-y * side / 512}px"></div></div>' for u, t in zip(urls, labels))
+    return f'<div style="display:flex;gap:24px;margin-top:{top}px">{cells}</div>'
+
+
+def ls_recipe_card(es, step):
+    """Bulle d'Encre's recipe as three stacked layers; step 1 frames the style LoRA as private."""
+    rows = [("SFT + 30 % Base (capas 24-29)" if es else "SFT + 30 % Base (layers 24-29)", "#2e4a7a"),
+            ("Turbo 8-steps v1.0 × 0.5", "#4a3a1a"),
+            ("LoRA de estilo × 0.8" + (" (privada)" if step else "") if es else "style LoRA × 0.8" + (" (private)" if step else ""), "#4a2a4a")]
+    blocks = "".join(f'<div style="width:900px;border-radius:14px;background:{c};padding:26px;font:700 40px Segoe UI,sans-serif;margin:14px auto">{t}</div>'
+                     for t, c in reversed(rows))
+    return (f'<div style="margin-top:180px;color:#fff;text-align:center"><div style="font:800 54px Segoe UI,sans-serif;color:#ffcc33;margin-bottom:24px">'
+            f'Bulle d\'Encre = {"una receta" if es else "a recipe"}</div>{blocks}</div>')
+
+
+def ls_minus05_html(es):
+    """Bulle d'Encre against the extracted LoRA cut at -0.5, at 15 steps: the café and the fisherman (measured renders)."""
+    lab = (("Bulle d'Encre", "cirugía −0,5") if es else ("Bulle d'Encre", "surgery −0.5"))
+    cell = lambda u, t: (f'<div style="text-align:center"><img src="{u}" style="height:400px;border-radius:6px">'
+                         f'<div style="color:#fff;font:700 28px Segoe UI,sans-serif;margin-top:10px">{t}</div></div>')
+    return ('<div style="display:grid;grid-template-columns:auto auto auto auto;gap:24px;margin-top:150px">'
+            + cell(ls_old("bulle_15", "cafe"), lab[0]) + cell(ls_old("style_15", "cafe"), lab[1])
+            + cell(ls_old("bulle_15"), lab[0]) + cell(ls_old("style_15"), lab[1]) + '</div>')
+
+
+def ls_distance_html(es, mark=None):
+    """The measured distances to the original style LoRA (in seeds, 4 prompts, 15 steps, CFG 2.5)."""
+    rows = [("−0.30", "0.17"), ("−0.5", "0.46"), ("sin cirugía" if es else "no surgery", "0.55")]
+    cell = lambda t, w, c="#e6e6ea", b=600: f'<div style="width:{w}px;font:{b} 40px Segoe UI,sans-serif;color:{c};text-align:center">{t}</div>'
+    body = "".join(f'<div style="display:flex;padding:16px 0;border-radius:10px;{"background:#3a3214;" if r[0] == mark else ""}">'
+                   + cell(r[0], 360, "#ffcc33", 800) + cell(r[1], 300) + "</div>" for r in rows)
+    title = ("Distancia a la LoRA de estilo original (en semillas, 4 prompts)" if es else
+             "Distance to the original style LoRA (in seeds, 4 prompts)")
+    return (f'<div style="margin-top:220px;color:#fff;text-align:center"><div style="font:600 32px Segoe UI,sans-serif;color:#c9c9d1;margin-bottom:26px">{title}</div>'
+            f'<div style="display:inline-block;background:#15151b;border-radius:14px;padding:20px 40px">{body}</div>'
+            f'<div style="font:600 28px Segoe UI,sans-serif;color:#c9c9d1;margin-top:22px">{"1,0 = tan distinto como otra semilla" if es else "1.0 = as different as another seed"}</div></div>')
+
+
+def ls_check(page_url, url):
+    """The take's fisherman against the measured one (MAE at 512): the take stops if it is another picture."""
+    import io
+    import urllib.parse
+    import urllib.request
+    from PIL import Image
+    import numpy as np
+    base = urllib.parse.urlsplit(page_url)
+    got = Image.open(io.BytesIO(urllib.request.urlopen(f"{base.scheme}://{base.netloc}{url}").read())).convert("RGB").resize((512, 512))
+    ref = Image.open(r"I:/HaDeS_MOSS/videos/advanced/adv_lora_surgery/measure/full_fisherman_8.png").convert("RGB").resize((512, 512))
+    mae = float(np.abs(np.asarray(got, dtype=np.float32) - np.asarray(ref, dtype=np.float32)).mean())
+    print(f"take vs measured fisherman: MAE {mae:.2f}", flush=True)
+    if mae > 2.0:
+        raise SystemExit(f"the take's fisherman is not the measured one (MAE {mae:.2f})")
+
+
+async def ls_text(d, key, size=(440, 330)):
+    """A Preview as Text node for a tool's report, sized so the report reads."""
+    n = await ap_add(d, "PreviewAny", "Preview as Text", LS_POS[key])
+    await d.js("([id, s]) => { const n = window.__hv.node(id); n.setSize(s); n.setDirtyCanvas(true, true); }", [n, list(size)])
+    return n
+
+
+async def ls_prepare(page):
+    """Off camera: the measured renders must be in comfy_output/lora_surgery."""
+    for key in ("bulle_15|fisherman", "extracted_15|fisherman", "style_15|fisherman", "c30_15|fisherman", "bulle_15|cafe", "style_15|cafe"):
+        k, p = key.split("|")
+        if not (Path("I:/HaDeS_MOSS/videos/comfy_output") / LS_OLD / f"{p}_{k}_00001_.png").exists():
+            raise SystemExit(f"measured render {key} missing")
+
+
+async def lora_surgery(d: Director):
+    """Advanced workflow #4 as a lesson: Bulle d'Encre's recipe, the base rebuilt, the LoRA extracted, the turbo cut out at -0.30
+    (with why not -0.5), the style + the full turbo at 8 steps, one file and a rank-32 copy, a recap."""
+    P = LS_POS
+    es = d.language == "es"
+    say_after = d._after_voice
+    await d.camera({"box": [-60, -80, 1400, 1000]}, 10, pad=60, top=60)
+    await d.move(W * 0.97, H * 0.55, 10)
+    clab = (("Bulle d'Encre", "extraída", "cirugía −0,5", "cirugía −0,30") if es else
+            ("Bulle d'Encre", "extracted", "surgery −0.5", "surgery −0.30"))
+    curls = [ls_old("bulle_15"), ls_old("extracted_15"), ls_old("style_15"), ls_old("c30_15")]
+
+    # 1. what we'll learn
+    await d.js("(h) => window.__hv.show(h, 10)",
+               ls_crops_html([curls[0], curls[2], curls[3]], [clab[0], clab[2], clab[3]], top=60) +
+               '<div style="position:fixed;left:0;right:0;bottom:90px;text-align:center;color:#fff">'
+               '<div style="font:900 72px Segoe UI Black,sans-serif">HaDeS MOSS Suite</div>'
+               f'<div style="font:600 36px Segoe UI,sans-serif;color:#ffcc33;margin-top:14px">{"Workflow avanzado n.º 4" if es else "Advanced workflow #4"}'
+               ' · LoRA Surgery</div></div>')
+    await d.hold(0.8)
+    for i in range(4):
+        await d.say(i)
+
+    # 2. a model is a recipe
+    await say_after(0.25)
+    await d.js("(h) => window.__hv.show(h)", ls_recipe_card(es, 0))
+    await d.say(4)
+    await d.say(5)
+    await say_after(0.2)
+    await d.js("(h) => window.__hv.show(h)", ls_recipe_card(es, 1))
+    await d.say(6)
+    await d.say(7)
+    await d.say(8)
+    await say_after(1.0)
+    await d.js("() => window.__hv.hide()")
+
+    # 3. the base, rebuilt
+    await d.say(9)
+    load = await ap_add(d, "HaDeSMossLoader", "MOSS Loader", P["load"])
+    await up_set(d, load, BASIC_LOADER)
+    await d.camera([load], 900, pad=140, top=60)
+    await basic_point(d, load, "unet_name")
+    await d.say(10)
+    await say_after(0.25)
+    sft = await ap_add(d, "UNETLoader", "Load Diffusion Model", P["sft"])
+    await up_set(d, sft, {"unet_name": LT_SFT, "weight_dtype": "default"})
+    await d.camera({"box": [-60, -80, 900, 900]}, 900, pad=60, top=60)
+    await basic_point(d, sft, "unet_name")
+    await d.say(11)
+    await say_after(0.25)
+    bm = await ap_add(d, "HaDeSMossModelBlockMerger", "MOSS Model Block Merger", P["bm"])
+    await up_set(d, bm, LT_BM)
+    async with d.fast(2.0):
+        await d.camera({"box": [-60, -80, 1000, 1000]}, 600, pad=60, top=60)
+        await basic_link(d, sft, "MODEL", bm, "model1", 700)
+        await basic_link(d, load, "MODEL", bm, "model2", 700)
+    await d.say(12)
+    await say_after(0.25)
+    await ml_zoom(d, bm, ["layers_24_29"])
+    await basic_point(d, bm, "layers_24_29")
+    await d.say(13)
+    await say_after(0.25)
+    await d.say(14)
+    await say_after(0.5)
+
+    # 4. the Extractor
+    await d.camera({"box": [-60, -80, 1450, 1100]}, 1000, pad=60, top=60)
+    bulle = await ap_add(d, "UNETLoader", "Load Diffusion Model", P["bulle"])
+    await up_set(d, bulle, {"unet_name": LT_BULLE, "weight_dtype": "default"})
+    await basic_point(d, bulle, "unet_name")
+    await d.say(15)
+    await say_after(0.25)
+    ext = await ap_add(d, "HaDeSMossLoraExtractor", "MOSS LoRA Extractor", P["ext"])
+    await up_set(d, ext, {"rank": 64, "export_filename": LS_EXT, "overwrite_existing": True, "tuned_name": "Bulle d'Encre",
+                          "base_name": "SFT + 30% Base in layers 24-29 (Block Merger)"})
+    async with d.fast(3.0):
+        await basic_link(d, bulle, "MODEL", ext, "model_tuned", 700)
+        await basic_link(d, bm, "MODEL", ext, "model_base", 700)
+        ext_text = await ls_text(d, "ext_text")
+        await basic_link(d, ext, "info", ext_text, "source", 700)
+    await d.say(16)
+    await say_after(0.25)
+    await ml_zoom(d, ext, ["rank"])
+    await basic_point(d, ext, "rank")
+    await d.say(17)
+    await say_after(0.25)
+    await ml_zoom(d, ext, ["export_filename"])
+    await basic_point(d, ext, "export_filename")
+    await d.say(18)
+    await say_after(0.1)
+    await lt_run(d)
+    await lt_refresh(d)
+    await d.camera([ext_text], 1000, pad=60, top=60)
+    await d.say(19)
+    await say_after(0.25)
+    await d.say(20)
+    await say_after(1.0)
+    await ts_group(d, "1. Extract", [-30, -80, 1400, 1180], "#335533")
+
+    # 5. the surgery
+    await d.camera({"box": [880, -80, 1950, 1000]}, 1000, pad=60, top=60)
+    await d.say(21)
+    merger = await ap_add(d, "HaDeSMossLoraMerger", "MOSS LoRA Merger", P["merger"])
+    await up_set(d, merger, {"lora_a": LS_EXT + ".safetensors", "weight_a": 1.0, "lora_b": LS_TURBO, "weight_b": 0.0, "rank": 66,
+                             "export_filename": LS_STYLE, "dynamic_energy": 0.0, "overwrite_existing": True})
+    async with d.fast(2.0):
+        await d.camera({"box": [-60, -80, 1950, 1000]}, 600, pad=60, top=60)
+        await basic_link(d, bm, "MODEL", merger, "model", 900)
+        m_text = await ls_text(d, "merger_text")
+        await basic_link(d, merger, "info", m_text, "source", 600)
+    await say_after(0.1)
+    await ml_zoom(d, merger, ["weight_a", "weight_b"])
+    await basic_point(d, merger, "weight_b")
+    await d.say(22)
+    await say_after(0.25)
+    await ml_zoom(d, merger, ["lora_a", "weight_a", "lora_b"])
+    await basic_point(d, merger, "lora_a")
+    await d.say(23)
+    await d.hold(0.4)
+    await basic_point(d, merger, "lora_b")
+    await say_after(0.25)
+    await d.say(24)
+    await say_after(0.25)
+    await d.js("(h) => window.__hv.show(h)", ls_minus05_html(es))
+    await d.say(25)
+    await say_after(1.0)
+    await d.js("() => window.__hv.hide()")
+    await d.say(26)
+    await d.say(27)
+    await say_after(0.25)
+    await ml_zoom(d, merger, ["weight_b"])
+    await basic_point(d, merger, "weight_b")
+    await d.say(28)
+    await d.hold(0.3)
+    await up_set(d, merger, {"weight_b": -0.30})
+    await say_after(0.25)
+    await d.say(29)
+    await say_after(1.5)
+    await ml_zoom(d, merger, ["rank", "export_filename"])
+    await basic_point(d, merger, "rank")
+    await d.say(30)
+    await say_after(0.1)
+    await lt_run(d)
+    await lt_refresh(d)
+    await d.camera([merger, m_text], 1000, pad=60, top=60)
+    await say_after(0.8)
+
+    # 6. did it work?
+    await d.js("(h) => window.__hv.show(h)", ls_crops_html(curls, clab))
+    await d.say(31)
+    await say_after(0.25)
+    await d.js("(h) => window.__hv.show(h)", ls_distance_html(es))
+    await d.say(32)
+    await say_after(0.25)
+    await d.js("(h) => window.__hv.show(h)", ls_distance_html(es, mark="−0.30"))
+    await d.say(33)
+    await say_after(0.25)
+    await d.js("(h) => window.__hv.show(h)", ls_crops_html(curls, clab))
+    await d.say(34)
+    await say_after(1.0)
+    await d.js("() => window.__hv.hide()")
+    await ts_group(d, "2. Cut the turbo out (-0.30)", [1370, -80, 480, 1180], "#664433")
+
+    # 7. the style + the full turbo at 8 steps
+    await d.camera({"box": [-60, 1100, 2750, 2250]}, 1100, pad=60, top=60)
+    ml = await ap_add(d, "HaDeSMossMultiLora", "MOSS Multi-LoRA", P["ml"])
+    await up_set(d, ml, {"loras": json.dumps([{"name": LS_STYLE + ".safetensors", "on": True, "strength": 1.0},
+                                              {"name": LS_TURBO, "on": True, "strength": 1.0}])})
+    await d.say(35)
+    await say_after(0.25)
+    await d.camera([ml], 900, pad=140, top=60)
+    await basic_point(d, ml, "hades_multilora_list")
+    await d.say(36)
+    await say_after(0.25)
+    async with d.fast(2.0):
+        await d.camera({"box": [-60, -80, 1400, 2250]}, 600, pad=60, top=60)
+        await basic_link(d, bm, "MODEL", ml, "model", 900)
+    await d.say(37)
+    await say_after(0.25)
+    await d.camera({"box": [380, 1100, 1900, 2000]}, 1000, pad=60, top=60)
+    enh = await ap_add(d, "HaDeSMossPromptEnhancer", "MOSS Prompt Enhancer", P["enh"])
+    await up_set(d, enh, {"mode": "as written", "width": 1024, "height": 1024, "seed": 1, "negative": ""})
+    async with d.fast(2.0):
+        await d.camera({"box": [-60, -80, 1900, 2250]}, 600, pad=60, top=60)
+        await basic_link(d, load, "CLIP", enh, "clip", 700)
+        await d.camera({"box": [380, 1100, 1900, 2000]}, 600, pad=60, top=60)
+        await pe_type(d, enh, "idea", LS_PROMPT, paste=True)
+    latent = await ap_add(d, "HaDeSMossLatent", "MOSS Latent", P["latent"])
+    await up_set(d, latent, {"aspect_ratio": "1:1", "megapixels": 1.0, "seed": LS_SEED, "control_after_generate": "fixed"})
+    await ml_zoom(d, latent, ["seed"])
+    await basic_point(d, latent, "seed")
+    await d.say(38)
+    await say_after(0.25)
+    await d.camera({"box": [380, 1100, 2750, 2250]}, 1000, pad=60, top=60)
+    ks = await ap_add(d, "HaDeSMossKSampler", "MOSS KSampler", P["ks"])
+    await up_set(d, ks, {"steps": 8, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple", "denoise": 1.0,
+                         "denoise_mode": "steps / denoise (core)"})
+    save = await ap_add(d, "HaDeSMossImageSaver", "MOSS Image Saver", P["save"])
+    await up_set(d, save, {"filename_prefix": "MOSS/HaDeS_MOSS_surgery_%seed%"})
+    tel = await ap_add(d, "HaDeSMossSuiteTelemetry", "MOSS Suite Telemetry", P["tel"])
+    async with d.fast(4.0):
+        await d.camera({"box": LS_BOX}, 600, pad=60, top=60)
+        for a, out, b, inp in ((ml, "MODEL", ks, "model"), (enh, "positive", ks, "positive"), (enh, "negative", ks, "negative"),
+                               (latent, "latent", ks, "latent_image"), (latent, "seed", ks, "seed"), (load, "VAE", ks, "vae"),
+                               (ks, "image", save, "images")):
+            await basic_link(d, a, out, b, inp, 600)
+        await d.camera({"box": LS_BOX}, 600, pad=60, top=60)
+        for i, a in enumerate((load, bm, ml, enh, latent, ks), 1):
+            await basic_link(d, a, "info", tel, f"info_{i}", 600)
+        await basic_link(d, tel, "json", save, "metadata", 600)
+        rep = await ap_add(d, "PreviewAny", "Preview Any", P["rep"])
+        await basic_link(d, tel, "report", rep, "source", 600)
+    await d.camera([ks], 900, pad=140, top=60)
+    await ml_zoom(d, ks, ["steps", "cfg"])
+    await basic_point(d, ks, "steps")
+    await d.say(39)
+    await say_after(0.25)
+    await d.camera({"box": [380, 1100, 3250, 2250]}, 900, pad=60, top=60)
+    final, secs = await basic_run(d, save)
+    ls_check(d.page.url, final)
+    await d.move(W * 0.97, H * 0.55)
+    await d.js("(h) => window.__hv.show(h)", ap_card([f'{secs:.1f} s · RTX 5090', ("8 pasos · CFG 1" if es else "8 steps · CFG 1")], top=360))
+    await d.say(40)
+    await say_after(0.25)
+    await d.js("(h) => window.__hv.show(h)", ts_pair_html([ls_old("bulle_15"), final],
+               (("Bulle d'Encre · 15 pasos", "estilo + turbo entera · 8 pasos") if es else ("Bulle d'Encre · 15 steps", "style + full turbo · 8 steps"))))
+    await d.say(41)
+    await say_after(0.5)
+    await d.js("() => window.__hv.hide()")
+    await d.camera([ml], 900, pad=140, top=60)
+    await basic_point(d, ml, "hades_multilora_list")
+    await d.say(42)
+    await say_after(0.5)
+    await ts_group(d, "3. The style + the full turbo, 8 steps", [420, 1120, 2780, 1100], "#334466")
+
+    # 8. one file, and smaller
+    await d.camera({"box": [1820, -80, 2850, 1000]}, 1000, pad=60, top=60)
+    merger2 = await ap_add(d, "HaDeSMossLoraMerger", "MOSS LoRA Merger", P["merger2"])
+    await up_set(d, merger2, {"lora_a": LS_STYLE + ".safetensors", "weight_a": 1.0, "lora_b": LS_TURBO, "weight_b": 1.0, "rank": 68,
+                              "export_filename": LS_ONE, "dynamic_energy": 0.0, "overwrite_existing": True})
+    async with d.fast(2.0):
+        await d.camera({"box": LS_TOP}, 600, pad=60, top=60)
+        await basic_link(d, bm, "MODEL", merger2, "model", 900)
+        m2_text = await ls_text(d, "m2_text")
+        await basic_link(d, merger2, "info", m2_text, "source", 600)
+    await d.camera([merger2], 900, pad=120, top=60)
+    await basic_point(d, merger2, "weight_b")
+    await d.say(43)
+    await say_after(0.1)
+    await lt_run(d)
+    await lt_refresh(d)
+    await d.camera([merger2, m2_text], 1000, pad=60, top=60)
+    await d.say(44)
+    await say_after(0.25)
+    resize = await ap_add(d, "HaDeSMossLoraResize", "MOSS LoRA Resize", P["resize"])
+    await up_set(d, resize, {"lora_name": LS_ONE + ".safetensors", "target_rank": 32, "export_filename": LS_R32,
+                             "dynamic_energy": 0.0, "overwrite_existing": True})
+    async with d.fast(2.0):
+        await d.camera({"box": LS_TOP}, 600, pad=60, top=60)
+        await basic_link(d, bm, "MODEL", resize, "model", 900)
+        rs_text = await ls_text(d, "rs_text")
+        await basic_link(d, resize, "info", rs_text, "source", 600)
+    await d.camera([resize], 900, pad=120, top=60)
+    await basic_point(d, resize, "target_rank")
+    await say_after(0.1)
+    await lt_run(d)
+    await lt_refresh(d)
+    await d.camera([resize, rs_text], 1000, pad=60, top=60)
+    await d.say(45)
+    await say_after(0.25)
+    await d.say(46)
+    await say_after(0.5)
+    await ts_group(d, "4. One file", [1850, -80, 980, 1180], "#553355")
+
+    # 9. recap and closing
+    recap = (["1 · LoRA = diferencia entre dos modelos", "2 · pesos negativos quitan una LoRA", "3 · mide: −0,30, no −0,5", "4 · Resize: más pequeña"] if es else
+             ["1 · LoRA = the difference between two models", "2 · negative weights cut a LoRA out", "3 · measure: −0.30, not −0.5", "4 · Resize: smaller file"])
+    for i in range(4):
+        await d.js("(h) => window.__hv.show(h)", ap_card(recap[:i + 1]))
+        await d.say(47 + i)
+        await say_after(0.25)
+    await d.js("() => window.__hv.hide()")
+    await d.camera({"box": LS_BOX}, 1200, pad=60, top=60)
+    await d.js("(h) => window.__hv.show(h)",
+               '<div style="color:#fff;text-align:center;max-width:1300px;margin-top:300px">'
+               f'<div style="font:600 30px Segoe UI,sans-serif;color:#c9c9d1">{"Descarga gratis (enlace en la descripción)" if es else "Free download (link in the description)"}</div>'
+               '<div style="font:700 44px Segoe UI,sans-serif;margin-top:22px">examples/advanced/HaDeS MOSS Suite - LoRA Surgery.json</div></div>')
+    await d.say(51)
+    await say_after(0.25)
+    await d.js("(h) => { const el = document.getElementById('__hv_show'); el.innerHTML = h; }",
+               ls_crops_html([curls[0], curls[2], curls[3]], [clab[0], clab[2], clab[3]], top=60) +
+               '<div style="position:fixed;left:0;right:0;bottom:90px;text-align:center;color:#fff">'
+               '<div style="font:900 72px Segoe UI Black,sans-serif">HaDeS MOSS Suite</div>'
+               f'<div style="font:400 28px Segoe UI,sans-serif;color:#c9c9d1;margin-top:18px">{"Workflow, Suite y modelos: enlaces en la descripción" if es else "Workflow, Suite and models: links in the description"}</div></div>')
+    await d.say(52)
+    await d.end(1.5)
+
+
+lora_surgery.prepare = ls_prepare
+
+
 SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "layout_test": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_test, LAYOUT_TEST_LINES),
           "layout_sentence": ("HaDeS MOSS Suite - Layout from a Sentence.json", layout_sentence, LAYOUT_SENTENCE_LINES),
@@ -6684,7 +7219,8 @@ SCENES = {"basic_generation": (None, basic_generation, BASIC_LINES),
           "hms_v1": (None, hms_v1_video, HMS_LINES),
           "adv_poster": (AP_FILE, adv_poster, AP_LINES),
           "adv_merge_lab": (ML_FILE, merge_lab, ML_LINES),
-          "adv_two_stage": (TS_FILE, two_stage, TS_LINES)}
+          "adv_two_stage": (TS_FILE, two_stage, TS_LINES),
+          "adv_lora_surgery": (LS_FILE, lora_surgery, LS_LINES)}
 
 # spoken forms where the written caption reads badly aloud
 SPOKEN = {"DRAFT LAYOUT": "Draft layout"}
