@@ -2197,7 +2197,7 @@ class DepthMapTest(unittest.TestCase):
                                                                intermediate_size=4 * hidden, patch_size=14, image_size=518, out_indices=[1, 2, 3, 4],
                                                                apply_layernorm=True, reshape_hidden_states=False),
                                   reassemble_hidden_size=hidden, patch_size=14, neck_hidden_sizes=neck, fusion_hidden_size=fusion,
-                                  head_hidden_size=32, depth_estimation_type="relative", max_depth=1.0)
+                                  head_hidden_size=32, depth_estimation_type="relative")
         ref = DepthAnythingForDepthEstimation(cfg).state_dict()
         sd = {}
         for n in names:

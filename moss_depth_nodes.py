@@ -112,10 +112,11 @@ def build_model(ckpt, path):
     _, hidden, heads, layers, out_indices, neck, fusion = ARCH[ckpt]
     backbone = Dinov2Config(hidden_size=hidden, num_attention_heads=heads, num_hidden_layers=layers, intermediate_size=4 * hidden,
                             patch_size=MULTIPLE, image_size=INPUT_SIZE, layerscale_value=1.0, out_indices=out_indices,
-                            apply_layernorm=True, reshape_hidden_states=False)
+                            apply_layernorm=True, reshape_hidden_states=False,
+                            attn_implementation="sdpa")  # DINOv2's memory-efficient attention (the depth head has none)
+    # max_depth left at its default: a relative map is rescaled to 0-255 anyway, and newer transformers accept only an int there
     config = DepthAnythingConfig(backbone_config=backbone, reassemble_hidden_size=hidden, patch_size=MULTIPLE, neck_hidden_sizes=neck,
-                                 fusion_hidden_size=fusion, head_hidden_size=32, depth_estimation_type="relative", max_depth=1.0)
-    backbone._attn_implementation = "sdpa"  # DINOv2's memory-efficient attention (the depth head has none)
+                                 fusion_hidden_size=fusion, head_hidden_size=32, depth_estimation_type="relative")
     model = DepthAnythingForDepthEstimation(config)
     sd = convert_state_dict(torch.load(path, map_location="cpu", weights_only=True), layers)
     missing, unexpected = model.load_state_dict(sd, strict=False)
