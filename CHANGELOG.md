@@ -7,6 +7,12 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **MOSS Depth Map:** a depth map for MOSS Control with Depth Anything V2, made with the attention scaled once. `comfyui_controlnet_aux` 1.1.6's own node scales DINOv2's attention twice and gives a blur with no outline on our install, so the control followed only the rough layout. The node uses that pack's model and weights, fixes the attention for its own call only (the pack is restored afterwards, also on an error) and downloads nothing: without the pack or the weights it says what to install. On the fisherman at 1024 its map is identical to the clean map (0 / 255), 2.8 s the first run and 0.6 s after on an RTX 5090 (`tools/RESULTS.md`). Tests with a stand-in for the pack; checked in the three views.
+
+### Changed
+- **Fixed Pose** example: the map is made in the workflow (Load Image with your photo → MOSS Depth Map) instead of loading a ready `depth_map.png`; the knight at seed 1013 is identical to the measured render.
+
 ## [0.9.8] - 2026-11-26
 
 ### Added

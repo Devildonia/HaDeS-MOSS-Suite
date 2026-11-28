@@ -2147,5 +2147,114 @@ class TestMetadataReader(unittest.TestCase):
             metadata.HaDeSMossMetadataReader().read(metadata.NONE, metadata.NONE)
 
 
+class DepthMapTest(unittest.TestCase):
+    """MOSS Depth Map with a stand-in for comfyui_controlnet_aux: the attention is single-scaled during the call only and restored
+    after (also on an error), missing weights and a missing pack give clear errors, and nothing is downloaded."""
+
+    def setUp(self):
+        import types
+        self.depth = importlib.import_module(f"{PACK}.moss_depth_nodes")
+        self.depth._MODELS.clear()
+        att = types.ModuleType("att")
+
+        class Attention:
+            def forward(self, x):
+                return "plain"
+
+        class MemEffAttention(Attention):
+            def forward(self, x, attn_bias=None):
+                return "double"
+        att.Attention, att.MemEffAttention = Attention, MemEffAttention
+        self.att = att
+        seen = self.seen = []
+        test = self
+
+        class Detector:
+            loads = 0
+
+            @classmethod
+            def from_pretrained(cls, pretrained_model_or_path=None, filename=None):
+                cls.loads += 1
+                return cls()
+
+            def to(self, device):
+                return self
+
+            def __call__(self, img, detect_resolution=512, max_depth=20.0):
+                seen.append(MemEffAttention().forward(None))
+                if test.fail:
+                    raise RuntimeError("boom")
+                import numpy
+                return numpy.full((detect_resolution, detect_resolution, 3), 200, dtype=numpy.uint8)
+        self.Detector = Detector
+        self.fail = False
+        da = types.ModuleType("da")
+        da.DepthAnythingV2Detector = Detector
+        self.ckpts = tempfile.mkdtemp(prefix="hades_depth_")
+        util = types.ModuleType("util")
+        util.DEPTH_ANYTHING_V2_MODEL_NAME_DICT = {c: "depth-anything/X" for c in self.depth.CKPTS}
+        util.annotator_ckpts_path = self.ckpts
+        self.saved = (self.depth.aux_modules, self.depth.importlib.import_module)
+        self.depth.aux_modules = lambda: (da, att)
+        real = importlib.import_module
+        self.depth.importlib.import_module = lambda n: util if n == "custom_controlnet_aux.util" else real(n)
+        os.environ.pop("AUX_ANNOTATOR_CKPTS_PATH", None)
+
+    def tearDown(self):
+        self.depth.aux_modules, self.depth.importlib.import_module = self.saved
+
+    def weights(self, ckpt="depth_anything_v2_vitl.pth"):
+        d = os.path.join(self.ckpts, "depth-anything", "X")
+        os.makedirs(d, exist_ok=True)
+        open(os.path.join(d, ckpt), "wb").close()
+
+    def test_single_scale_during_call_only(self):
+        self.weights()
+        before = self.att.MemEffAttention.forward
+        img = torch.zeros(2, 32, 48, 3)
+        out, info = self.depth.HaDeSMossDepthMap().make(img, "depth_anything_v2_vitl.pth", 64)
+        self.assertEqual(self.seen, ["plain", "plain"])
+        self.assertIs(self.att.MemEffAttention.forward, before)
+        self.assertEqual(tuple(out.shape), (2, 64, 64, 3))
+        self.assertAlmostEqual(float(out[0, 0, 0, 0]), 200 / 255, places=5)
+        meta = common.parse_info_meta(info)
+        self.assertEqual((meta["node"], meta["ckpt"], meta["images"], meta["attention"]), ("depth_map", "depth_anything_v2_vitl.pth", 2, "single scale"))
+        self.depth.HaDeSMossDepthMap().make(img[:1], "depth_anything_v2_vitl.pth", 64)
+        self.assertEqual(self.Detector.loads, 1)  # kept between runs
+
+    def test_restored_after_an_error(self):
+        self.weights()
+        before = self.att.MemEffAttention.forward
+        self.fail = True
+        with self.assertRaisesRegex(RuntimeError, "boom"):
+            self.depth.HaDeSMossDepthMap().make(torch.zeros(1, 8, 8, 3), "depth_anything_v2_vitl.pth", 64)
+        self.assertIs(self.att.MemEffAttention.forward, before)
+
+    def test_missing_weights_are_not_downloaded(self):
+        with self.assertRaisesRegex(RuntimeError, "depth_anything_v2_vitb.pth is not in"):
+            self.depth.HaDeSMossDepthMap().make(torch.zeros(1, 8, 8, 3), "depth_anything_v2_vitb.pth", 64)
+        self.assertEqual(self.Detector.loads, 0)
+
+    def test_missing_pack(self):
+        self.depth.aux_modules = self.saved[0]
+        real = importlib.import_module
+
+        def no_aux(n):
+            if n.startswith("custom_controlnet_aux"):
+                raise ImportError(n)
+            return real(n)
+        self.depth.importlib.import_module = no_aux
+        saved_paths = self.depth.folder_paths.get_folder_paths
+        self.depth.folder_paths.get_folder_paths = lambda k: []
+        try:
+            with self.assertRaisesRegex(RuntimeError, "comfyui_controlnet_aux"):
+                self.depth.HaDeSMossDepthMap().make(torch.zeros(1, 8, 8, 3), "depth_anything_v2_vitl.pth", 64)
+        finally:
+            self.depth.folder_paths.get_folder_paths = saved_paths
+
+    def test_telemetry_names_it(self):
+        self.assertEqual(telemetry.NODE_NAMES["depth_map"], "Depth Map")
+
+
 if __name__ == "__main__":
     unittest.main(argv=TEST_ARGV, verbosity=2)

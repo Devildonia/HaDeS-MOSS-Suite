@@ -3387,3 +3387,25 @@ er_sde / simple, CFG 2.5, shift 5, no SLG:
   moved more (MAE 23.4, saturation x0.87).
 - Not measured: other samplers and step counts, finetunes, editing / img2img, sizes above 1344 x 1792.
 - Scripts and images: `I:/HaDeS_MOSS/pcm` (sweep, detailer) and `I:/HaDeS_MOSS/detailer_release`.
+
+## MOSS Depth Map (2026-11-28)
+
+A Suite node for the depth map MOSS Control needs: Depth Anything V2 (vitl) from `comfyui_controlnet_aux`, with the DINOv2 attention
+scaled once. The pack's `MemEffAttention` multiplies q by the scale and then calls xFormers / `scaled_dot_product_attention`, which scale
+again ("Fixed pose, the fifth advanced workflow"); the node swaps in the plain `Attention.forward` for its own call only and restores it.
+Clean ComfyUI on port 8189 (`--use-sage-attention`, RTX 5090, only the Suite and the Manager loaded: the node imports the pack's model code
+from its folder), the fisherman photo at 1024. Script and sheet: `I:/HaDeS_MOSS/advanced_workflows/fixed_pose/measure_depth_node.py`,
+`results_depth_node.txt`, `depth_node_check.jpg`.
+
+- **The map:** identical to `depth_plain_attention.png` (the clean map of the Fixed Pose measurements): MAE 0.00 / 255, largest pixel
+  difference 0; 43.40 / 255 from the pack's own node (`depth_installed.png`).
+- **Time:** 2.8 s the first run (the model loads), 0.6 s on another image after (kept on the CPU between runs). Nothing is downloaded:
+  without the weights file the node stops with a message.
+- **The pack is untouched:** the swap is undone after each call, also when the call fails (`tests/test_moss_suite.py`, `DepthMapTest`,
+  with a stand-in for the pack). The pack's own node was not run in this instance (it is not loaded there).
+- **Fixed Pose example** now makes the map in the workflow (Load Image → MOSS Depth Map): 21 nodes, 47 links, three groups, no node
+  overlapping another; the knight at seed 1013 (2048 x 2048) is identical to the measured render (MAE 0.0); 28.4 s the first run.
+- Frontend 1.57.4: the node in the three views (classic with HaDeS widgets, classic with standard widgets, Nodes 2.0): widgets
+  `ckpt_name` and `resolution` edited, runs at 512 / 768 / 1024 with the info shown in a Preview as Text, the same after save / reload.
+  The HaDeS row labels read MODEL and RES (RESOLUTION was cut). The example loads in the three views and is the same after save /
+  reload. Not checked: manual resizing and zoom of the node in Nodes 2.0, the vitb / vits weights (not on this install).

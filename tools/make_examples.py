@@ -873,7 +873,11 @@ EXAMPLES["HaDeS MOSS Suite - Fixed Pose"] = {
     # 1. one depth map holds the pose; change only the prompt for another character in the same pose
     "loras": ("HaDeSMossMultiLora", {"model": ("load", 0), "enabled": True,
                                      "loras": json.dumps([{"name": CONTROL_ADAPTER, "on": True, "strength": 1.0}])}),
-    "depth": ("LoadImage", {"image": "depth_map.png"}),
+    # the map is made here: MOSS Depth Map runs Depth Anything V2 with the attention scaled once (comfyui_controlnet_aux's own node
+    # gives a blur with no outline on our install, tools/RESULTS.md); near is white
+    "photo": ("LoadImage", {"image": "pose_photo.png"}),
+    "depth": ("HaDeSMossDepthMap", {"image": ("photo", 0), "ckpt_name": "depth_anything_v2_vitl.pth", "resolution": 1024}),
+    "map": ("PreviewImage", {"images": ("depth", 0)}),
     "enh": prompt("Oil painting of a medieval knight in weathered steel armor mending a chainmail cloak on a stone castle parapet at "
                   "sunset, warm torches, sea in the background.", negative="worst quality, low quality"),
     "latent": latent(1013),
@@ -909,18 +913,20 @@ EXAMPLES["HaDeS MOSS Suite - Fixed Pose"] = {
                               "  Denoise 0.4 and 0.5 keep the pose too (0.976, 0.974) and change the picture more.\n"
                               "The map carries more than the pose: build, head and hands come from the photo (the knight got the\n"
                               "  fisherman's beard; the potter, asked in her thirties, looks older in all four seeds).\n\n"
-                              "Making the map: Depth Anything V2 (comfyui_controlnet_aux) or any depth tool. Look at it first:\n"
-                              "  it must show the silhouette. A blur with no outline is a faulty map (measured with\n"
-                              "  comfyui_controlnet_aux 1.1.6 on our install, see RESULTS); the control then follows only the rough layout.\n"
+                              "Making the map: load your photo (pose_photo.png here) and MOSS Depth Map makes it, Depth Anything V2\n"
+                              "  with the attention scaled once (needs comfyui_controlnet_aux and its vitl weights; downloads nothing).\n"
+                              "  comfyui_controlnet_aux 1.1.6's own node gave a blur with no outline on our install; the control then\n"
+                              "  follows only the rough layout. MOSS Depth Map's map is identical to the clean map measured. Look at the\n"
+                              "  map first: it must show the silhouette.\n"
                               "Telemetry's notes on the turbo at denoise 0.30 / 0.25 refer to its older measurements; these are in RESULTS.\n\n"
                               "Models: the adapter (darask0/MOSS-Image-color-depth-control) and the turbo in models/loras,\n"
                               "RealESRGAN_x2plus.pth in models/upscale_models."}),
-    "_layout": {"note": (0, -760), "load": (0, 0), "loras": (0, 380), "enh": (450, 0), "latent": (950, 0), "depth": (950, 420),
-                "ctrl": (1400, 0), "turbo": (1400, 620), "ks": (1850, 0), "stage1": (1850, 600), "ks2": (2300, 0), "stage2": (2300, 600),
-                "upmodel": (2750, 0), "up": (2750, 150), "enc": (2750, 300), "ks3": (3150, 0), "save": (3600, 0),
-                "tel": (3600, 480), "report": (4050, 480)},
-    "_groups": [("1. The pose from the depth map (control, 8 steps)", ["loras", "depth", "enh", "latent", "ctrl", "turbo", "ks", "stage1"],
-                 "#335533"),
+    "_layout": {"note": (0, -760), "load": (0, 0), "loras": (0, 380), "enh": (450, 0), "latent": (950, 0), "photo": (0, 620),
+                "depth": (450, 620), "map": (950, 420), "ctrl": (1400, 0), "turbo": (1400, 620), "ks": (1850, 0), "stage1": (1850, 600),
+                "ks2": (2300, 0), "stage2": (2300, 600), "upmodel": (2750, 0), "up": (2750, 150), "enc": (2750, 300), "ks3": (3150, 0),
+                "save": (3600, 0), "tel": (3600, 480), "report": (4050, 480)},
+    "_groups": [("1. The pose from the depth map (control, 8 steps)",
+                 ["loras", "photo", "depth", "map", "enh", "latent", "ctrl", "turbo", "ks", "stage1"], "#335533"),
                 ("2. Redraw without control at 0.3", ["ks2", "stage2"], "#334466"),
                 ("3. x2", ["upmodel", "up", "enc", "ks3", "save", "tel", "report"], "#553355")],
 }

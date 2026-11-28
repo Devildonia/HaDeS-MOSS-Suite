@@ -45,6 +45,7 @@ const SHORT_TAGS = {
     overwrite_existing: "OVERWRITE", dynamic_energy: "ENERGY", target_rank: "RANK", custom_author: "AUTHOR", custom_model_title: "TITLE",
     report_title: "TITLE", time_modulation: "TIME MOD", text_embedder: "TEXT EMB", other_layers: "OTHER",
     clip_name: "TEXT ENC", vae_name: "VAE", weight_dtype: "DTYPE", clip_device: "TE DEVICE", embed_workflow: "WORKFLOW", hashes: "HASHES",
+    resolution: "RES", ckpt_name: "MODEL",
 };
 
 // Text in a slider row next to its tag; the share each merge group carries alone of the SFT -> Base change (tools/RESULTS.md)
@@ -326,6 +327,7 @@ const GENERIC = {
     HaDeSMossSamplerMetadata: { title: "SAMPLER METADATA" },
     HaDeSMossTurbo: { title: "TURBO LORA", sliders: { strength: [0, 2], cfg: [1, 4] } },
     HaDeSMossSuiteTelemetry: { title: "SUITE TELEMETRY" },
+    HaDeSMossDepthMap: { title: "DEPTH MAP · DEPTH ANYTHING V2" },
     HaDeSMossControl: { title: "CONTROL · COLOR / DEPTH", sliders: { strength: [0, 2], start_percent: [0, 1], end_percent: [0, 1], blur: [0, 32] } },
 };
 for (const [cls, { title, sliders = {} }] of Object.entries(GENERIC)) {
