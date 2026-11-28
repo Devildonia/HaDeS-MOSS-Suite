@@ -127,11 +127,11 @@ No extra dependencies. Needs a ComfyUI with MOSS-Image support (tested on 0.43.0
 
 ### `MOSS Depth Map` (`HaDeS/MOSS Pipeline`)
 - **Class:** `HaDeSMossDepthMap`
-- **Purpose:** a depth map for MOSS Control (near is white) with Depth Anything V2, made with the attention scaled once. `comfyui_controlnet_aux` 1.1.6's own Depth Anything V2 node scales DINOv2's attention twice (`MemEffAttention` multiplies q by the scale, then xFormers / `scaled_dot_product_attention` scale again): on our install it gives a blur with no outline, and the control then follows only the rough layout. This node uses that pack's model code and weights, applies the plain attention for its own call only and restores the pack afterwards.
+- **Purpose:** a depth map for MOSS Control (near is white) with Depth Anything V2, made with the attention scaled once. `comfyui_controlnet_aux` 1.1.6's own Depth Anything V2 node scales DINOv2's attention twice (`MemEffAttention` multiplies q by the scale, then xFormers / `scaled_dot_product_attention` scale again): on our install it gives a blur with no outline, and the control then follows only the rough layout. This node runs Depth Anything V2 on `transformers` (installed with ComfyUI) with the original weights and DINOv2's attention scaled once; it imports no other node pack's code.
 - **Inputs:** `image`; `ckpt_name` (`depth_anything_v2_vitl.pth`, measured; `vitb`, `vits`); `resolution` (the map's shorter side, 1024 measured).
 - **Outputs:** `depth_map` (IMAGE, for MOSS Control's `depth_map`), `info`.
-- **Needs** `comfyui_controlnet_aux` and the weights in its ckpts folder (run its Depth Anything V2 node once to get them). The node downloads nothing: without the pack or the file it stops with a message saying what to install.
-- **Measured** ([`tools/RESULTS.md`](tools/RESULTS.md), "MOSS Depth Map"): on the fisherman at 1024, identical to the clean map made with the plain attention (0 / 255, every pixel) and 43.4 / 255 from the pack's own node; 2.8 s the first run (model loading), 0.6 s after, on an RTX 5090.
+- **Needs** the weights file `depth_anything_v2_vitl.pth` (1.3 GB, Hugging Face `depth-anything/Depth-Anything-V2-Large`) in `models/depth_anything`, or where `comfyui_controlnet_aux` keeps it if that pack already downloaded it. The node downloads nothing: without the file it stops with a message saying where to put it.
+- **Measured** ([`tools/RESULTS.md`](tools/RESULTS.md), "MOSS Depth Map"): on the fisherman at 1024, 0.004 / 255 from the clean map made with the plain attention (no pixel more than 1 / 255 apart; the pack's own node is 43.4 / 255 away); 0.4 s per map after the first run, on an RTX 5090.
 
 ### `MOSS Latent` (`HaDeS/MOSS Pipeline`)
 - **Class:** `HaDeSMossLatent`

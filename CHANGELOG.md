@@ -10,6 +10,9 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - **MOSS Text Check `strict`** (advanced, off by default): `passed` then also needs case and punctuation to match, for a check used as a typography acceptance (audit 0.9.9 M8).
 
+### Changed
+- **MOSS Depth Map no longer uses another node pack's code.** The 0.9.9 node added `comfyui_controlnet_aux`'s folder to `sys.path` and replaced its attention at run time, the likely reason the 0.9.9 package was flagged on the Registry. It now runs Depth Anything V2 on `transformers` (installed with ComfyUI) with the original weights, read from `models/depth_anything` or from where `comfyui_controlnet_aux` keeps them (`torch.load` with `weights_only`); `comfyui_controlnet_aux` is no longer needed. The map is 0.004 / 255 from the clean map on the fisherman; the Fixed Pose knight keeps its pose (0.991) with small changes in detail (`tools/RESULTS.md`).
+
 ### Fixed
 Audit 0.9.9, 19 findings, all checked and fixed, each with a regression test (`tools/RESULTS.md`):
 - **A LoRA whose factors do not fit the model is an error** (A1). Multi-LoRA, LoRA Block Weight and the KSampler's turbo input counted such a LoRA as applied while ComfyUI kept the weight unchanged with only a console error. Every factor is now checked against its weight (or the q / k / v slice of a fused `qkv`); a control adapter may widen `video_embedder`. The published LoRAs pass.

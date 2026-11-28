@@ -3440,3 +3440,32 @@ steps, 512, so the new check accepts it; asked with seed 1 it is refused). Fixes
   run in that instance on the fisherman at 1024: 2.5 s, the same map as above (MAE 0.0015 / 255). The examples were regenerated
   (`make_examples.py`): only the three Text Check nodes changed (`strict` false). Not checked here: the Registry zip (built by CI with
   `comfy node pack`, not installed locally), the Layout Editor in Nodes 2.0, zoom and manual resizing.
+
+## MOSS Depth Map without another node pack's code (2026-11-28, after the 0.9.9 Registry flag)
+
+The 0.9.9 package was flagged on the Comfy Registry; the reason is not shown to us. The only new code in 0.9.9 was MOSS Depth Map,
+which added `comfyui_controlnet_aux`'s folder to `sys.path`, imported its modules by name and replaced its DINOv2 attention at run
+time: the patterns package scanners look for. The node now runs Depth Anything V2 on `transformers`' `DepthAnythingForDepthEstimation`
+(a requirement of ComfyUI itself, 4.57.3 here) with DINOv2's `sdpa` attention (scaled once), the original checkpoint converted key by
+key (every key must match, `torch.load(weights_only=True)`), and the pre / post-processing in torch (no `cv2`). The weights are read as a
+file from `models/depth_anything` or from where `comfyui_controlnet_aux` keeps them; nothing of that pack is imported. No other pattern a
+scanner looks for was found in the shipped files (no `sys.path`, `subprocess`, `eval` / `exec`, network calls; the tooltip's HTML is escaped).
+
+RTX 5090, vitl, against the previous node (HEAD 0836edf: the pack's model with the single-scale attention), warm
+(`I:/HaDeS_MOSS/audit_0.9.9/check_depth_transformers.py`, `results_depth_transformers.txt`):
+
+| Image | MAE to the previous node (max) | Time new / previous | Peak extra VRAM new / previous |
+|---|---|---|---|
+| fisherman 1024 x 1024 | 0.0040 / 255 (1) | 0.40 / 0.34 s | 1750 / 1817 MB |
+| portrait crop 576 x 1024 | 0.0368 / 255 (4) | 0.37 / 0.33 s | 2112 / 2234 MB |
+| panorama 3072 x 1024 | 0.1338 / 255 (5) | 0.47 / 0.49 s | 2217 / 2420 MB |
+
+- The fisherman's map is 0.0043 / 255 from the clean map of the Fixed Pose measurements (no pixel more than 1 apart). The larger
+  differences on the portrait and the panorama come from torch's bicubic resize in place of OpenCV's.
+- **Fixed Pose example, seed 1013** (clean 8189, `check_fixed_pose_knight.py`): the same knight, pose and composition as the measured
+  render, with small changes in detail (the tower in the background); MAE 7.96 / 255 at 2048 x 2048, so no longer pixel-identical. Pose
+  against the map (the example's measure): 0.991 for both.
+- Clean 8189 that does not load `comfyui_controlnet_aux` at all: the node runs in the three views (classic with HaDeS widgets at 768,
+  standard widgets at 512, Nodes 2.0 at 1024), 6.0 s the first run (model load), 0.4 s after. Tests: `DepthMapTest` on a tiny Depth
+  Anything (every original key converts, none missing or left over; map size, 8-bit steps, reload on a replaced file, errors); suite 146
+  with the CUDA checks.

@@ -2148,130 +2148,119 @@ class TestMetadataReader(unittest.TestCase):
 
 
 class DepthMapTest(unittest.TestCase):
-    """MOSS Depth Map with a stand-in for comfyui_controlnet_aux: its own detector's attention blocks get the single-scale forward
-    (the pack's classes and other models stay unchanged, audit 0.9.9 M3), the detector reloads when the file changes (M4), missing
-    weights and a missing pack give clear errors, and nothing is downloaded."""
+    """MOSS Depth Map on transformers' Depth Anything with a tiny made-up architecture: every key of the original checkpoint format
+    converts (none missing, none left over), the map has the asked size, the model reloads when the file changes (audit 0.9.9 M4),
+    missing weights and a foreign checkpoint give clear errors, and no other node pack's code is imported."""
+    TINY = ("Tiny", 32, 2, 4, [1, 2, 3, 4], [8, 16, 32, 32], 8)
 
     def setUp(self):
-        import types
         self.depth = importlib.import_module(f"{PACK}.moss_depth_nodes")
         self.depth._MODELS.clear()
-        att = types.ModuleType("att")
-
-        class Attention(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.num_heads, self.qkv, self.proj, self.proj_drop = 2, torch.nn.Linear(8, 24), torch.nn.Identity(), torch.nn.Identity()
-
-            def forward(self, x):
-                return "plain"
-
-        class MemEffAttention(Attention):
-            def forward(self, x, attn_bias=None):
-                return "double"
-        att.Attention, att.MemEffAttention = Attention, MemEffAttention
-        self.att = att
-        test = self
-        self.loads = []
-
-        class Detector:
-            @classmethod
-            def from_pretrained(cls, pretrained_model_or_path=None, filename=None):
-                test.loads.append(pretrained_model_or_path)
-                d = cls()
-                d.model = torch.nn.Sequential(MemEffAttention())
-                return d
-
-            def to(self, device):
-                return self
-
-            def __call__(self, img, detect_resolution=512, max_depth=20.0):
-                test.seen = self.model[0](torch.zeros(1, 3, 8))
-                if test.fail:
-                    raise RuntimeError("boom")
-                import numpy
-                return numpy.full((detect_resolution, detect_resolution, 3), 200, dtype=numpy.uint8)
-        self.fail = False
-        da = types.ModuleType("da")
-        da.DepthAnythingV2Detector = Detector
-        self.ckpts = tempfile.mkdtemp(prefix="hades_depth_")
-        util = types.ModuleType("util")
-        util.DEPTH_ANYTHING_V2_MODEL_NAME_DICT = {c: "depth-anything/X" for c in self.depth.CKPTS}
-        util.annotator_ckpts_path = self.ckpts
-        self.saved = (self.depth.aux_modules, self.depth.importlib.import_module)
-        self.depth.aux_modules = lambda: (da, att)
-        real = importlib.import_module
-        self.depth.importlib.import_module = lambda n: util if n == "custom_controlnet_aux.util" else real(n)
-        os.environ.pop("AUX_ANNOTATOR_CKPTS_PATH", None)
+        self.depth.ARCH["tiny.pth"] = self.TINY
+        self.dir = tempfile.mkdtemp(prefix="hades_depth_")
+        self.saved_get = self.depth.folder_paths.get_full_path
+        self.depth.folder_paths.get_full_path = lambda folder, name: (
+            os.path.join(self.dir, name) if folder == "depth_anything" and os.path.isfile(os.path.join(self.dir, name)) else None)
+        self.saved_env = os.environ.pop("AUX_ANNOTATOR_CKPTS_PATH", None)
+        self.saved_nodes = self.depth.folder_paths.get_folder_paths
+        self.depth.folder_paths.get_folder_paths = lambda k: [] if k == "custom_nodes" else self.saved_nodes(k)
 
     def tearDown(self):
-        self.depth.aux_modules, self.depth.importlib.import_module = self.saved
+        self.depth.ARCH.pop("tiny.pth", None)
+        self.depth.folder_paths.get_full_path = self.saved_get
+        self.depth.folder_paths.get_folder_paths = self.saved_nodes
+        if self.saved_env is not None:
+            os.environ["AUX_ANNOTATOR_CKPTS_PATH"] = self.saved_env
 
-    def weights(self, ckpt="depth_anything_v2_vitl.pth", data=b""):
-        d = os.path.join(self.ckpts, "depth-anything", "X")
-        os.makedirs(d, exist_ok=True)
-        with open(os.path.join(d, ckpt), "wb") as f:
-            f.write(data)
-        return d
+    def original_checkpoint(self, seed=0):
+        """A checkpoint in the original Depth Anything V2 format for the tiny architecture: every original key, with the values of a
+        randomly initialised transformers model (q / k / v fused back), so the conversion is checked key by key."""
+        _, hidden, heads, layers, _, neck, fusion = self.TINY
+        names = ["pretrained.cls_token", "pretrained.pos_embed", "pretrained.mask_token", "pretrained.norm.weight", "pretrained.norm.bias"]
+        names += [f"pretrained.patch_embed.proj.{t}" for t in ("weight", "bias")]
+        for b in range(layers):
+            for part in ("norm1", "attn.qkv", "attn.proj", "norm2", "mlp.fc1", "mlp.fc2"):
+                names += [f"pretrained.blocks.{b}.{part}.{t}" for t in ("weight", "bias")]
+            names += [f"pretrained.blocks.{b}.ls1.gamma", f"pretrained.blocks.{b}.ls2.gamma"]
+        for n in range(4):
+            names += [f"depth_head.projects.{n}.{t}" for t in ("weight", "bias")]
+            names += [f"depth_head.scratch.layer{n + 1}_rn.weight"]
+            r = f"depth_head.scratch.refinenet{n + 1}."
+            names += [r + f"out_conv.{t}" for t in ("weight", "bias")]
+            names += [r + f"resConfUnit{u}.conv{c}.{t}" for u in (1, 2) for c in (1, 2) for t in ("weight", "bias")]
+        for n in (0, 1, 3):
+            names += [f"depth_head.resize_layers.{n}.{t}" for t in ("weight", "bias")]
+        names += [f"depth_head.scratch.{c}.{t}" for c in ("output_conv1", "output_conv2.0", "output_conv2.2") for t in ("weight", "bias")]
+        torch.manual_seed(seed)
+        from transformers import DepthAnythingConfig, DepthAnythingForDepthEstimation, Dinov2Config
+        cfg = DepthAnythingConfig(backbone_config=Dinov2Config(hidden_size=hidden, num_attention_heads=heads, num_hidden_layers=layers,
+                                                               intermediate_size=4 * hidden, patch_size=14, image_size=518, out_indices=[1, 2, 3, 4],
+                                                               apply_layernorm=True, reshape_hidden_states=False),
+                                  reassemble_hidden_size=hidden, patch_size=14, neck_hidden_sizes=neck, fusion_hidden_size=fusion,
+                                  head_hidden_size=32, depth_estimation_type="relative", max_depth=1.0)
+        ref = DepthAnythingForDepthEstimation(cfg).state_dict()
+        sd = {}
+        for n in names:
+            if ".attn.qkv." in n:
+                mapped = self.depth.convert_state_dict({n: torch.zeros(3)}, layers)
+                sd[n] = torch.cat([ref[k] for k in mapped])
+            else:
+                (k,) = self.depth.convert_state_dict({n: torch.zeros(1)}, layers)
+                sd[n] = ref[k].clone()
+        return sd, ref
 
-    def test_single_scale_on_its_own_model_only(self):
-        folder = self.weights()
-        img = torch.zeros(2, 32, 48, 3)
-        out, info = self.depth.HaDeSMossDepthMap().make(img, "depth_anything_v2_vitl.pth", 64)
-        self.assertIsInstance(self.seen, torch.Tensor)  # our forward ran, not the pack's "double" / "plain"
-        self.assertEqual(self.att.MemEffAttention()(torch.zeros(1, 3, 8)), "double")  # the pack's class is unchanged
-        self.assertEqual(os.path.normcase(self.loads[0]), os.path.normcase(folder))  # loaded from the path checked, never resolved again
-        self.assertEqual(tuple(out.shape), (2, 64, 64, 3))
-        self.assertAlmostEqual(float(out[0, 0, 0, 0]), 200 / 255, places=5)
+    def write(self, sd, name="tiny.pth"):
+        torch.save(sd, os.path.join(self.dir, name))
+
+    def test_every_original_key_converts(self):
+        sd, ref = self.original_checkpoint()
+        conv = self.depth.convert_state_dict(sd, 4)
+        self.assertEqual(set(conv), set(ref))
+        for k in ref:
+            torch.testing.assert_close(conv[k], ref[k])
+        with self.assertRaisesRegex(RuntimeError, "unexpected weight"):
+            self.depth.convert_state_dict({"model.diffusion_model.x": torch.zeros(1)}, 4)
+
+    def test_map_size_range_and_reload(self):
+        sd, _ = self.original_checkpoint()
+        self.write(sd)
+        out, info = self.depth.HaDeSMossDepthMap().make(torch.rand(2, 40, 60, 3), "tiny.pth", 64)
+        self.assertEqual(tuple(out.shape), (2, 64, 96, 3))  # 64 on the shorter side
+        self.assertGreaterEqual(float(out.min()), 0.0)
+        self.assertLessEqual(float(out.max()), 1.0)
+        self.assertTrue(torch.equal(out[..., 0], out[..., 2]))
+        self.assertTrue(torch.equal(out * 255, torch.round(out * 255)))  # whole 8-bit steps, as the original map
         meta = common.parse_info_meta(info)
-        self.assertEqual((meta["node"], meta["ckpt"], meta["images"], meta["attention"]), ("depth_map", "depth_anything_v2_vitl.pth", 2, "single scale"))
-        self.depth.HaDeSMossDepthMap().make(img[:1], "depth_anything_v2_vitl.pth", 64)
-        self.assertEqual(len(self.loads), 1)  # kept between runs
+        self.assertEqual((meta["node"], meta["ckpt"], meta["images"], meta["attention"]), ("depth_map", "tiny.pth", 2, "single scale"))
+        model = self.depth._MODELS["tiny.pth"][1]
+        self.assertEqual(model.backbone.config._attn_implementation, "sdpa")
+        self.depth.HaDeSMossDepthMap().make(torch.rand(1, 32, 32, 3), "tiny.pth", 64)
+        self.assertIs(self.depth._MODELS["tiny.pth"][1], model)  # kept between runs
+        sd2, _ = self.original_checkpoint(seed=1)
+        self.write(sd2)  # another file under the same name
+        os.utime(os.path.join(self.dir, "tiny.pth"), ns=(os.stat(os.path.join(self.dir, "tiny.pth")).st_mtime_ns + 10**9,) * 2)
+        self.depth.HaDeSMossDepthMap().make(torch.rand(1, 32, 32, 3), "tiny.pth", 64)
+        self.assertIsNot(self.depth._MODELS["tiny.pth"][1], model)
+        self.assertEqual(len(self.depth._MODELS), 1)  # the old model is dropped
 
-    def test_forward_matches_one_scale(self):
-        a = self.att.MemEffAttention()
-        self.depth.fix_attention(torch.nn.Sequential(a), self.att)
-        x = torch.randn(1, 5, 8)
-        q, k, v = a.qkv(x).reshape(1, 5, 3, 2, 4).permute(2, 0, 3, 1, 4)
-        ref = ((q * 4 ** -0.5) @ k.transpose(-2, -1)).softmax(-1) @ v
-        self.assertTrue(torch.allclose(a(x), ref.transpose(1, 2).reshape(1, 5, 8), atol=1e-5))
-
-    def test_reloads_when_the_file_changes(self):
-        self.weights(data=b"a")
-        self.depth.HaDeSMossDepthMap().make(torch.zeros(1, 8, 8, 3), "depth_anything_v2_vitl.pth", 64)
-        self.weights(data=b"bb")  # another file under the same name
-        self.depth.HaDeSMossDepthMap().make(torch.zeros(1, 8, 8, 3), "depth_anything_v2_vitl.pth", 64)
-        self.assertEqual(len(self.loads), 2)
-        self.assertEqual(len(self.depth._MODELS), 1)  # the old detector is dropped
-
-    def test_error_leaves_the_pack_alone(self):
-        self.weights()
-        self.fail = True
-        with self.assertRaisesRegex(RuntimeError, "boom"):
-            self.depth.HaDeSMossDepthMap().make(torch.zeros(1, 8, 8, 3), "depth_anything_v2_vitl.pth", 64)
-        self.assertEqual(self.att.MemEffAttention()(torch.zeros(1, 3, 8)), "double")
+    def test_a_checkpoint_that_does_not_fit_is_an_error(self):
+        sd, _ = self.original_checkpoint()
+        del sd["pretrained.norm.weight"]
+        self.write(sd)
+        with self.assertRaisesRegex(RuntimeError, "does not fit"):
+            self.depth.HaDeSMossDepthMap().make(torch.rand(1, 32, 32, 3), "tiny.pth", 64)
 
     def test_missing_weights_are_not_downloaded(self):
-        with self.assertRaisesRegex(RuntimeError, "depth_anything_v2_vitb.pth is not in"):
+        with self.assertRaisesRegex(RuntimeError, "depth_anything_v2_vitb.pth not found"):
             self.depth.HaDeSMossDepthMap().make(torch.zeros(1, 8, 8, 3), "depth_anything_v2_vitb.pth", 64)
-        self.assertEqual(self.loads, [])
+        self.assertEqual(self.depth._MODELS, {})
 
-    def test_missing_pack(self):
-        self.depth.aux_modules = self.saved[0]
-        real = importlib.import_module
-
-        def no_aux(n):
-            if n.startswith("custom_controlnet_aux"):
-                raise ImportError(n)
-            return real(n)
-        self.depth.importlib.import_module = no_aux
-        saved_paths = self.depth.folder_paths.get_folder_paths
-        self.depth.folder_paths.get_folder_paths = lambda k: []
-        try:
-            with self.assertRaisesRegex(RuntimeError, "comfyui_controlnet_aux"):
-                self.depth.HaDeSMossDepthMap().make(torch.zeros(1, 8, 8, 3), "depth_anything_v2_vitl.pth", 64)
-        finally:
-            self.depth.folder_paths.get_folder_paths = saved_paths
+    def test_no_other_pack_code(self):
+        """Audit 0.9.9 follow-up: the 0.9.9 node added comfyui_controlnet_aux's folder to sys.path and replaced its attention at run
+        time; the node now only reads that pack's weights file."""
+        src = open(self.depth.__file__, encoding="utf-8").read()
+        for banned in ("sys.path", "importlib", "custom_controlnet_aux", ".forward ="):
+            self.assertNotIn(banned, src)
 
     def test_telemetry_names_it(self):
         self.assertEqual(telemetry.NODE_NAMES["depth_map"], "Depth Map")
